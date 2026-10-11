@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 let listener, applied=0;
-const local={settings:{apiKey:'test-only',model:'test-model'}},session={};
+const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[]};
 globalThis.chrome={storage:{local:storage(local),session:storage(session)},runtime:{id:'unit-test',onMessage:{addListener:fn=>listener=fn},openOptionsPage:async()=>{}},action:{onClicked:{addListener:()=>{}}},tabs:{onRemoved:{addListener:()=>{}}},scripting:{executeScript:async input=>{
@@ -11,7 +11,10 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   throw new Error('Unexpected frame call');
 }}};
 const solution={answer:'5',explanation:'Subtract 7, divide by 3.',confidence:.99,supported:true,limitation:'',actions:[{kind:'text',target:'a1',value:'5',destination:'',x:null,y:null}]};
-globalThis.fetch=async()=>({ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(solution)}]}]})});
+globalThis.fetch=async url=>{
+  if(String(url).includes('/health'))return{ok:true,json:async()=>({ok:true,keyConfigured:true,model:'test-model'})};
+  return{ok:true,json:async()=>({solution})};
+};
 await import('../src/background/worker.js');
 const request=message=>new Promise(resolve=>listener(message,{id:'unit-test',tab:{id:1},frameId:0},resolve));
 test('worker enforces consent, applies once, and invalidates on stop',async()=>{

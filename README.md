@@ -1,21 +1,50 @@
 # AuraSolve — Practice Tutor
 
-A fresh, dependency-free Chrome Manifest V3 extension. Original implementation; no AskLabby code, branding, backend, account system, or assets are included. Source is separated by responsibility and runs directly in Chrome; no compilation is needed.
+A fresh, dependency-free Chrome Manifest V3 extension backed by **AuraSolve Cloud** on Railway. Original implementation; no AskLabby code, branding, account system, or assets are included. Source is separated by responsibility and runs directly in Chrome; no compilation is needed.
 
-## Install
+## How it works
 
-1. Unzip `AuraSolve-1.0.1.zip` into a folder.
+```
+Chrome extension  →  Railway API  →  OpenAI
+                    (your key lives here)
+```
+
+Users install the extension and start practicing. **No API key in Chrome.** Your OpenAI key stays in Railway environment variables.
+
+## Deploy to Railway (one-time)
+
+1. Push this repo to GitHub (already done at `coleperrilliat-maker/aurasolve`).
+2. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select `aurasolve`.
+3. In Railway → **Variables**, add:
+   - `OPENAI_API_KEY` — your OpenAI API key
+   - `OPENAI_MODEL` — e.g. `gpt-4.1-mini`
+   - `CLIENT_KEY` — a long random string (e.g. run `openssl rand -hex 32`)
+4. Railway → **Settings** → **Networking** → **Generate Domain**. Copy the public URL (e.g. `https://aurasolve-production.up.railway.app`).
+5. Edit `src/shared/config.js` in this repo:
+   - Set `API_BASE` to your Railway domain
+   - Set `CLIENT_KEY` to the same value as Railway's `CLIENT_KEY`
+6. Commit, push, and **reload the extension** in Chrome.
+
+Railway runs `npm start` (`node server/index.js`). Health check: `/api/v1/health`.
+
+### Local API dev
+
+```sh
+cp .env.example .env   # fill in OPENAI_API_KEY and CLIENT_KEY
+npm start              # http://localhost:8787
+```
+
+Point `src/shared/config.js` at `http://localhost:8787` while developing, then switch back to your Railway URL before sharing the extension.
+
+## Install the extension
+
+1. Clone or download this folder.
 2. Open `chrome://extensions` and enable **Developer mode**.
-3. Click **Load unpacked** and select the folder that directly contains `manifest.json`. Do not select the ZIP or its parent folder.
-4. Pin AuraSolve. Open its extension options or click **API key & settings** in the sidebar.
-5. Enter your OpenAI API key and a Responses API model with structured-output support. The default is `gpt-4.1-mini`; availability depends on your API account. Click **Save settings**.
-6. Refresh any already-open practice page. On other HTTP(S) websites, click the toolbar icon to attach AuraSolve for that visit.
+3. Click **Load unpacked** and select the folder that directly contains `manifest.json`.
+4. Pin AuraSolve. Open **Settings** to confirm the server shows **Online**.
+5. Refresh any already-open practice page. On other HTTP(S) websites, click the toolbar icon to attach AuraSolve for that visit.
 
-No hosted backend is required. API calls go from the extension service worker directly to OpenAI. OpenAI API usage is billed separately from ChatGPT.
-
-### If you prefer an .env file
-
-Copy `.env.example` to `.env`, enter `OPENAI_API_KEY` and optionally `OPENAI_MODEL`, then import it using the Settings page and click Save. Chrome does not automatically load `.env` files. Never share your real `.env` or API key. The packaged ZIP contains only the placeholder example.
+No OpenAI setup in the browser. Usage is billed through your Railway server's OpenAI account.
 
 ## Modes
 
@@ -46,36 +75,41 @@ These are conservative heuristics, not a guarantee that a site is ungraded. Some
 | Images | Alt text only; no screenshot vision or OCR |
 | AutoPilot | Exactly identified check/submit and next controls; visible correctness feedback required |
 
-This is a working implementation with a local practice lab, not universal automation for every Pearson question. It has not been tested against a signed-in live Pearson activity or with a real API key in the build environment. Detection refuses pages without a recognized question container. If several questions are visible, click a field in the intended question to disambiguate.
+This is a working implementation with a local practice lab, not universal automation for every Pearson question. It has not been tested against a signed-in live Pearson activity. Detection refuses pages without a recognized question container. If several questions are visible, click a field in the intended question to disambiguate.
 
 ## Try the included practice lab
 
 With Node.js 20 or newer installed, open a terminal in this folder:
 
 ```sh
-npm run demo
+npm start          # AuraSolve Cloud API (required for AI)
+npm run demo       # practice lab on http://localhost:4318
 ```
 
-Open `http://localhost:4318`. There are five questions: a text answer, a radio choice, a plotted point, an even/odd drag, and a dropdown. They are real local practice controls, not prerecorded results. AI features require your key. Toggle **Simulate graded assignment** to verify the mutation gate. No packages need to be installed. Press Ctrl+C in the terminal to stop the lab.
+Open `http://localhost:4318`. There are five questions: a text answer, a radio choice, a plotted point, an even/odd drag, and a dropdown. They are real local practice controls, not prerecorded results. Toggle **Simulate graded assignment** to verify the mutation gate. No packages need to be installed. Press Ctrl+C in the terminal to stop the lab.
 
 ## Organization
 
 ```text
 manifest.json                  Chrome entry points and permissions
+server/index.js                Railway HTTP API
+server/openai.js               OpenAI Responses API (server-side only)
 src/background/worker.js       Request routing, consent, cancellation, plans
-src/background/openai.js       Responses API and structured answer generation
+src/background/api.js          Extension → Railway client
 src/content/detection.js       Question, field, feedback, and button detection
 src/content/actions.js         Validated field changes and practice navigation
 src/content/ui.js              Sidebar and bounded AutoPilot controller
 src/content/ui.css             White-and-blue isolated sidebar styling
 src/content/app.js             Content runtime assembly
 src/content/bootstrap.js       Content module loader
+src/shared/config.js           Railway URL + client key (update after deploy)
 src/shared/policy.js           Practice classification and confirmation checks
 src/shared/solution.js         Answer schema and action validation
-src/options/                   API-key and model settings
+src/options/                   Cloud status and model preference
 demo/                          Five-question local practice lab
-tests/                         Policy, action, and mocked API tests
+tests/                         Policy, action, API, and mocked worker tests
 scripts/                       Validation and demo server
+railway.toml                   Railway deploy config
 ```
 
 Native JavaScript ES modules and CSS keep the loadable source readable and avoid shipping framework build dependencies. There is no React/TypeScript build pipeline in this edition.
@@ -88,11 +122,11 @@ Do not add generic clicks returned by the model. Action targets must exist in th
 
 ## Privacy and permissions
 
-- No accounts, subscriptions, analytics, remote code, or AuraSolve server.
-- Only the detected question and field descriptors are sent to OpenAI when requested; conversation storage is disabled in the API request. This does not change OpenAI's separate API data-retention policies.
-- The API key is saved in this Chrome profile, not encrypted and not synced. Content scripts cannot access extension local storage. Use Remove key in Settings to erase it.
+- No accounts, subscriptions, or analytics in the extension.
+- Detected questions and field descriptors are sent to your Railway server, then to OpenAI. Conversation storage is disabled in the API request.
+- The OpenAI API key lives only on Railway, not in Chrome.
 - The user signature stays in Chrome session storage. Tutor notes stay in the current tab's sidebar and are lost on refresh.
-- Automatic content-script access is limited to the listed Pearson-family domains and the local lab. The toolbar uses activeTab permission for other pages. Extension settings and OpenAI are not sent site login cookies.
+- Automatic content-script access is limited to the listed Pearson-family domains and the local lab. The toolbar uses activeTab permission for other pages.
 
 ## Verification
 
@@ -101,16 +135,18 @@ npm test
 npm run check
 ```
 
-Tests cover practice blocking, consent expiry/page binding, model-action validation, graph bounds, native field events, changed-question rejection, complete-field submission, hidden-tab stopping, and mocked OpenAI responses. These do not replace live browser/site integration testing. See `TESTING.md` for build results.
+Tests cover practice blocking, consent expiry/page binding, model-action validation, graph bounds, native field events, changed-question rejection, complete-field submission, hidden-tab stopping, Railway API client behavior, and mocked worker flows. These do not replace live browser/site integration testing. See `TESTING.md` for build results.
 
 ## Troubleshooting
 
 - **Manifest missing:** select the extracted folder directly containing `manifest.json`.
+- **Server offline:** confirm Railway is deployed, variables are set, and `src/shared/config.js` matches your domain and `CLIENT_KEY`.
 - **No question found:** the site needs a selector/adapter or is inside a frame the extension cannot access.
 - **Explain only:** the activity is unknown or has a grading indicator.
-- **401 / 429:** check the API key, API credits, limits, and model access in your OpenAI account.
+- **401 / 429:** check Railway `OPENAI_API_KEY`, API credits, limits, and model access.
 - **No visible buttons:** refresh the page or click the toolbar icon. Chrome internal pages and Chrome Web Store pages cannot be injected.
 - **Graph/drag stopped:** complete it manually; do not assume a generic canvas can accept automated actions.
+- **After code changes:** reload the extension at `chrome://extensions` — commits to GitHub do not update Chrome automatically.
 
 API documentation used: https://developers.openai.com/api/reference/resources/responses/methods/create
 Chrome documentation used: https://developer.chrome.com/docs/extensions/reference/api/scripting and https://developer.chrome.com/docs/extensions/reference/api/storage

@@ -15,11 +15,11 @@ export function createUI() {
       <p class="intro">Work through practice, one clear explanation at a time.</p>
       <div class="modes"><button data-mode="autopilot"><span>✈️</span><b>AutoPilot</b><small>Practice together</small></button><button data-mode="field"><span>✍️</span><b>Fill a field</b><small>One answer</small></button><button data-mode="explain"><span>💡</span><b>Explain</b><small>Understand why</small></button></div>
       <section class="notice"><div class="badge" id="badge">READY WHEN YOU ARE</div><p id="status" role="status" aria-live="polite">Open a practice question and choose a mode. For one field, click that field first.</p><button id="stop" class="stop" hidden>■ Stop AutoPilot / request</button></section>
-      <section class="consent" id="consent" hidden><h2>Practice only. Your call.</h2><p>AuraSolve will fill answers and, in AutoPilot, click submit for up to five practice questions. It sends the detected question and field labels to OpenAI. It stops if the page appears graded or is unsupported.</p><label class="check"><input id="agree" type="checkbox"> I confirm this is ungraded practice, not homework, a quiz, a test, or an assessment.</label><label class="signature">Type your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Page checks are imperfect. This confirmation lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary">Confirm & continue</button><button id="cancel" class="secondary">Cancel</button></section>
+      <section class="consent" id="consent" hidden><h2>Practice only. Your call.</h2><p>AuraSolve will fill answers and, in AutoPilot, click submit for up to five practice questions. It sends the detected question and field labels to AuraSolve Cloud. It stops if the page appears graded or is unsupported.</p><label class="check"><input id="agree" type="checkbox"> I confirm this is ungraded practice, not homework, a quiz, a test, or an assessment.</label><label class="signature">Type your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Page checks are imperfect. This confirmation lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary">Confirm & continue</button><button id="cancel" class="secondary">Cancel</button></section>
       <div id="results" aria-live="polite"></div>
       <div class="empty" id="empty"><div class="orb">✦</div><h2>A tutor, right beside you.</h2><p>Your answer previews and explanations will appear here.</p><div class="pill">PRACTICE ONLY · YOU’RE IN CONTROL</div></div>
     </div>
-    <footer><span>Private workspace <i>✦</i></span><button id="settings">API key & settings ↗</button></footer>
+    <footer><span>AuraSolve Cloud <i>✦</i></span><button id="settings">Settings ↗</button></footer>
   </aside>`;
   shadow.append(wrap);document.documentElement.append(host);
   const $=selector=>shadow.querySelector(selector), panel=$(".panel"), results=$("#results");
@@ -45,7 +45,7 @@ export function createUI() {
     const live=()=>{if(mine!==token)throw new Error("Stopped.");};
     try {
       const settings=await request({type:"settingsStatus"});live();
-      if(!settings.configured)throw new Error("Add your OpenAI API key using Settings below. API usage is billed by OpenAI.");
+      if(!settings.configured)throw new Error("AuraSolve Cloud is offline or not configured. Open Settings to check the server, then reload the extension.");
       for(let i=1;i<=(mode==="autopilot"?5:1);i++) {
         live();status(mode==="autopilot"?`Working on practice question ${i} of 5…`:"Reading the question and thinking it through…","THINKING");
         const result=await request({type:"solve",mode});live();

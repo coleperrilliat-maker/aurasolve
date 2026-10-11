@@ -18,7 +18,7 @@ Inspected the user's Chrome Pearson player without changing any answer. The prom
 
 - Chrome extension installation/rendering: launching the test Chrome process was blocked by the execution environment.
 - Live local demo: binding localhost port 4318 was denied by the execution environment. The included server can be run from the user's terminal.
-- Real OpenAI request: no API key was supplied.
+- Real OpenAI request: run against Railway with OPENAI_API_KEY set in server env.
 - Live signed-in Pearson/MyLab pages, their proprietary graph widgets, and custom drag controls.
 
 Before relying on a real practice page, test Explain, then a single field, and then a short AutoPilot run on known ungraded material. Review actual page feedback. The local lab provides repeatable controls for each implemented action family.

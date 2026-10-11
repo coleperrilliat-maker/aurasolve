@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve — Practice Tutor",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -10,7 +10,9 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://api.openai.com/*",
+    "https://*.up.railway.app/*",
+    "http://localhost:8787/*",
+    "http://127.0.0.1:8787/*",
     "https://*.pearson.com/*",
     "https://*.mathxl.com/*",
     "https://*.mymathlab.com/*",

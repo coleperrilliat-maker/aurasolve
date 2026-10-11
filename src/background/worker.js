@@ -1,5 +1,5 @@
 import {requirePractice, validateConsent, classify} from "../shared/policy.js";
-import {solve} from "./openai.js";
+import {checkBackend, solve} from "./api.js";
 const plans = new Map(), jobs = new Map(), revisions = new Map();
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"});
 const rev = id => revisions.get(id) || 0;
@@ -39,7 +39,12 @@ async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");
   if (message.type === "settingsStatus") {
     const {settings={}} = await chrome.storage.local.get("settings");
-    return {configured:Boolean(settings.apiKey),model:settings.model || "gpt-4.1-mini"};
+    try {
+      const health = await checkBackend(AbortSignal.timeout(8000));
+      return {configured:health.keyConfigured !== false,model:settings.model || health.model || "gpt-4.1-mini",service:"AuraSolve Cloud"};
+    } catch {
+      return {configured:false,model:settings.model || "gpt-4.1-mini",service:"AuraSolve Cloud"};
+    }
   }
   if (message.type === "settings") { await chrome.runtime.openOptionsPage(); return {}; }
   const tabId = sender.tab?.id;
