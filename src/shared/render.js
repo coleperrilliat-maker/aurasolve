@@ -1,5 +1,8 @@
 import {pickedChoices} from "./choices.js";
-import katex from "../vendor/katex/katex.js";
+
+// Loaded separately so a math-library failure can't stop AuraSolve from starting; math falls back to plain text.
+let katex = null;
+import("../vendor/katex/katex.js").then(module => { katex = module.default; }).catch(error => console.warn("AuraSolve math rendering unavailable:", error.message));
 
 const el = (tag, className) => { const node = document.createElement(tag); if (className) node.className = className; return node; };
 
@@ -12,6 +15,7 @@ function math(node, text) {
     if (!(i % 2)) { node.append(part); return; }
     const display = !part.startsWith("\\(");
     const span = el("span", "math");
+    if (!katex) { span.textContent = part.slice(2, -2); node.append(span); return; }
     try { katex.render((display ? "" : "\\displaystyle ") + part.slice(2, -2), span, {displayMode: display, throwOnError: false, output: "html", strict: "ignore"}); }
     catch { span.textContent = part; }
     node.append(span);
