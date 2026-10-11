@@ -48,7 +48,10 @@ function card(result, mode, number) {
   const explanation = document.createElement("p");
   explanation.className = "clamped";
   explanation.textContent = result.solution.explanation;
-  article.append(label, answer, explanation);
+  if (mode === "explain") {
+    article.className = "flat";
+    article.append(answer, explanation);
+  } else article.append(label, answer, explanation);
   $("results").prepend(article);
   requestAnimationFrame(() => {
     if (explanation.scrollHeight <= explanation.clientHeight + 1) {
@@ -87,7 +90,8 @@ async function run(mode) {
           await send({type: "apply", planId: result.planId});
           live();
           status("Field filled. You choose whether to submit.");
-        } else status(mode === "explain" ? "Explanation ready." : "Fill this one yourself using the explanation.");
+        } else if (mode === "explain") $("status").hidden = true;
+        else status("Fill this one yourself using the explanation.");
         break;
       }
       if (!result.solution.supported || result.solution.confidence < .85 || !result.solution.actions.length) {
@@ -134,6 +138,7 @@ async function choose(mode) {
   if (busy) return;
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   $("results").replaceChildren();
+  $("status").hidden = false;
   status("Checking this page…");
   if (mode === "explain") { pending = null; return run(mode); }
   setBusy(true);

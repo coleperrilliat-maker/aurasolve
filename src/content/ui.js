@@ -51,7 +51,8 @@ export function createUI() {
       if(picks.length>1)label.textContent+=` · ${picks.length} answers`;
     } else {answer=document.createElement("h2");const bold=document.createElement("strong");bold.textContent=result.solution.answer;answer.append(bold);}
     const explanation=document.createElement("p");explanation.className="text clamped";explanation.textContent=result.solution.explanation;
-    article.append(label,answer,explanation);
+    if(mode==="explain"){article.classList.add("flat");article.append(answer,explanation);}
+    else article.append(label,answer,explanation);
     if (result.solution.limitation) {const note=document.createElement("p");note.className="limitation";note.textContent=result.solution.limitation;article.append(note);}
     results.prepend(article);
     requestAnimationFrame(()=>{
@@ -79,7 +80,8 @@ export function createUI() {
             const filled=document.createElement("div");filled.className="feedback";filled.textContent="✓ Field filled";
             article.append(filled);
             status("Field filled. Review it on the page; you choose whether to submit.","FILLED");
-          } else status(mode==="explain"?"Your explanation is ready.":"Automatic filling is unavailable for this answer. Use the explanation to complete it manually.",mode==="explain"?"EXPLAINED":"MANUAL STEP");
+          } else if(mode==="explain") $(".notice").hidden=true;
+          else status("Automatic filling is unavailable for this answer. Use the explanation to complete it manually.","MANUAL STEP");
           break;
         }
         if(!result.solution.supported || result.solution.confidence<.85 || !result.solution.actions.length) {card(result,mode,i);throw new Error("AutoPilot paused: this answer needs a manual step or more certainty.");}
@@ -105,7 +107,7 @@ export function createUI() {
   async function choose(mode) {
     if(running)return;
     panel.dataset.view=mode;panel.classList.toggle("explain",mode==="explain");open();
-    results.replaceChildren();
+    results.replaceChildren();$(".notice").hidden=false;
     status("Checking the current question…","CHECKING");
     const mine=++token;
     shadow.querySelectorAll("[data-mode]").forEach(el=>el.classList.toggle("active",el.dataset.mode===mode));
