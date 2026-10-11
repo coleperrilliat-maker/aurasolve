@@ -63,3 +63,5 @@ progress::-webkit-progress-bar{background:#e3eaf5}progress::-webkit-progress-val
 #speed-run{appearance:none;width:36px;height:21px;border-radius:14px;background:#d4deec;position:relative;flex-shrink:0;transition:background .15s}
 #speed-run:before{content:"";position:absolute;width:15px;height:15px;left:3px;top:3px;background:#fff;border-radius:50%;box-shadow:0 1px 3px #0002;transition:transform .15s}
 #speed-run:checked{background:#0666ff}#speed-run:checked:before{transform:translateX(15px)}
+
+#results h2{font-size:18px;letter-spacing:-.4px;margin:20px 0 5px}.run-summary{font-size:12px;color:#64748b}.run-item{border:1px solid #e3eaf5;border-radius:12px;margin:10px 0;padding:12px}.run-item>summary{cursor:pointer;font-size:13px;font-weight:500}.run-item .answer-card{margin-top:12px}

@@ -65,14 +65,20 @@ async function pageFeedback(tabId,state) {
   return outcomes.find(o=>o.state==='incorrect') || outcomes.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
 async function submitPlan(tabId,plan,state) {
-  // Resolve the control before modifying any answer. Pearson may put it in
-  // the parent frame while the answer editor lives in a child frame.
-  const documentId = controlDocument(state,'submit');
+  // Pearson may enable Check answer only after the inputs have changed.
   if ((await pageFeedback(tabId,state)).state!=='unknown') throw new Error('This question already has feedback. Move to a fresh question.');
   const result = await frameCall(tabId,plan.documentId,'execute',{...plan,submit:true,deferSubmit:true});
   if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-  const fresh = await collect(tabId);
-  if (fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash || controlDocument(fresh,'submit')!==documentId) throw new Error('The question or submit control changed. Review the filled answer manually.');
+  let fresh,documentId;
+  for(let attempt=0;attempt<20;attempt++){
+    if(plan.generation!==rev(tabId))throw new Error('Stopped.');
+    fresh=await collect(tabId);
+    if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash)throw new Error('The question changed. Review the filled answer manually.');
+    const count=[fresh.question,...(fresh.top.documentId!==fresh.question.documentId?[fresh.top]:[])].reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
+    if(count>0){documentId=controlDocument(fresh,'submit');break;}
+    await new Promise(resolve=>setTimeout(resolve,150));
+  }
+  if(!documentId)throw new Error('Answers were filled, but Check answer did not become available. Inspect this page to report its submit control.');
   await consent(tabId,fresh);
   if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
   await frameCall(tabId,documentId,'clickControl','submit');

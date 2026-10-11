@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 let captureFails=false, captured=0, solveCalls=0, lastSnapshot;
-let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false;
+let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false, enableOnFill=false;
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[],controls:{submit:1,next:1}};
@@ -11,7 +11,7 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   const wrapped=data=>[{result:{ok:true,data}}];
   if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
-  if(input.args[0]==='execute'){applied++;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
+  if(input.args[0]==='execute'){applied++;if(enableOnFill)state.controls.submit=1;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
   if(input.args[0]==='feedback')return wrapped({state:input.target.documentIds[0]==='doc1'?verdict:'unknown',text:''});
   if(input.args[0]==='nextProblem')return wrapped({clicked:nextButton});
   throw new Error('Unexpected frame call');
@@ -143,4 +143,15 @@ test('visual questions include a screenshot in the same single solve call',async
     assert.equal(solveCalls,before+1);assert.equal(captured,shots+1);
     assert.match(lastSnapshot.image,/^data:image\/jpeg;base64,/);
   }finally{state.visual=false;}
+});
+
+test('AutoPilot fills before resolving a submit button disabled until input',async()=>{
+ await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+ state.controls.submit=0;enableOnFill=true;clickedDocument=null;
+ try{
+  const result=await request({type:'solve',mode:'autopilot'});
+  const response=await request({type:'apply',planId:result.data.planId});
+  assert.equal(response.ok,true);assert.equal(response.data.submitted,true);
+  assert.equal(clickedDocument,'doc1');
+ }finally{enableOnFill=false;state.controls.submit=1;}
 });

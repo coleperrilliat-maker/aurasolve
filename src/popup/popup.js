@@ -7,7 +7,7 @@ document.querySelector('.brand strong').textContent=`AuraSolve ${BUILD_VERSION}`
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let pending = null;
 let token = 0;
-let busy = false, paused=false;
+let busy = false, paused=false, runLog=[];
 for(const id of ['time-min','time-max']){
   for(let seconds=10;seconds<=120;seconds+=10)$(id).add(new Option(seconds+' seconds',seconds));
 }
@@ -63,8 +63,23 @@ function card(result, mode, number) {
   $("results").prepend(renderSolution(result, mode === "autopilot" ? `Question ${number}` : ""));
 }
 
+function breakdown(){
+  if(!runLog.length)return;
+  $('results').replaceChildren();
+  const heading=document.createElement('h2');heading.textContent='Run breakdown';
+  const summary=document.createElement('p');summary.className='run-summary';
+  summary.textContent=runLog.filter(item=>item.outcome==='Correct').length+' of '+runLog.length+' attempted questions confirmed correct.';
+  $('results').append(heading,summary);
+  for(const item of runLog){
+    const details=document.createElement('details');details.className='run-item';
+    const label=document.createElement('summary');label.textContent='Question '+item.number+' · '+item.outcome;
+    details.append(label,renderSolution(item.result,''));$('results').append(details);
+  }
+}
+
 async function run(mode) {
   const mine = ++token;
+  runLog=[];
   paused=false;pauseUI();
   const limit=mode==='autopilot'?Number($('question-limit').value):1;
   $('pilot-progress').hidden=mode!=='autopilot';
@@ -99,7 +114,8 @@ async function run(mode) {
       let result;
       try { result = await send({type: "solve", mode}); } finally { $("loader").hidden = true; }
       await checkpoint();
-      card(result, mode, i);
+      if(mode==='autopilot')runLog.push({number:i,result,outcome:'Not submitted'});
+      else card(result,mode,i);
       if (mode !== "autopilot") {
         if (mode === "field" && result.solution.supported && result.solution.actions.length && result.solution.confidence >= .85) {
           status("Filling the selected field…");
@@ -122,8 +138,10 @@ async function run(mode) {
       await checkpoint();
       $('pace-status').textContent=$('speed-run').checked?'Speed run · no extra delay':'Target pace: '+target+' seconds';
       status("Checking the answer…");
+      runLog[runLog.length-1].outcome="Submission requested · result unconfirmed";
       await send({type: "apply", planId: result.planId});
       live();
+      runLog[runLog.length-1].outcome='Submitted · result unconfirmed';
       let outcome;
       for (let poll = 0; poll < 12; poll++) {
         await delay(500);
@@ -132,6 +150,7 @@ async function run(mode) {
         live();
         if (outcome.state !== "unknown") break;
       }
+      runLog[runLog.length-1].outcome=outcome?.state==='correct'?'Correct':outcome?.state==='incorrect'?'Incorrect':'Submitted · result unconfirmed';
       if (outcome?.state !== "correct") throw new Error("AutoPilot stopped. A correct answer was not confirmed.");
       $('progress').value=i;
       status(i === limit ? limit+(limit===1?" question done.":" questions done.") : "Correct. Continuing…");
@@ -152,7 +171,7 @@ async function run(mode) {
   } catch (error) {
     if (mine === token) status(`${error.message}${$("results").children.length ? ' Your answer and explanation are below.' : ''}`);
   } finally {
-    if (mine === token) setBusy(false);
+    if (mine === token) {setBusy(false);if(mode==='autopilot')breakdown();}
   }
 }
 
@@ -223,6 +242,7 @@ $("stop").onclick = async () => {
   setBusy(false);
   try { await send({type: "stop"}); } catch {}
   status("Stopped.");
+  breakdown();
 };
 
 try {

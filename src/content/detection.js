@@ -143,7 +143,7 @@ export function feedback() {
 export function findButtons(kind) {
   const patterns = kind === "submit" ? /^(check answer|check my answer|submit answer|submit|check)$/i : /^(next|next question|next problem|continue)$/i;
   const command = kind === 'submit' ? 'checkanswer' : 'next';
-  return [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && (el.getAttribute('command')?.toLowerCase() === command || patterns.test(clean(el.innerText || el.value || el.getAttribute('aria-label')))));
+  return [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && (el.getAttribute('command')?.toLowerCase() === command || [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].some(text=>patterns.test(clean(text)))));
 }
 export function findButton(kind) {
   const buttons = findButtons(kind);

@@ -222,10 +222,13 @@ try{
   await pilot.evaluate(()=>releaseSolve());
   await pilot.waitForTimeout(200);
   assert.equal(await pilot.evaluate(()=>pilotCalls.includes('apply')),false);
+  assert.equal(await pilot.locator('#results').textContent(),'');
   await pilot.getByRole('button',{name:'Resume AutoPilot',exact:true}).click();
   await pilot.waitForFunction(()=>document.querySelector('#status').textContent==='1 question done.');
   assert.equal(await pilot.evaluate(()=>pilotCalls.filter(c=>c==='apply').length),1);
   assert.equal(await pilot.locator('#progress').getAttribute('value'),'1');
+  assert.equal(await pilot.locator('#results h2').textContent(),'Run breakdown');
+  assert.equal(await pilot.locator('.run-item summary').textContent(),'Question 1 · Correct');
   await pilot.screenshot({path:'/workspace/scratch/9a7d8c843f26/pilot-sidebar.png'});
   console.log('PASS: AutoPilot settings, speed run, pause during solve, resume once, and run limit');
   const side=await browser.newPage();
