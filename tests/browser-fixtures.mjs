@@ -131,6 +131,15 @@ try{
   await fill.evaluate(()=>{document.querySelector('main').removeAttribute('data-aura-question');document.querySelector('main').innerHTML='<h1>Account settings</h1><input aria-label="Display name">';});
   await fill.waitForFunction(()=>!document.querySelector('#aurasolve-root'));
   console.log('PASS: Fill disappears on dashboards and settings and returns for answerable questions');
+  const placement=await fill.evaluate(async()=>{
+    document.querySelector('main').innerHTML='<div id="generatedPrompt"><p>If the transformation to the right is an isometry, find the value of y.</p></div><div><input aria-label="y"></div><div id="diagram"><svg width="200" height="200"></svg></div>';
+    document.querySelector('main').setAttribute('data-aura-question','');
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const host=document.querySelector('#aurasolve-root'),button=testShadow.querySelector('button');
+    return {inPrompt:Boolean(host.closest('#generatedPrompt')),height:getComputedStyle(button).height,weight:getComputedStyle(button).fontWeight};
+  });
+  assert.deepEqual(placement,{inPrompt:true,height:'30px',weight:'400'});
+  console.log('PASS: compact regular-weight button stays inside text prompt instead of diagram panel');
   const side=await browser.newPage();
   await side.addInitScript(()=>{
     window.chrome={runtime:{sendMessage:async message=>({ok:true,data:message.type==='settingsStatus'?{configured:true}:message.type==='solve'?{solution:{answer:'5',explanation:'Subtract 7, then divide by 3.',actions:[],choices:[]},question:{fields:[]}}:{}})},windows:{getCurrent:async()=>({id:7})},sidePanel:{close:async options=>{window.closedWindow=options.windowId;}}};
