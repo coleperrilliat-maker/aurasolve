@@ -46,7 +46,11 @@ try{
     await actions.execute({...plan,submit:true});
     actions.clickControl('next');
     const {answerLines}=await import('/src/shared/render.js');
-    const compact=answerLines({answer:'B. A coordinate plane has a horizontal x-axis.\nD. It is a translation up four units.',choices:[],actions:[]},{fields:[]});
+    const compact=answerLines({answer:'B. A coordinate plane has a horizontal x-axis.\nD. It is a translation up four units.',choices:[],actions:[]},{fields:[{kind:'radio'}]});
+    {
+      const numeric=answerLines({answer:'A. y = 8',choices:['A'],actions:[]},{fields:[{kind:'text'}]});
+      if(JSON.stringify(numeric)!==JSON.stringify(['y = 8']))throw new Error('Part label replaced numeric answer');
+    }
     return {checked:document.querySelector('input[type="radio"]').checked,value:document.querySelector('#scale').value,submits,next,compact};
   });
   assert.deepEqual(mixed,{checked:true,value:'1/3',submits:1,next:1,compact:['Graph B','D']});
