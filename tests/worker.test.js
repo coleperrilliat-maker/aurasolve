@@ -110,3 +110,11 @@ test('Fill solves and applies without any signature',async()=>{
   assert.equal(filled.data.submitted,false);
   assert.equal(session['grant:1'],undefined);
 });
+test('a visual question never silently falls back to text when capture fails',async()=>{
+  state.visual=true;
+  try {
+    const result=await request({type:'solve',mode:'field'});
+    assert.equal(result.ok,false);
+    assert.match(result.error,/Could not capture the question image/);
+  } finally {state.visual=false;}
+});

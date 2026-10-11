@@ -140,6 +140,13 @@ try{
   });
   assert.deepEqual(placement,{inPrompt:true,height:'30px',weight:'400'});
   console.log('PASS: compact regular-weight button stays inside text prompt instead of diagram panel');
+  const inventory=await fill.evaluate(async()=>{
+    document.querySelector('main').innerHTML='<p>Choose a reason for this statement.</p><select aria-label="Reason"><option value="v">Vertical angles</option></select><input value="private-answer">';
+    const {inspectControls}=await import('/src/content/diagnostics.js');return inspectControls();
+  });
+  assert.ok(inventory.controls.some(c=>c.tag==='SELECT' && c.options[0].label==='Vertical angles'));
+  assert.ok(!JSON.stringify(inventory).includes('private-answer'));
+  console.log('PASS: read-only inspector reports dropdown options without entered input values');
   const side=await browser.newPage();
   await side.addInitScript(()=>{
     window.chrome={runtime:{sendMessage:async message=>({ok:true,data:message.type==='settingsStatus'?{configured:true}:message.type==='solve'?{solution:{answer:'5',explanation:'Subtract 7, then divide by 3.',actions:[],choices:[]},question:{fields:[]}}:{}})},windows:{getCurrent:async()=>({id:7})},sidePanel:{close:async options=>{window.closedWindow=options.windowId;}}};

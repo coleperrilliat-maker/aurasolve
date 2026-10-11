@@ -26,7 +26,8 @@ async function collect(tabId) {
 }
 const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,allFrames:true},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
 async function screenshot(tabId, question) {
-  const {windowId} = await chrome.tabs.get(tabId);
+  const {windowId,active} = await chrome.tabs.get(tabId);
+  if(!active)throw new Error("Keep the question tab active so AuraSolve can read its image.");
   await veil(tabId,true);
   let shot;
   try { await new Promise(resolve=>setTimeout(resolve,80)); shot = await chrome.tabs.captureVisibleTab(windowId,{format:"png"}); }
@@ -118,6 +119,11 @@ async function handle(message,sender) {
     }
   }
   const tabId = await resolveTab(message, sender);
+  if (message.type === 'inspectPage') {
+    await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:'MAIN',func:editorBridge,args:[{op:'discover'}]});
+    const reports=await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:async()=>{await globalThis.__auraReady;return globalThis.__aura?.inspectControls?.() || null;}});
+    return {version:chrome.runtime.getManifest().version,frames:reports.filter(r=>r.result).map(r=>({frameId:r.frameId,...r.result}))};
+  }
   if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); return {}; }
   if (message.type==='prepareField') {
     const state=await collect(tabId);
@@ -159,7 +165,7 @@ async function handle(message,sender) {
     try {
       const {rect, viewport, ...question} = state.question;
       if (question.visual) {
-        question.image = await screenshot(tabId, state.question).catch(error => { console.warn("AuraSolve screenshot failed:", error); return null; });
+        question.image = await screenshot(tabId, state.question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
         visualRead = Boolean(question.image);
         if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
       }

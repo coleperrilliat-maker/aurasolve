@@ -164,3 +164,20 @@ try {
 
 
 $('close').onclick=async()=>{const win=await chrome.windows.getCurrent();await chrome.sidePanel.close({windowId:win.id});};
+
+let inspectionReport=null;
+$('inspect-page').onclick=async()=>{
+  $('inspect-page').disabled=true;
+  try {
+    inspectionReport=await send({type:'inspectPage'});
+    const frames=inspectionReport.frames;
+    $('inspection-summary').textContent=frames.map(f=>`Frame ${f.frameId}: ${f.fields.length} supported fields, ${f.controls.length} controls; vision ${f.visual?'needed':'not detected'}.`).join('\n');
+    $('inspection-summary').hidden=false;$('save-inspection').hidden=false;
+  } catch(error){status(error.message);$('status').hidden=false;}
+  finally{$('inspect-page').disabled=false;}
+};
+$('save-inspection').onclick=()=>{
+  if(!inspectionReport)return;
+  const url=URL.createObjectURL(new Blob([JSON.stringify(inspectionReport,null,2)],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='aurasolve-page-inspection.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};

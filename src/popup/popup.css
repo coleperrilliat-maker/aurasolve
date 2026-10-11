@@ -41,3 +41,5 @@ button:disabled{opacity:.45;cursor:default}
 
 
 body{width:100%;min-width:260px;padding:20px}.modes{grid-template-columns:1fr 1fr;margin:18px 0}.modes button{padding:12px;font-size:14px}#close{border:1px solid #dce3ec;background:#f5f8fc;border-radius:8px;padding:7px 12px;font:600 13px system-ui;cursor:pointer}#cloud{margin:8px 0}header{gap:10px}
+
+.inspection{margin-top:24px;border-top:1px solid #e2e8f0;padding-top:14px;color:#475569;font-size:13px}.inspection summary{cursor:pointer}.inspection button{background:#eff6ff;color:#065adb;border:1px solid #dbeafe;padding:8px 12px;border-radius:7px;cursor:pointer}.inspection pre{white-space:pre-wrap;font:12px/1.5 system-ui}

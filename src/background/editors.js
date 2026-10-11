@@ -14,8 +14,8 @@ export function editorBridge(request = {op: "discover"}) {
       const registry=window.dijit?.registry || window.dijit;
       const widgetId=el.getAttribute('widgetid') || el.id;
       const widget = registry?.byNode?.(el) || (widgetId && registry?.byId?.(widgetId));
-      if (widget && typeof widget.getOptions === 'function' && typeof widget.set === 'function' && typeof widget.get === 'function' && typeof widget._setValueAttr === 'function') {
-        const options = widget.getOptions();
+      if (widget && (typeof widget.getOptions === 'function' || Array.isArray(widget.options)) && typeof widget.set === 'function' && typeof widget.get === 'function' && typeof widget._setValueAttr === 'function') {
+        const options = typeof widget.getOptions === 'function' ? widget.getOptions() : widget.options;
         if (Array.isArray(options) && options.length) return {
           name:'dojo-select',
           options:options.filter(o=>o.value != null).map(o=>{
