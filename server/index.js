@@ -1,5 +1,5 @@
 import http from "node:http";
-import {solveWithOpenAI} from "./openai.js";
+import {solveWithOpenAI, DEFAULT_MODEL} from "./openai.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 4_000_000;
@@ -65,7 +65,7 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, 200, {
       ok: true,
       service: "aurasolve",
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      model: process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL,
       keyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
     });
     return;
@@ -86,7 +86,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const {mode, snapshot, model} = payload;
+    const {mode, snapshot, model, effort} = payload;
     if (!["explain", "field", "autopilot"].includes(mode) || !snapshot || typeof snapshot !== "object") {
       sendJson(res, 400, {error: "Missing mode or snapshot."});
       return;
@@ -97,7 +97,7 @@ const server = http.createServer(async (req, res) => {
     req.on("close", () => controller.abort());
 
     try {
-      const solution = await solveWithOpenAI(snapshot, mode, model, controller.signal);
+      const solution = await solveWithOpenAI(snapshot, mode, typeof model === "string" ? model : undefined, controller.signal, effort);
       sendJson(res, 200, {solution});
     } catch (error) {
       const message = error.name === "AbortError" ? "Request timed out." : error.message;

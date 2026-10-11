@@ -1,7 +1,8 @@
 export const solutionSchema = {
   type: "object", additionalProperties: false,
+  // explanation comes first so the model works the problem before committing to an answer.
   properties: {
-    answer: {type:"string"}, choices: {type:"array",items:{type:"string"}}, explanation: {type:"string"},
+    explanation: {type:"string"}, answer: {type:"string"}, choices: {type:"array",items:{type:"string"}},
     confidence: {type:"number"}, supported: {type:"boolean"},
     limitation: {type:"string"},
     actions: {type:"array",items:{type:"object",additionalProperties:false,properties:{
@@ -9,7 +10,7 @@ export const solutionSchema = {
       target:{type:"string"}, value:{type:"string"}, destination:{type:"string"},
       x:{type:["number","null"]}, y:{type:["number","null"]}
     },required:["kind","target","value","destination","x","y"]}}
-  }, required:["answer","choices","explanation","confidence","supported","limitation","actions"]
+  }, required:["explanation","answer","choices","confidence","supported","limitation","actions"]
 };
 export function validateSolution(solution, snapshot, mode) {
   if (!solution || typeof solution.answer !== "string" || typeof solution.explanation !== "string" ||

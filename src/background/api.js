@@ -11,7 +11,7 @@ export async function solve(snapshot, mode, settings, signal) {
     body: JSON.stringify({
       mode,
       snapshot,
-      model: settings.model || "gpt-4.1-mini",
+      model: settings.model || undefined,
     }),
   });
 

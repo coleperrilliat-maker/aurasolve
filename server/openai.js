@@ -1,9 +1,15 @@
 import {solutionSchema, validateSolution} from "../src/shared/solution.js";
 import {TUTOR_INSTRUCTIONS} from "../src/shared/instructions.js";
 
-export async function solveWithOpenAI(snapshot, mode, model, signal) {
+export const DEFAULT_MODEL = "gpt-4.1-mini";
+const EFFORTS = ["none", "minimal", "low", "medium", "high"];
+
+export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, requestedEffort) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("Server is missing OPENAI_API_KEY.");
+  const model = requestedModel || process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
+  const effort = EFFORTS.includes(requestedEffort) ? requestedEffort : process.env.OPENAI_REASONING_EFFORT?.trim() || "low";
+  const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort}} : {};
 
   const image = typeof snapshot.image === "string" && snapshot.image.length < 3_500_000 && /^data:image\/(jpeg|png);base64,/.test(snapshot.image) ? snapshot.image : null;
   const text = JSON.stringify({
@@ -24,13 +30,14 @@ export async function solveWithOpenAI(snapshot, mode, model, signal) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: model || process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      model,
+      ...reasoning,
       store: false,
       instructions: TUTOR_INSTRUCTIONS,
       input: image
         ? [{role: "user", content: [{type: "input_text", text}, {type: "input_image", image_url: image, detail: "high"}]}]
         : text,
-      max_output_tokens: 3000,
+      max_output_tokens: reasoning.reasoning ? 12000 : 3000,
       text: {
         format: {
           type: "json_schema",
