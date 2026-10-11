@@ -13,6 +13,7 @@ export function createUI() {
   const wrap=document.createElement("div");
   wrap.innerHTML=`
   <nav class="dock" aria-label="AuraSolve modes"><span class="dock-grip" title="Drag to move · double-click to reset" aria-hidden="true"></span><button data-mode="autopilot" title="Practice AutoPilot" aria-label="Practice AutoPilot">✈️</button><button data-mode="field" title="Fill this field" aria-label="Fill this field">✍️</button><button data-mode="explain" title="Explain to me" aria-label="Explain to me">💡</button></nav>
+  <div id="fill-status" class="fill-status" role="status" aria-live="polite" hidden></div>
   <aside class="panel" hidden aria-label="AuraSolve practice tutor">
     <header id="drag" title="Drag to move"><small class="build">AuraSolve ${BUILD_VERSION}</small><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
     <div class="body">
@@ -38,7 +39,9 @@ export function createUI() {
   };
   $('#reconnect').onclick=()=>location.reload();
   const open=()=>{panel.hidden=false;};
+  let fillNoticeTimer;
   const status=text=>{$("#status").textContent=text;};
+  const fillNotice=text=>{clearTimeout(fillNoticeTimer);$('#fill-status').textContent=text;$('#fill-status').hidden=false;fillNoticeTimer=setTimeout(()=>{$('#fill-status').hidden=true;},8000);};
   $("#drag").addEventListener("pointerdown",event=>{
     if(event.button!==0 || event.target.closest("button"))return;
     const rect=panel.getBoundingClientRect(), dx=event.clientX-rect.left, dy=event.clientY-rect.top;
@@ -103,6 +106,10 @@ export function createUI() {
   addEventListener("resize",()=>requestAnimationFrame(placeDock));
   function busy(value) {
     running=value;$("#stop").hidden=!value;
+    const fieldButton=$('[data-mode="field"]'), loading=value && panel.dataset.view==='field';
+    fieldButton.innerHTML=loading?'<span class="fill-spinner" aria-hidden="true"></span>':'✍️';
+    fieldButton.setAttribute('aria-busy',String(loading));
+    fieldButton.setAttribute('aria-label',loading?'Filling answers':'Fill answers');
     const canContinue=results.children.length && (panel.dataset.view!=="field" || pendingField);
     $("#nextbar").hidden=value || !canContinue;
     shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value || disconnected);
@@ -115,6 +122,7 @@ export function createUI() {
   }
   async function run(mode) {
     const mine=++token;busy(true);$("#consent").hidden=true;
+    if(mode==="field")panel.hidden=true;
     const live=()=>{if(mine!==token)throw new Error("Stopped.");};
     try {
       const settings=await request({type:"settingsStatus"});live();
@@ -125,6 +133,12 @@ export function createUI() {
         let result;
         try{result=await request({type:"solve",mode});}finally{$("#loader").hidden=true;}
         live();
+        if(mode==='field') {
+          if(!result.solution.supported || !result.solution.actions.length || result.solution.confidence<.85) throw new Error(result.solution.limitation || 'Could not fill these controls. Use Explain for help.');
+          await request({type:'apply',planId:result.planId});live();
+          status('Answers filled.');
+          break;
+        }
         const article=card(result,mode,i);
         if(mode!=="autopilot") {
           if(mode==="explain")explainedPrompt=result.question.promptHash;
@@ -156,13 +170,13 @@ export function createUI() {
         for(let poll=0;poll<12;poll++){await sleep(500);live();const next=await request({type:"inspect"});live();if(next.question.hash!==result.question.hash){changed=true;break;}}
         if(!changed)throw new Error("The next question did not load. AutoPilot stopped.");
       }
-    } catch(error) {if(mine===token)status(`${error.message}${results.children.length ? ' Your answer and explanation are below.' : ''}`,"NEEDS ATTENTION");}
+    } catch(error) {if(mine===token && mode==='field')fillNotice(error.message);else if(mine===token)status(`${error.message}${results.children.length ? ' Your answer and explanation are below.' : ''}`,"NEEDS ATTENTION");}
     finally {if(mine===token)busy(false);}
   }
   async function choose(mode) {
     if(running)return;
     pendingField=null;
-    panel.dataset.view=mode;panel.classList.toggle("explain",mode==="explain");open();
+    panel.dataset.view=mode;panel.classList.toggle("explain",mode==="explain");panel.hidden=mode==="field";$("#fill-status").hidden=true;
     $("#next").textContent=mode==="field"?"Submit & next →":"Next problem →";
     results.replaceChildren();$(".notice").hidden=false;
     status("Checking the current question…","CHECKING");
@@ -175,9 +189,9 @@ export function createUI() {
       const info=await request({type:"inspect"});
       if(mine!==token)return;
       if(info.signed || consentUrl===location.href){busy(false);return await run(mode);}
-      pending=mode;$("#consent").hidden=false;$("#statement").value="";$("#signature").value="";$("#confirm").disabled=true;
+      pending=mode;open();$("#consent").hidden=false;$("#statement").value="";$("#signature").value="";$("#confirm").disabled=true;
       status("Type the honor statement and sign to continue.","Honor code");
-    }catch(error){status(error.message,"NEEDS ATTENTION");}finally{busy(false);}
+    }catch(error){if(mode==="field")fillNotice(error.message);else status(error.message,"NEEDS ATTENTION");}finally{busy(false);}
   }
   async function nextProblem() {
     const mode=panel.dataset.view;

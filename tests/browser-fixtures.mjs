@@ -107,13 +107,13 @@ try{
   });
   await ui.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.includes('Fixture: editor unavailable'));
   const text=await ui.evaluate(()=>testShadow.querySelector('#results').textContent);
-  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.11/);
+  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.12/);
   assert.match(text,/Answer/);assert.match(text,/Explanation/);assert.match(text,/Subtract 7/);
   assert.equal(await ui.evaluate(()=>testShadow.querySelectorAll('.answer-card').length),1);
   console.log('PASS: AutoPilot keeps one answer and explanation visible after a failed fill');
   await ui.evaluate(()=>{delete window.chrome.runtime;testShadow.querySelector('[data-mode="field"]').click();});
   await ui.waitForFunction(()=>!testShadow.querySelector('#reconnect').hidden);
-  const disconnectedText=await ui.evaluate(()=>testShadow.querySelector('#status').textContent);
+  const disconnectedText=await ui.evaluate(()=>testShadow.querySelector('#fill-status').textContent);
   assert.match(disconnectedText,/Refresh this lab page/);
   assert.doesNotMatch(disconnectedText,/Cannot read properties/);
   assert.equal(await ui.evaluate(()=>testShadow.querySelector('[data-mode="field"]').disabled),true);
@@ -151,6 +151,8 @@ try{
   await fill.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.startsWith('Answers filled.'));
   assert.equal(await fill.locator('#answer').inputValue(),'5');
   assert.equal(await fill.evaluate(()=>window.submits),0);
-  assert.match(await fill.evaluate(()=>testShadow.querySelector('#results').textContent),/Subtract 7/);
-  console.log('PASS: Fill button writes the selected native input, shows tutoring, and never submits');
+  assert.match(await fill.evaluate(()=>testShadow.querySelector('#results').textContent),/^$/);
+  assert.equal(await fill.evaluate(()=>testShadow.querySelector('.panel').hidden),true);
+  assert.equal(await fill.evaluate(()=>testShadow.querySelector('[data-mode="field"]').getAttribute('aria-busy')),'false');
+  console.log('PASS: Fill button writes the selected native input, stays popup-free, restores its emoji, and never submits');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
