@@ -34,29 +34,67 @@ export function editorBridge(request = {op: "discover"}) {
     // Pearson also exposes answer dropdowns without a global Dojo registry.
     // Only use a menu explicitly linked to this control, never a page-wide menu.
     if (el.matches('.acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid]')) {
-      const ids=[el.getAttribute('aria-controls'),el.getAttribute('aria-owns'),
-        (el.getAttribute('widgetid') || el.id) && (el.getAttribute('widgetid') || el.id)+'_dropdown']
-        .filter(Boolean).flatMap(id=>id.split(/\s+/));
-      const menus=[...new Set(ids.map(id=>document.getElementById(id)).filter(Boolean))];
-      if(menus.length===1) {
-        const items=[...menus[0].querySelectorAll('[role="option"],[role="menuitem"],.dijitMenuItem')]
+      const menuItems=()=>{
+        const ids=[el.getAttribute('aria-controls'),el.getAttribute('aria-owns'),
+          (el.getAttribute('widgetid') || el.id) && (el.getAttribute('widgetid') || el.id)+'_dropdown']
+          .filter(Boolean).flatMap(id=>id.split(/\s+/));
+        const menus=[...new Set(ids.map(id=>document.getElementById(id)).filter(Boolean))];
+        if(menus.length!==1)return [];
+        return [...menus[0].querySelectorAll('[role="option"],[role="menuitem"],.dijitMenuItem')]
           .filter(item=>!item.parentElement?.closest('[role="option"],[role="menuitem"],.dijitMenuItem'));
-        const label=item=>(item.querySelector('.dijitMenuItemLabel') || item).textContent.trim();
-        const labels=items.map(label);
-        if(items.length && labels.every(Boolean) && new Set(labels).size===labels.length) return {
-          name:'dojo-select',
-          options:items.map(item=>({value:label(item),label:label(item),disabled:item.getAttribute('aria-disabled')==='true' || item.classList.contains('dijitDisabled')})),
-          read:()=>(el.querySelector('.dijitSelectLabel,.textbasecell span') || el).textContent.trim(),
-          write:value=>{
-            const item=items.find(item=>label(item)===value && item.getAttribute('aria-disabled')!=='true' && !item.classList.contains('dijitDisabled'));
-            if(!item)throw new Error('The dropdown option is unavailable.');
-            el.click();item.click();
-          }
-        };
+      };
+      const label=item=>(item.querySelector('.dijitMenuItemLabel') || item).textContent.trim();
+      const disabled=item=>item.getAttribute('aria-disabled')==='true' || item.classList.contains('dijitDisabled');
+      const items=menuItems(),labels=items.map(label);
+      let options=[];
+      if(items.length && labels.every(Boolean) && new Set(labels).size===labels.length) {
+        options=items.map(item=>({value:label(item),label:label(item),disabled:disabled(item)}));
+        el.dataset.auraDropdownOptions=JSON.stringify(options);
+      } else {
+        try {options=JSON.parse(el.dataset.auraDropdownOptions || '[]');} catch {}
       }
+      if(options.length)return {
+        name:'dojo-select',options,
+        read:()=>(el.querySelector('.dijitSelectLabel,.textbasecell span') || el).textContent.trim(),
+        write:async value=>{
+          if(!options.some(o=>o.value===value && !o.disabled))throw new Error('The dropdown option is unavailable.');
+          el.click();
+          let item;
+          for(let attempt=0;attempt<20;attempt++){
+            item=menuItems().find(item=>label(item)===value && !disabled(item) && item.getClientRects().length);
+            if(item)break;
+            await new Promise(resolve=>setTimeout(resolve,50));
+          }
+          if(!item)throw new Error('Could not open this answer dropdown. Inspect this page to report its control.');
+          item.click();
+          for(let attempt=0;attempt<20;attempt++){
+            if((el.querySelector('.dijitSelectLabel,.textbasecell span') || el).textContent.trim()===value)return;
+            await new Promise(resolve=>setTimeout(resolve,50));
+          }
+        }
+      };
     }
+
     return null;
   }
+  if(request.op==='prepare')return (async()=>{
+    if(document.hidden)throw new Error('The question tab is hidden.');
+    const prior=document.activeElement;
+    const roots='[data-aura-question],[data-testid="question"],div[id*="xl_player_layout"],.question-content,#questionContent,#question-content,.questionContainer,.question-container,#problem,.problem-content';
+    for(const el of document.querySelectorAll('.acctable .inputcell[role="listbox"],.dijitSelect,[role="combobox"][widgetid]')){
+      if(!el.closest(roots) || !el.getClientRects().length || el.closest('[hidden],[aria-disabled="true"],.disabled,.dijitDisabled') || adapterFor(el))continue;
+      el.click();
+      for(let attempt=0;attempt<20;attempt++){
+        if(adapterFor(el))break;
+        await new Promise(resolve=>setTimeout(resolve,50));
+      }
+      const target=document.activeElement || el;
+      target.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',keyCode:27,bubbles:true}));
+      target.dispatchEvent(new KeyboardEvent('keyup',{key:'Escape',code:'Escape',keyCode:27,bubbles:true}));
+    }
+    prior?.focus?.({preventScroll:true});
+    return true;
+  })();
   if (request.op === 'discover') {
     for (const el of document.querySelectorAll(selector)) {
       const adapter = adapterFor(el);
@@ -78,11 +116,14 @@ export function editorBridge(request = {op: "discover"}) {
     throw new Error('The math editor is unavailable.');
   const adapter = adapterFor(el);
   if (!adapter || adapter.name !== request.adapter) throw new Error('This math editor needs a dedicated adapter.');
-  adapter.write(request.value);
+  const written=adapter.write(request.value);
+  const finish=()=>{
   const normalize = value => String(value).replace(/\s+/g,'');
   if (normalize(adapter.read()) !== normalize(request.value))
     throw new Error('The math editor did not retain the answer. Review it manually.');
   el.dispatchEvent(new Event('input',{bubbles:true}));
   el.dispatchEvent(new Event('change',{bubbles:true}));
   return {filled:true};
+  };
+  return written?.then ? written.then(finish) : finish();
 }

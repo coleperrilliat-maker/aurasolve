@@ -128,6 +128,7 @@ async function handle(message,sender) {
   if (message.type==='prepareField') {
     const state=await collect(tabId);
     await frameCall(tabId,state.question.documentId,'prepareField');
+    await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
     return {};
   }
   if (message.type === "inspect") {
@@ -155,8 +156,10 @@ async function handle(message,sender) {
   if (message.type === "solve") {
     if (!["explain","field","autopilot"].includes(message.mode)) throw new Error("Unknown mode.");
     cancel(tabId); const generation = rev(tabId);
-    const state = await collect(tabId);
+    let state = await collect(tabId);
     if (message.mode === "autopilot") await consent(tabId,state);
+    await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:"MAIN",func:editorBridge,args:[{op:"prepare"}]});
+    state = await collect(tabId);
     const {settings={}} = await chrome.storage.local.get("settings");
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);

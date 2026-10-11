@@ -91,11 +91,37 @@ try{
     const {editorBridge}=await import('/src/background/editors.js');editorBridge();
     const detector=await import('/src/content/detection.js'),before=detector.snapshot();
     const field=before.fields[0];
-    editorBridge({op:'write',key:field.editorKey,adapter:field.adapter,value:'always'});
+    await editorBridge({op:'write',key:field.editorKey,adapter:field.adapter,value:'always'});
     return {shown,kind:field.kind,options:field.options.map(o=>o.label),value:control.textContent,stable:before.hash===detector.snapshot().hash};
   });
   assert.deepEqual(pearsonListbox,{shown:true,kind:'select',options:['always','sometimes','never'],value:'always',stable:true});
   console.log('PASS: Pearson listbox shows Fill before discovery and fills a linked DOM dropdown without a global registry');
+
+  const lazyDropdowns=await page.evaluate(async()=>{
+    delete window.dijit;
+    document.body.innerHTML='<main data-aura-question><p>Choose both missing words.</p><div class="acctable"><span id="one" role="listbox" class="inputcell" aria-controls="one_dropdown"><span class="textbasecell"><span>Choose</span></span></span><span id="two" role="listbox" class="inputcell" aria-controls="two_dropdown"><span class="textbasecell"><span>Choose</span></span></span></div></main>';
+    for(const id of ['one','two']){
+      const control=document.getElementById(id);
+      control.onclick=()=>setTimeout(()=>{
+        document.getElementById(id+'_dropdown')?.remove();
+        const menu=document.createElement('div');menu.id=id+'_dropdown';
+        for(const word of ['always','sometimes','never']){
+          const option=document.createElement('div');option.setAttribute('role','option');option.textContent=word;
+          option.onclick=()=>setTimeout(()=>{control.querySelector('.textbasecell span').textContent=word;menu.remove();},60);
+          menu.append(option);
+        }
+        document.body.append(menu);
+      },60);
+    }
+    document.addEventListener('keydown',event=>{if(event.key==='Escape')document.querySelectorAll('[id$="_dropdown"]').forEach(el=>el.remove());});
+    const {editorBridge}=await import('/src/background/editors.js');
+    await editorBridge({op:'prepare'});editorBridge();
+    const {snapshot}=await import('/src/content/detection.js');const before=snapshot();
+    for(const [i,field] of before.fields.entries())await editorBridge({op:'write',key:field.editorKey,adapter:field.adapter,value:i?'never':'always'});
+    return {count:before.fields.length,values:[...document.querySelectorAll('.textbasecell span')].map(el=>el.textContent),stable:before.hash===snapshot().hash};
+  });
+  assert.deepEqual(lazyDropdowns,{count:2,values:['always','never'],stable:true});
+  console.log('PASS: two delayed dropdowns discovered, reopened after menu removal, and filled with verified asynchronous readback');
 
   const activated=await page.evaluate(async()=>{
     document.body.innerHTML='<main data-aura-question>Solve 2x = 8<span class="eqEditor inputField" widgetid="fixture">Answer</span></main>';
