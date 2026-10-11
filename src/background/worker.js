@@ -16,7 +16,7 @@ async function collect(tabId) {
   const found = frames.filter(f=>f.question);
   const known = found.filter(f=>!f.fallback);
   const candidates = known.length ? known : found;
-  const focused = candidates.filter(f=>f.selected);
+  const focused = candidates.filter(f=>f.selected && f.selectionSource!=='automatic');
   let options = focused.length === 1 ? focused : candidates;
   // Several guessed containers (e.g. a sidebar form and the question frame): use the one with the most answer controls.
   if (options.length > 1 && !known.length) options = [options.reduce((a,b)=>(b.fields.length-a.fields.length || b.question.length-a.question.length)>0?b:a)];

@@ -16,7 +16,7 @@ export function labelFor(el) {
 }
 // Pearson's split player puts the prompt in #top and the inputs in #bottom.
 // Read their common layout container, not either panel separately.
-const rootSelector = '[data-aura-question], [data-testid="question"], [id^="xl_player_layout_TopBottomLayout_"], .question-content, #questionContent, #question-content, .questionContainer, .question-container, #problem, .problem-content';
+const rootSelector = '[data-aura-question], [data-testid="question"], div[id*="xl_player_layout"], .question-content, #questionContent, #question-content, .questionContainer, .question-container, #problem, .problem-content';
 export function questionRoot() {
   const active = selected && elementFor(selected);
   const nearest = active?.closest(rootSelector);
@@ -24,7 +24,13 @@ export function questionRoot() {
   const matches = [...document.querySelectorAll(rootSelector)].filter(visible);
   const roots = matches.filter(el=>!matches.some(parent=>parent!==el && parent.contains?.(el)));
   if (roots.length === 1) return roots[0];
-  return roots.length ? null : fallbackRoot(active);
+  if (roots.length) return null;
+  // Mastering's question body is separate from its navigation and toolbars.
+  if (/(^|\.)(pearson\.com|mathxl\.com|mymathlab\.com)$/.test(location.hostname)) {
+    const parts=[...document.querySelectorAll('.section > .bd')].filter(el=>visible(el) && el.querySelector(fieldSelector));
+    if (parts.length===1) return parts[0];
+  }
+  return fallbackRoot(active);
 }
 // Sites without a known layout: use the smallest container holding every visible answer control plus some prompt text.
 function fallbackRoot(active) {
@@ -114,7 +120,7 @@ export function snapshot() {
   const scalar=fields.filter(f=>['text','select','point','drag'].includes(f.kind));
   const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
   const autoSelected=(empty || scalar[0])?.id || null;
-  return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,hash,limitations:[...new Set(limitations)],controls:{submit:findButtons('submit').length,next:findButtons('next').length},
+  return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{submit:findButtons('submit').length,next:findButtons('next').length},
     fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }

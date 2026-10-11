@@ -1,6 +1,8 @@
 import {renderSolution} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
+import {BUILD_VERSION} from '../shared/version.js';
 const $ = id => document.getElementById(id);
+document.querySelector('.brand strong').textContent=`AuraSolve ${BUILD_VERSION}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let pending = null;
 let token = 0;

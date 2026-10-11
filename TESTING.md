@@ -46,3 +46,7 @@ No live signed-in Pearson/MyMathLab or other lab integration was tested. MathQui
 ## 1.13.7: automatic selection
 
 The Fill-button browser fixture now explicitly avoids focusing or clicking the answer input. It still fills the native input and preserves the explanation without submitting. A fourth Chromium fixture verifies activation of a lazy Pearson-style widget that creates an input on click. These are simulated page fixtures, not a live Pearson verification.
+
+## 1.13.8
+
+37 Node tests pass; four Chromium fixtures pass; syntax/manifest validation passes. Release tests ensure the visible build, manifest and package versions agree and the removed click-first gate is absent from both Fill entry points. The browser suite verifies the visible panel build number. Live signed-in MyMathLab remains unverified.

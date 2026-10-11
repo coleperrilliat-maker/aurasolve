@@ -175,3 +175,7 @@ Field actions now carry page errors back intact, so an unsupported or stale edit
 ### 1.13.7: automatic answer-field selection
 
 Fill no longer requires clicking the answer box first. It inspects the detected question, prefers an empty supported text/dropdown field, and can activate a Pearson-style equation widget that creates its input only when clicked. A manually selected supported field still takes precedence. If no supported field is found, it explains the question and reports that detection limitation instead of asking for a click repeatedly. Custom graph widgets and automatic multiple-choice selection are not added by this change.
+
+### 1.13.8: release visibility and Pearson layouts
+
+The panel and popup now display their build number. Question detection recognizes additional Pearson player layout IDs and Mastering question bodies, while frame selection distinguishes an automatic field choice from a manual selection. The click-first gate remains removed. See `docs/asklabby-comparison.md` for the ZIP inspection findings and the limit imposed by its missing remote adapters.

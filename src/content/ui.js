@@ -1,5 +1,6 @@
 import {renderSolution, loadMathFonts} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
+import {BUILD_VERSION} from '../shared/version.js';
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export function createUI() {
   const host = document.createElement("div"); host.id="aurasolve-root";
@@ -12,7 +13,7 @@ export function createUI() {
   wrap.innerHTML=`
   <nav class="dock" aria-label="AuraSolve modes"><span class="dock-grip" title="Drag to move · double-click to reset" aria-hidden="true"></span><button data-mode="autopilot" title="Practice AutoPilot" aria-label="Practice AutoPilot">✈️</button><button data-mode="field" title="Fill this field" aria-label="Fill this field">✍️</button><button data-mode="explain" title="Explain to me" aria-label="Explain to me">💡</button></nav>
   <aside class="panel" hidden aria-label="AuraSolve practice tutor">
-    <header id="drag" title="Drag to move"><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
+    <header id="drag" title="Drag to move"><small class="build">AuraSolve ${BUILD_VERSION}</small><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
     <div class="body">
       <p class="notice" id="status" role="status" aria-live="polite">Choose a mode. Fill automatically finds an answer field in the question.</p>
       <div class="loader-wrap" id="loader" hidden aria-hidden="true"><div class="spinner"></div></div>
@@ -24,6 +25,8 @@ export function createUI() {
   </aside>`;
   shadow.append(wrap);document.documentElement.append(host);
   const $=selector=>shadow.querySelector(selector), panel=$(".panel"), results=$("#results");
+  host.dataset.auraVersion=BUILD_VERSION;
+  $('[data-mode="field"]').title=`Fill answer automatically · AuraSolve ${BUILD_VERSION}`;
   let running=false, token=0, pending=null, pendingField=null, consentUrl=null, explainedPrompt=null, watching=false, seen=null;
   const request=async message=>{const response=await chrome.runtime.sendMessage(message);if(!response?.ok)throw new Error(response?.error || "AuraSolve disconnected. Reload the page.");return response.data;};
   const open=()=>{panel.hidden=false;};
