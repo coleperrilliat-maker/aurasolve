@@ -100,8 +100,8 @@ async function choose(mode) {
   if (mode === "explain") { pending = null; return run(mode); }
   setBusy(true);
   try {
+    if(mode==='field')await send({type:'prepareField'});
     const info = await send({type: "inspect"});
-    if (mode === "field" && !info.question.selected) throw new Error("Click the answer field on the page first.");
     if (info.signed) { setBusy(false); return run(mode); }
     pending = mode;
     $("consent").hidden = false;

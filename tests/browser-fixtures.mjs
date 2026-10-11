@@ -32,6 +32,17 @@ try{
   });
   assert.equal(result.count,1);assert.ok(result.selected);assert.equal(result.value,'5');assert.equal(result.stable,true);assert.equal(result.submit,1);
   console.log('PASS: nested Pearson-style containers, auto-selection, real contenteditable fill, stable snapshot, command button');
+  const activated=await page.evaluate(async()=>{
+    document.body.innerHTML='<main data-aura-question>Solve 2x = 8<span class="eqEditor inputField" widgetid="fixture">Answer</span></main>';
+    const widget=document.querySelector('.eqEditor');
+    widget.onclick=()=>{widget.innerHTML='<input class="focusNode" aria-label="x">';};
+    const detector=await import('/src/content/detection.js');
+    const before=detector.snapshot().fields.length;
+    await detector.prepareField();
+    return {before,after:detector.snapshot().fields.length,selected:detector.snapshot().selected};
+  });
+  assert.equal(activated.before,0);assert.equal(activated.after,1);assert.ok(activated.selected);
+  console.log('PASS: Fill inspection activates a lazy Pearson-style answer box without a user click');
 
   const ui=await browser.newPage();
   await ui.goto(origin+'/src/options/index.html');
@@ -68,7 +79,7 @@ try{
     const {callPageMethod}=await import('/src/background/frame-call.js');
     window.__aura={execute:actions.execute};
     detection.trackSelection();
-    document.querySelector('#answer').focus();
+    // No answer-box click or focus: Fill must find it itself.
     let plan;
     window.chrome={runtime:{getURL:path=>new URL('/'+path,location.href).href,sendMessage:async message=>{
       const question=detection.snapshot();

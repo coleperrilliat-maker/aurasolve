@@ -171,3 +171,7 @@ These changes have automated regression coverage but are not a claim of compatib
 ### 1.13.6: Fill-field follow-up
 
 Field actions now carry page errors back intact, so an unsupported or stale editor no longer becomes the unhelpful “The page action failed” message. Pearson equation-editor discovery also recognizes widget IDs and the Dojo registry. The Fill button has a browser regression fixture proving that a selected native input receives the value and is not submitted. Live proprietary Pearson widgets still need verification. After installing an update, reload the extension **and refresh the already-open lab tab** to replace its old page script.
+
+### 1.13.7: automatic answer-field selection
+
+Fill no longer requires clicking the answer box first. It inspects the detected question, prefers an empty supported text/dropdown field, and can activate a Pearson-style equation widget that creates its input only when clicked. A manually selected supported field still takes precedence. If no supported field is found, it explains the question and reports that detection limitation instead of asking for a click repeatedly. Custom graph widgets and automatic multiple-choice selection are not added by this change.

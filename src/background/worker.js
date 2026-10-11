@@ -117,6 +117,11 @@ async function handle(message,sender) {
   }
   const tabId = await resolveTab(message, sender);
   if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); return {}; }
+  if (message.type==='prepareField') {
+    const state=await collect(tabId);
+    await frameCall(tabId,state.question.documentId,'prepareField');
+    return {};
+  }
   if (message.type === "inspect") {
     const state = await collect(tabId);
     let signed = true;
@@ -144,7 +149,6 @@ async function handle(message,sender) {
     cancel(tabId); const generation = rev(tabId);
     const state = await collect(tabId);
     if (message.mode !== "explain") await consent(tabId,state);
-    if (message.mode === "field" && !state.question.selected) throw new Error("Click the answer field on the page, then choose Fill this field.");
     const {settings={}} = await chrome.storage.local.get("settings");
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);
@@ -157,7 +161,9 @@ async function handle(message,sender) {
         if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
-      solution = await solve(question,message.mode,settings,controller.signal);
+      const missingField=message.mode==='field' && !question.fields.length;
+      solution = await solve(question,missingField?'explain':message.mode,settings,controller.signal);
+      if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");

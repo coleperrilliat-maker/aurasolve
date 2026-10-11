@@ -42,3 +42,7 @@ No live signed-in Pearson/MyMathLab or other lab integration was tested. MathQui
 - Added recognition of Pearson `span.eqEditor[widgetid]` and lookup through the exposed Dojo registry using the widget ID. It still requires a real supported value API; this is not a promise that all Pearson editors work.
 - Removed the generic “The page action failed” wrapper: synchronous and asynchronous page exceptions now retain their original error message, and stale page scripts give a refresh instruction.
 - No signed-in Pearson session was available to reproduce the reported field failure.
+
+## 1.13.7: automatic selection
+
+The Fill-button browser fixture now explicitly avoids focusing or clicking the answer input. It still fills the native input and preserves the explanation without submitting. A fourth Chromium fixture verifies activation of a lazy Pearson-style widget that creates an input on click. These are simulated page fixtures, not a live Pearson verification.

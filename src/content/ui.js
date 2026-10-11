@@ -14,7 +14,7 @@ export function createUI() {
   <aside class="panel" hidden aria-label="AuraSolve practice tutor">
     <header id="drag" title="Drag to move"><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
     <div class="body">
-      <p class="notice" id="status" role="status" aria-live="polite">Choose a mode. For one field, click that field first.</p>
+      <p class="notice" id="status" role="status" aria-live="polite">Choose a mode. Fill automatically finds an answer field in the question.</p>
       <div class="loader-wrap" id="loader" hidden aria-hidden="true"><div class="spinner"></div></div>
       <button id="stop" class="stop" hidden>Stop</button>
       <section class="consent" id="consent" hidden><h2>Honor code</h2><p>AuraSolve fills answers and, in AutoPilot, clicks submit for up to five questions. You are responsible for using it only where it's allowed.</p><label class="signature">Type: <b class="phrase">${HONOR_STATEMENT}</b><input id="statement" type="text" autocomplete="off" spellcheck="false" maxlength="120" placeholder="${HONOR_STATEMENT}" /></label><label class="signature">Sign your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Your signature lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary" disabled>Sign & continue</button><button id="cancel" class="secondary">Cancel</button></section>
@@ -160,9 +160,9 @@ export function createUI() {
     if(mode==="explain"){pending=null;return run(mode);}
     busy(true);
     try {
+      if(mode==='field')await request({type:'prepareField'});
       const info=await request({type:"inspect"});
       if(mine!==token)return;
-      if(mode==="field" && !info.question.selected)throw new Error("Click the answer field on the page first, then choose Fill a field.");
       if(info.signed || consentUrl===location.href){busy(false);return await run(mode);}
       pending=mode;$("#consent").hidden=false;$("#statement").value="";$("#signature").value="";$("#confirm").disabled=true;
       status("Type the honor statement and sign to continue.","Honor code");
@@ -201,7 +201,7 @@ export function createUI() {
     busy(false);
     if(mode==="field"){
       results.replaceChildren();$("#nextbar").hidden=true;
-      status("Next problem ready. Click its answer field, then choose Fill this field.","READY");
+      status("Next problem ready. Choose Fill to detect its answer field.","READY");
       return;
     }
     await choose(mode);

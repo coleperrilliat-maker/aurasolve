@@ -86,4 +86,16 @@ test('an unsolicited editor mutation is rejected',async()=>{
   const result=await request({type:'writeEditor',planId:'made-up',target:'a1'});
   assert.equal(result.ok,false);assert.match(result.error,/no longer active/);
 });
+test('missing answer controls still return tutoring instead of a click-first error',async()=>{
+  const fields=state.fields, selected=state.selected;
+  state.fields=[];state.selected=null;
+  try {
+    const result=await request({type:'solve',mode:'field'});
+    assert.equal(result.ok,true);
+    assert.ok(result.data.solution.explanation);
+    assert.equal(result.data.solution.supported,false);
+    assert.deepEqual(result.data.solution.actions,[]);
+    assert.match(result.data.solution.limitation,/could not detect/);
+  } finally {state.fields=fields;state.selected=selected;}
+});
 

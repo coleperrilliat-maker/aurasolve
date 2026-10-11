@@ -49,6 +49,20 @@ export function trackSelection() {
   document.addEventListener("focusin",remember,true);
   document.addEventListener("pointerdown",remember,true);
 }
+export async function prepareField() {
+  let current=snapshot();
+  if (current.fields.length) return {ready:true};
+  // Some Pearson editors create the native input only after activation.
+  // Activate only an answer widget inside the detected question.
+  const root=questionRoot();
+  const widgets=root ? [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && !el.classList.contains('disabled')) : [];
+  if (widgets.length) {
+    widgets[0].focus?.();widgets[0].click();
+    await new Promise(resolve=>setTimeout(resolve,120));
+    current=snapshot();
+  }
+  return {ready:current.fields.length>0};
+}
 export function context() {
   const labels = [...document.querySelectorAll('h1, h2, [role="heading"], .assignment-title, #assignmentTitle, .breadcrumb, [data-activity-type], [data-graded]')].filter(visible).map(el=>clean(el.innerText || el.getAttribute('data-activity-type')));
   if (document.querySelector('[data-graded="true"]')) labels.push("graded");
@@ -97,7 +111,9 @@ export function snapshot() {
   const box = root?.getBoundingClientRect?.();
   const selectedElement = elementFor(selected);
   const chosen = fields.find(f=>f.id === selected) || fields.find(f=>elementFor(f.id)?.contains?.(selectedElement));
-  const autoSelected = fields.length===1 && ['text','select','point','drag'].includes(fields[0].kind) ? fields[0].id : null;
+  const scalar=fields.filter(f=>['text','select','point','drag'].includes(f.kind));
+  const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
+  const autoSelected=(empty || scalar[0])?.id || null;
   return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,hash,limitations:[...new Set(limitations)],controls:{submit:findButtons('submit').length,next:findButtons('next').length},
     fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
