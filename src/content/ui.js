@@ -1,3 +1,4 @@
+import {pickedChoices} from "../shared/choices.js";
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export function createUI() {
   const host = document.createElement("div"); host.id="aurasolve-root";
@@ -41,7 +42,13 @@ export function createUI() {
   function card(result,mode,number) {
     const article=document.createElement("article");article.className="result";
     const label=document.createElement("div");label.className="result-label";label.textContent=mode==="autopilot"?`Practice ${number}`:mode==="field"?"Answer preview":"Explanation";
-    const answer=document.createElement("h2");answer.textContent=result.solution.answer;
+    const picks=pickedChoices(result.solution,result.question);
+    let answer;
+    if(picks.length){
+      answer=document.createElement("ul");answer.className="choices";
+      for(const pick of picks){const item=document.createElement("li");const bold=document.createElement("strong");bold.textContent=pick;item.append(bold);answer.append(item);}
+      if(picks.length>1)label.textContent+=` · ${picks.length} answers`;
+    } else {answer=document.createElement("h2");const bold=document.createElement("strong");bold.textContent=result.solution.answer;answer.append(bold);}
     const explanation=document.createElement("p");explanation.className="text clamped";explanation.textContent=result.solution.explanation;
     article.append(label,answer,explanation);
     if (result.solution.limitation) {const note=document.createElement("p");note.className="limitation";note.textContent=result.solution.limitation;article.append(note);}

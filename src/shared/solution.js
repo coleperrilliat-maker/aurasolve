@@ -1,7 +1,7 @@
 export const solutionSchema = {
   type: "object", additionalProperties: false,
   properties: {
-    answer: {type:"string"}, explanation: {type:"string"},
+    answer: {type:"string"}, choices: {type:"array",items:{type:"string"}}, explanation: {type:"string"},
     confidence: {type:"number"}, supported: {type:"boolean"},
     limitation: {type:"string"},
     actions: {type:"array",items:{type:"object",additionalProperties:false,properties:{
@@ -9,13 +9,16 @@ export const solutionSchema = {
       target:{type:"string"}, value:{type:"string"}, destination:{type:"string"},
       x:{type:["number","null"]}, y:{type:["number","null"]}
     },required:["kind","target","value","destination","x","y"]}}
-  }, required:["answer","explanation","confidence","supported","limitation","actions"]
+  }, required:["answer","choices","explanation","confidence","supported","limitation","actions"]
 };
 export function validateSolution(solution, snapshot, mode) {
   if (!solution || typeof solution.answer !== "string" || typeof solution.explanation !== "string" ||
       typeof solution.supported !== "boolean" || typeof solution.limitation !== "string" ||
       !Number.isFinite(solution.confidence) || solution.confidence < 0 || solution.confidence > 1 || !Array.isArray(solution.actions))
     throw new Error("The model returned an invalid solution. Nothing was filled.");
+  if (solution.choices === undefined) solution.choices = [];
+  if (!Array.isArray(solution.choices) || solution.choices.length > 12 || solution.choices.some(c => typeof c !== "string" || c.length > 500))
+    throw new Error("The model returned invalid answer choices.");
   if (solution.actions.length > 24) throw new Error("Too many actions in the response.");
   const ids = new Map(snapshot.fields.map(f => [f.id, f]));
   const seen = new Set();

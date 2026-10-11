@@ -1,3 +1,4 @@
+import {pickedChoices} from "../shared/choices.js";
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let pending = null;
@@ -24,8 +25,25 @@ function card(result, mode, number) {
   const article = document.createElement("article");
   const label = document.createElement("b");
   label.textContent = mode === "autopilot" ? `Practice ${number}` : mode === "field" ? "Answer preview" : "Explanation";
-  const answer = document.createElement("h2");
-  answer.textContent = result.solution.answer;
+  const picks = pickedChoices(result.solution, result.question);
+  let answer;
+  if (picks.length) {
+    answer = document.createElement("ul");
+    answer.className = "choices";
+    for (const pick of picks) {
+      const item = document.createElement("li");
+      const bold = document.createElement("strong");
+      bold.textContent = pick;
+      item.append(bold);
+      answer.append(item);
+    }
+    if (picks.length > 1) label.textContent += ` · ${picks.length} answers`;
+  } else {
+    answer = document.createElement("h2");
+    const bold = document.createElement("strong");
+    bold.textContent = result.solution.answer;
+    answer.append(bold);
+  }
   const explanation = document.createElement("p");
   explanation.className = "clamped";
   explanation.textContent = result.solution.explanation;

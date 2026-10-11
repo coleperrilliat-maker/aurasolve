@@ -47,6 +47,11 @@ button:focus-visible,input:focus-visible{outline:2px solid #6366f1;outline-offse
 .result{margin-top:12px;padding:12px;border-radius:14px;background:#fff;border:1px solid rgba(15,23,42,.07);box-shadow:0 1px 2px rgba(15,23,42,.04);animation:arrive .22s ease}
 .result-label{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6366f1}
 .result h2{margin:6px 0 4px;font-size:16px;font-weight:650;letter-spacing:-.2px;color:#0f172a;overflow-wrap:anywhere;white-space:pre-wrap}
+.result h2 strong{font-weight:750}
+.choices{list-style:none;margin:8px 0 8px;padding:0;display:flex;flex-direction:column;gap:5px}
+.choices li{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.22);font-size:13px;line-height:1.4;color:#064e3b;overflow-wrap:anywhere}
+.choices li::before{content:"✓";flex:none;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;background:#10b981;color:#fff;font-size:10px;font-weight:800;margin-top:1px}
+.choices strong{font-weight:750}
 .result .text{margin:0;font-size:12.5px;line-height:1.6;color:#475569;white-space:pre-wrap;overflow-wrap:anywhere}
 .result .text.clamped{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .expand{margin-top:6px;padding:4px 8px;border-radius:8px;font-size:11.5px;font-weight:600;color:#4f46e5;background:rgba(99,102,241,.08)}

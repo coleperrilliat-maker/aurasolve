@@ -14,3 +14,14 @@ test('invalid select values and unknown drops are rejected',()=>{assert.throws((
 test('extension calls AuraSolve Cloud with client key',async()=>{const original=globalThis.fetch;globalThis.fetch=async(url,request)=>{assert.equal(url,`${API_BASE}/api/v1/solve`);assert.equal(request.headers['X-AuraSolve-Key'],CLIENT_KEY);const body=JSON.parse(request.body);assert.equal(body.mode,'field');assert.deepEqual(body.snapshot,snapshot);return {ok:true,json:async()=>({solution})};};try{assert.deepEqual(await solve(snapshot,'field',{model:'test-model'},undefined),solution);}finally{globalThis.fetch=original;}});
 test('server errors surface without an action plan',async()=>{const original=globalThis.fetch;globalThis.fetch=async()=>({ok:false,status:502,json:async()=>({error:'OpenAI did not finish the answer.'})});try{await assert.rejects(solve(snapshot,'field',{model:'test-model'}),/did not finish/);}finally{globalThis.fetch=original;}});
 test('empty solutions are rejected',async()=>{const original=globalThis.fetch;globalThis.fetch=async()=>({ok:true,json:async()=>({})});try{await assert.rejects(solve(snapshot,'field',{model:'test-model'}),/empty answer/);}finally{globalThis.fetch=original;}});
+test('multiple-choice picks come from choices, or from chosen radio/checkbox fields',async()=>{
+  const {pickedChoices}=await import('../src/shared/choices.js');
+  const question={fields:[{id:'r1',kind:'radio',label:'A. 12'},{id:'r2',kind:'radio',label:'B. 15'},{id:'c1',kind:'checkbox',label:'C. 3'},{id:'c2',kind:'checkbox',label:'D. 5'}]};
+  assert.deepEqual(pickedChoices({choices:['B. 15'],actions:[]},question),['B. 15']);
+  assert.deepEqual(pickedChoices({choices:[],actions:[{kind:'checkbox',target:'c1',value:'true'},{kind:'checkbox',target:'c2',value:'true'},{kind:'radio',target:'r1',value:''}]},question),['C. 3','D. 5','A. 12']);
+  assert.deepEqual(pickedChoices({choices:[],actions:[{kind:'checkbox',target:'c1',value:'false'}]},question),[]);
+});
+test('invalid choices are rejected and missing choices default to none',()=>{
+  assert.throws(()=>validateSolution({...solution,choices:[42]},snapshot,'field'),/choices/);
+  const copy={...solution};delete copy.choices;assert.deepEqual(validateSolution(copy,snapshot,'field').choices,[]);
+});
