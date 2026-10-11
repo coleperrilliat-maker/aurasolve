@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve — Practice Tutor",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -64,7 +64,8 @@
         "src/content/*.css",
         "src/shared/*.js",
         "src/vendor/katex/*",
-        "src/vendor/katex/fonts/*"
+        "src/vendor/katex/fonts/*",
+        "src/shared/*.css"
       ],
       "matches": [
         "http://*/*",

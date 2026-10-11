@@ -41,9 +41,12 @@ export async function loadMathFonts(urlFor) {
   for (const [, rule] of css.matchAll(/@font-face\{([^}]+)\}/g)) {
     const family = rule.match(/font-family:([^;]+)/)?.[1], file = rule.match(/url\((fonts\/[^)]+\.woff2)\)/)?.[1];
     if (!family || !file) continue;
-    document.fonts.add(new FontFace(family, `url(${urlFor(`src/vendor/katex/${file}`)})`, {
+    const face = new FontFace(family, `url(${urlFor(`src/vendor/katex/${file}`)})`, {
       style: rule.match(/font-style:([^;]+)/)?.[1] || "normal", weight: rule.match(/font-weight:([^;]+)/)?.[1] || "400",
-    }));
+    });
+    document.fonts.add(face);
+    // Load now so the first answer isn't blank while KaTeX's font-display:block waits on a lazy load.
+    face.load().catch(() => {});
   }
 }
 

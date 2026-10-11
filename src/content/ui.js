@@ -5,7 +5,7 @@ export function createUI() {
   const host = document.createElement("div"); host.id="aurasolve-root";
   host.style.cssText="all:initial;position:fixed;z-index:2147483647;top:0;left:0;width:0;height:0";
   const shadow=host.attachShadow({mode:"closed"});
-  for(const sheet of ["src/vendor/katex/katex.min.css","src/content/ui.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=chrome.runtime.getURL(sheet);shadow.append(link);}
+  for(const sheet of ["src/vendor/katex/katex.min.css","src/shared/loader.css","src/content/ui.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=chrome.runtime.getURL(sheet);shadow.append(link);}
   // @font-face rules don't apply inside a shadow root, so KaTeX's fonts are registered on the document.
   loadMathFonts(path=>chrome.runtime.getURL(path)).catch(()=>{});
   const wrap=document.createElement("div");
@@ -15,6 +15,7 @@ export function createUI() {
     <header id="drag" title="Drag to move"><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
     <div class="body">
       <p class="notice" id="status" role="status" aria-live="polite">Choose a mode. For one field, click that field first.</p>
+      <div class="loader-wrap" id="loader" hidden aria-hidden="true"><div class="banter-loader"><div class="banter-loader__box"></div><div class="banter-loader__box"></div><div class="banter-loader__box"></div><div class="banter-loader__box"></div><div class="banter-loader__box"></div><div class="banter-loader__box"></div><div class="banter-loader__box"></div><div class="banter-loader__box"></div><div class="banter-loader__box"></div></div></div>
       <button id="stop" class="stop" hidden>Stop</button>
       <section class="consent" id="consent" hidden><h2>Honor code</h2><p>AuraSolve fills answers and, in AutoPilot, clicks submit for up to five questions. You are responsible for using it only where it's allowed.</p><label class="signature">Type: <b class="phrase">${HONOR_STATEMENT}</b><input id="statement" type="text" autocomplete="off" spellcheck="false" maxlength="120" placeholder="${HONOR_STATEMENT}" /></label><label class="signature">Sign your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Your signature lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary" disabled>Sign & continue</button><button id="cancel" class="secondary">Cancel</button></section>
       <div id="results" aria-live="polite"></div>
@@ -103,7 +104,10 @@ export function createUI() {
       if(!settings.configured)throw new Error("AuraSolve Cloud is offline or not configured. Open Settings to check the server, then reload the extension.");
       for(let i=1;i<=(mode==="autopilot"?5:1);i++) {
         live();status(mode==="autopilot"?`Working on practice question ${i} of 5…`:"Reading the question and thinking it through…","THINKING");
-        const result=await request({type:"solve",mode});live();
+        $("#loader").hidden=false;
+        let result;
+        try{result=await request({type:"solve",mode});}finally{$("#loader").hidden=true;}
+        live();
         if(mode!=="autopilot") {
           if(mode==="explain")explainedPrompt=result.question.promptHash;
           const article=card(result,mode,i);

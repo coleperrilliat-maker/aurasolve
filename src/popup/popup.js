@@ -38,7 +38,9 @@ async function run(mode) {
     for (let i = 1; i <= (mode === "autopilot" ? 5 : 1); i++) {
       live();
       status(mode === "autopilot" ? `Working on question ${i} of 5…` : "Reading the question…");
-      const result = await send({type: "solve", mode});
+      $("loader").hidden = false;
+      let result;
+      try { result = await send({type: "solve", mode}); } finally { $("loader").hidden = true; }
       live();
       if (mode !== "autopilot") {
         card(result, mode, i);
