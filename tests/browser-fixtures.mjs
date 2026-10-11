@@ -63,10 +63,17 @@ try{
   });
   await ui.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.includes('Fixture: editor unavailable'));
   const text=await ui.evaluate(()=>testShadow.querySelector('#results').textContent);
-  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.8/);
+  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.9/);
   assert.match(text,/Answer/);assert.match(text,/Explanation/);assert.match(text,/Subtract 7/);
   assert.equal(await ui.evaluate(()=>testShadow.querySelectorAll('.answer-card').length),1);
   console.log('PASS: AutoPilot keeps one answer and explanation visible after a failed fill');
+  await ui.evaluate(()=>{delete window.chrome.runtime;testShadow.querySelector('[data-mode="field"]').click();});
+  await ui.waitForFunction(()=>!testShadow.querySelector('#reconnect').hidden);
+  const disconnectedText=await ui.evaluate(()=>testShadow.querySelector('#status').textContent);
+  assert.match(disconnectedText,/Refresh this lab page/);
+  assert.doesNotMatch(disconnectedText,/Cannot read properties/);
+  assert.equal(await ui.evaluate(()=>testShadow.querySelector('[data-mode="field"]').disabled),true);
+  console.log('PASS: losing chrome.runtime shows refresh recovery and stops further actions');
 
   const fill=await browser.newPage();
   await fill.goto(origin+'/src/options/index.html');

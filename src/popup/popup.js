@@ -1,6 +1,7 @@
 import {renderSolution} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 import {BUILD_VERSION} from '../shared/version.js';
+import {sendExtension} from '../shared/messaging.js';
 const $ = id => document.getElementById(id);
 document.querySelector('.brand strong').textContent=`AuraSolve ${BUILD_VERSION}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -9,9 +10,7 @@ let token = 0;
 let busy = false;
 
 async function send(message) {
-  const response = await chrome.runtime.sendMessage(message);
-  if (!response?.ok) throw new Error(response?.error || "AuraSolve disconnected.");
-  return response.data;
+  return sendExtension(message);
 }
 
 function status(text) {

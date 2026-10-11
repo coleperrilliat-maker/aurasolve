@@ -1,6 +1,7 @@
 import {renderSolution, loadMathFonts} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 import {BUILD_VERSION} from '../shared/version.js';
+import {sendExtension} from '../shared/messaging.js';
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export function createUI() {
   const host = document.createElement("div"); host.id="aurasolve-root";
@@ -16,6 +17,7 @@ export function createUI() {
     <header id="drag" title="Drag to move"><small class="build">AuraSolve ${BUILD_VERSION}</small><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
     <div class="body">
       <p class="notice" id="status" role="status" aria-live="polite">Choose a mode. Fill automatically finds an answer field in the question.</p>
+      <button id="reconnect" class="primary" hidden>Refresh this page</button>
       <div class="loader-wrap" id="loader" hidden aria-hidden="true"><div class="spinner"></div></div>
       <button id="stop" class="stop" hidden>Stop</button>
       <section class="consent" id="consent" hidden><h2>Honor code</h2><p>AuraSolve fills answers and, in AutoPilot, clicks submit for up to five questions. You are responsible for using it only where it's allowed.</p><label class="signature">Type: <b class="phrase">${HONOR_STATEMENT}</b><input id="statement" type="text" autocomplete="off" spellcheck="false" maxlength="120" placeholder="${HONOR_STATEMENT}" /></label><label class="signature">Sign your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Your signature lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary" disabled>Sign & continue</button><button id="cancel" class="secondary">Cancel</button></section>
@@ -28,7 +30,13 @@ export function createUI() {
   host.dataset.auraVersion=BUILD_VERSION;
   $('[data-mode="field"]').title=`Fill answer automatically · AuraSolve ${BUILD_VERSION}`;
   let running=false, token=0, pending=null, pendingField=null, consentUrl=null, explainedPrompt=null, watching=false, seen=null;
-  const request=async message=>{const response=await chrome.runtime.sendMessage(message);if(!response?.ok)throw new Error(response?.error || "AuraSolve disconnected. Reload the page.");return response.data;};
+  let disconnected=false;
+  const request=async message=>{
+    if(disconnected)throw Object.assign(new Error('Refresh this lab page to reconnect AuraSolve.'),{code:'AURA_DISCONNECTED'});
+    try{return await sendExtension(message);}
+    catch(error){if(error.code==='AURA_DISCONNECTED'){$('#reconnect').hidden=false;disconnected=true;}throw error;}
+  };
+  $('#reconnect').onclick=()=>location.reload();
   const open=()=>{panel.hidden=false;};
   const status=text=>{$("#status").textContent=text;};
   $("#drag").addEventListener("pointerdown",event=>{
@@ -97,7 +105,7 @@ export function createUI() {
     running=value;$("#stop").hidden=!value;
     const canContinue=results.children.length && (panel.dataset.view!=="field" || pendingField);
     $("#nextbar").hidden=value || !canContinue;
-    shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value);
+    shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value || disconnected);
   }
   async function stop() {token++;pending=null;pendingField=null;consentUrl=null;$("#consent").hidden=true;busy(false);try{await request({type:"stop"});}catch{}status("Stopped. Review any answer already filled or submitted before continuing.","STOPPED");}
   function card(result,mode,number) {
@@ -211,7 +219,7 @@ export function createUI() {
   }
   $("#next").onclick=nextProblem;
   shadow.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>choose(button.dataset.mode));
-  const explaining=()=>!running && !panel.hidden && panel.dataset.view==="explain" && explainedPrompt && !document.hidden;
+  const explaining=()=>!disconnected && !running && !panel.hidden && panel.dataset.view==="explain" && explainedPrompt && !document.hidden;
   // A new question must look the same on two polls in a row so half-loaded pages don't trigger a solve.
   setInterval(async()=>{
     if(watching || !explaining())return;

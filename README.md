@@ -179,3 +179,7 @@ Fill no longer requires clicking the answer box first. It inspects the detected 
 ### 1.13.8: release visibility and Pearson layouts
 
 The panel and popup now display their build number. Question detection recognizes additional Pearson player layout IDs and Mastering question bodies, while frame selection distinguishes an automatic field choice from a manual selection. The click-first gate remains removed. See `docs/asklabby-comparison.md` for the ZIP inspection findings and the limit imposed by its missing remote adapters.
+
+### 1.13.9: recovery after reloading the extension
+
+The old page's emoji panel can lose its Chrome messaging context when the extension is reloaded or removed. All messaging paths now handle a missing runtime and invalidated context without dereferencing undefined. The panel offers Refresh this page and disables further actions until refreshed. It never reloads a lab or retries a write automatically. Updating the extension still requires refreshing existing lab tabs.

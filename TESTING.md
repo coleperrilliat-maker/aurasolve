@@ -50,3 +50,7 @@ The Fill-button browser fixture now explicitly avoids focusing or clicking the a
 ## 1.13.8
 
 37 Node tests pass; four Chromium fixtures pass; syntax/manifest validation passes. Release tests ensure the visible build, manifest and package versions agree and the removed click-first gate is absent from both Fill entry points. The browser suite verifies the visible panel build number. Live signed-in MyMathLab remains unverified.
+
+## 1.13.9: disconnected extension runtime
+
+41 Node tests and five Chromium fixtures pass; syntax/manifest checks pass. A browser fixture removes chrome.runtime after creating the panel, then clicks Fill and verifies a refresh recovery button, a clear reconnect message, and disabled action buttons instead of a sendMessage TypeError. The messaging helper also tests context invalidation, absent replies, successful replies and real application errors. Writes are not retried automatically. This verifies recovery behavior, not live Pearson compatibility.

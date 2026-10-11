@@ -1,5 +1,6 @@
 import {snapshot,elementFor,visible,findButton,feedback} from "./detection.js";
 import {validateSolution} from "../shared/solution.js";
+import {sendExtension} from '../shared/messaging.js';
 function guard() {
   if (document.hidden) throw new Error("The practice page is hidden. AutoPilot stopped.");
 }
@@ -49,8 +50,7 @@ export async function execute(plan) {
     const el = elementFor(a.target);
     const field = current.fields.find(f=>f.id === a.target);
     if (field.editorKey) {
-      const response = await chrome.runtime.sendMessage({type:'writeEditor',planId:plan.id,target:a.target});
-      if (!response?.ok) throw new Error(response?.error || 'Could not reach the math editor.');
+      await sendExtension({type:'writeEditor',planId:plan.id,target:a.target});
     }
     else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
     else if (a.kind === "radio") { el.click(); if (!el.checked) throw new Error("The radio answer was not accepted by the page."); }
