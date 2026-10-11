@@ -1,4 +1,4 @@
-import {pickedChoices} from "../shared/choices.js";
+import {renderSolution} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -23,51 +23,7 @@ function setBusy(value) {
 }
 
 function card(result, mode, number) {
-  const article = document.createElement("article");
-  const label = document.createElement("b");
-  label.textContent = mode === "autopilot" ? `Practice ${number}` : mode === "field" ? "Answer preview" : "Explanation";
-  const picks = pickedChoices(result.solution, result.question);
-  let answer;
-  if (picks.length) {
-    answer = document.createElement("ul");
-    answer.className = "choices";
-    for (const pick of picks) {
-      const item = document.createElement("li");
-      const bold = document.createElement("strong");
-      bold.textContent = pick;
-      item.append(bold);
-      answer.append(item);
-    }
-    if (picks.length > 1) label.textContent += ` · ${picks.length} answers`;
-  } else {
-    answer = document.createElement("h2");
-    answer.classList.toggle("multi", result.solution.answer.includes("\n"));
-    const bold = document.createElement("strong");
-    bold.textContent = result.solution.answer;
-    answer.append(bold);
-  }
-  const explanation = document.createElement("p");
-  explanation.className = "clamped";
-  explanation.textContent = result.solution.explanation;
-  if (mode === "explain") {
-    article.className = "flat";
-    article.append(answer, explanation);
-  } else article.append(label, answer, explanation);
-  $("results").prepend(article);
-  requestAnimationFrame(() => {
-    if (explanation.scrollHeight <= explanation.clientHeight + 1) {
-      explanation.classList.remove("clamped");
-      return;
-    }
-    const toggle = document.createElement("button");
-    toggle.className = "expand";
-    toggle.type = "button";
-    toggle.textContent = "Expand";
-    toggle.onclick = () => {
-      toggle.textContent = explanation.classList.toggle("clamped") ? "Expand" : "Collapse";
-    };
-    explanation.after(toggle);
-  });
+  $("results").prepend(renderSolution(result, mode === "autopilot" ? `Question ${number}` : ""));
 }
 
 async function run(mode) {

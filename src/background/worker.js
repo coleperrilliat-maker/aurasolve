@@ -109,7 +109,7 @@ async function handle(message,sender) {
     try {
       const {rect, viewport, ...question} = state.question;
       if (question.visual) {
-        question.image = await screenshot(tabId, state.question).catch(() => null);
+        question.image = await screenshot(tabId, state.question).catch(error => { console.warn("AuraSolve screenshot failed:", error); return null; });
         if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");

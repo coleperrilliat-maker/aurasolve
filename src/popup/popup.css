@@ -1,45 +1,34 @@
 *{box-sizing:border-box}
-body{width:320px;margin:0;padding:14px;font:13px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0f172a;background:linear-gradient(180deg,#f8fafc,#fff 40%);-webkit-font-smoothing:antialiased}
-header{display:flex;gap:10px;align-items:center;margin-bottom:14px}
-.mark{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-weight:700;font-size:17px;padding-bottom:2px;box-shadow:0 6px 14px rgba(99,102,241,.3)}
-strong{font-size:15px;font-weight:650;letter-spacing:-.2px}
-strong span{color:#6366f1}
-small{display:flex;align-items:center;gap:5px;color:#64748b;font-size:11px;margin-top:2px}
-small::before{content:"";width:6px;height:6px;border-radius:50%;background:#cbd5e1}
-small.online::before{background:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.15)}
-small.offline::before{background:#ef4444}
-.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:4px;border-radius:14px;background:#f1f5f9}
-.modes button{border:0;background:transparent;border-radius:10px;padding:8px 4px;font:inherit;font-size:11px;font-weight:600;color:#475569;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
-.modes button span{display:block;font-size:16px;margin-bottom:3px}
-.modes button:hover{background:rgba(255,255,255,.7)}
-.modes button.active{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(15,23,42,.1)}
-#status{color:#475569;font-size:12px;line-height:1.5;margin:12px 2px}
-#consent{border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:12px;margin-bottom:10px}
-.check{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#334155;line-height:1.45}
-.check input{margin-top:2px;accent-color:#6366f1}
-.honor{margin:0;font-size:12px;color:#334155;line-height:1.45}
-.honor b{color:#0f172a}
-#statement,#signature{width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:10px;padding:9px 10px;font:inherit;font-size:12px}
-#statement:focus,#signature:focus{outline:2px solid #c7d2fe;border-color:#818cf8}
-#statement.ok{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.12)}
-.primary,.stop{width:100%;border:0;border-radius:10px;padding:9px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
-.primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;margin-top:8px;box-shadow:0 6px 16px rgba(99,102,241,.3)}
-.stop{background:#fef2f2;color:#dc2626;margin-bottom:8px}
-article{border:1px solid rgba(15,23,42,.07);background:#fff;border-radius:14px;padding:12px;margin-top:8px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
-article b{display:block;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:#6366f1;margin-bottom:4px}
-article h2{margin:0 0 4px;font-size:15px;font-weight:650}
-article h2 strong,.choices strong{font-weight:750}
-.choices{list-style:none;margin:6px 0 8px;padding:0;display:flex;flex-direction:column;gap:5px}
-.choices li{display:flex;gap:8px;align-items:flex-start;padding:7px 9px;border-radius:10px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.22);color:#064e3b;line-height:1.4}
-.choices li::before{content:"✓";flex:none;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;background:#10b981;color:#fff;font-size:10px;font-weight:800;margin-top:1px}
-article p{margin:0;color:#475569;line-height:1.55;font-size:12.5px;white-space:pre-wrap}
-article p.clamped{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.expand{margin-top:6px;padding:4px 8px;border:0;border-radius:8px;font:inherit;font-size:11.5px;font-weight:600;color:#4f46e5;background:rgba(99,102,241,.08);cursor:pointer}
-article.flat{border:0;background:none;box-shadow:none;padding:4px 2px 0;margin-top:12px}
-article.flat h2{font-size:18px;margin-bottom:8px}
-article h2.multi,article.flat h2.multi{font-size:13px;line-height:1.55;white-space:pre-wrap}
-article.flat .choices{margin:0 0 8px;gap:4px}
-article.flat .choices li{padding:0;background:none;border:0;font-size:14px;color:#0f172a}
-article.flat p{padding-top:8px;border-top:1px solid rgba(15,23,42,.07)}
+body{width:320px;margin:0;padding:12px 14px 14px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;color:#111;background:#fff;-webkit-font-smoothing:antialiased}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+header strong{font-size:14px;font-weight:700}
+small{display:flex;align-items:center;gap:5px;color:#888;font-size:12px}
+small::before{content:"";width:6px;height:6px;border-radius:50%;background:#ccc}
+small.online::before{background:#16a34a}
+small.offline::before{background:#dc2626}
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.modes button{border:1px solid #e5e5e5;background:#fff;border-radius:8px;padding:7px 4px;font:inherit;font-size:12px;font-weight:600;color:#333;cursor:pointer}
+.modes button span{display:block;font-size:15px}
+.modes button:hover{background:#f6f6f6}
+.modes button.active{background:#f0f0f0;border-color:#d4d4d4}
+#status{color:#666;font-size:13px;margin:10px 0}
+#consent{margin-bottom:10px}
+.honor{margin:0;font-size:13px}
+#statement,#signature{width:100%;margin-top:8px;border:1px solid #ddd;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px}
+#statement:focus,#signature:focus{outline:2px solid #111;outline-offset:0}
+#statement.ok{border-color:#16a34a}
+.primary,.stop{width:100%;border-radius:8px;padding:8px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.primary{background:#111;color:#fff;border:0;margin-top:8px}
+.stop{background:#fff;border:1px solid #e5e5e5;margin-bottom:8px}
+.answer-card{padding:2px 0}
+.answer-card+.answer-card{margin-top:12px;padding-top:12px;border-top:1px solid #eee}
+.tag{font-size:12px;color:#888}
+.answer-card h3{margin:10px 0 4px;font-size:14px;font-weight:700}
+.answer-card h3:first-of-type{margin-top:2px}
+.answer{margin:0;font-size:16px;font-weight:700;white-space:pre-wrap;overflow-wrap:anywhere}
+.answers{margin:0;padding-left:18px;font-weight:700;font-size:15px}
+.steps{margin:0;padding-left:18px;color:#222}
+.answers li,.steps li{margin:3px 0;overflow-wrap:anywhere}
+.note{margin:10px 0 0;font-size:12px;font-style:italic;color:#888}
 [hidden]{display:none!important}
 button:disabled{opacity:.45;cursor:default}

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve — Practice Tutor",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -10,6 +10,7 @@
     "scripting"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://*.up.railway.app/*",
     "http://localhost:8787/*",
     "http://127.0.0.1:8787/*",
