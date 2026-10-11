@@ -1,3 +1,4 @@
+import {saraChoices} from './sara.js';
 import {fingerprint} from "../shared/policy.js";
 const ids = new WeakMap(), elements = new Map();
 let sequence = 0, selected = null;
@@ -105,6 +106,9 @@ export function snapshot() {
   }
   if (root) for (const el of root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .mq-editable-field, .mathquill-editable, .acctable .inputcell[role="textbox"]')) {
     if (visible(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>el===elementFor(f.id) || el.contains(elementFor(f.id)))) limitations.push('A Pearson math or table field needs a supported editor API.');
+  }
+  if (!fields.length) for (const el of saraChoices(document,location.hostname,visible)) {
+    fields.push({id:idFor(el),label:(el.innerText || el.textContent).trim(),kind:'radio',group:'sara-answer',adapter:'sara-choice'});
   }
   const drops = root ? [...root.querySelectorAll('[data-aura-drop]')].filter(visible).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
   if (root?.querySelector('canvas, svg:not([data-aura-graph])') && !fields.some(f=>f.kind === 'point')) limitations.push("Canvas/SVG content is not read visually; complex graph actions are unsupported.");

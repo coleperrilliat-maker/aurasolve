@@ -107,7 +107,7 @@ try{
   });
   await ui.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.includes('Fixture: editor unavailable'));
   const text=await ui.evaluate(()=>testShadow.querySelector('#results').textContent);
-  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.14/);
+  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.15/);
   assert.match(text,/Answer/);assert.match(text,/Explanation/);assert.match(text,/Subtract 7/);
   assert.equal(await ui.evaluate(()=>testShadow.querySelectorAll('.answer-card').length),1);
   console.log('PASS: AutoPilot keeps one answer and explanation visible after a failed fill');

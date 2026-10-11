@@ -1,3 +1,4 @@
+import {clickSaraChoice} from './sara.js';
 import {snapshot,elementFor,visible,findButton,feedback} from "./detection.js";
 import {validateSolution} from "../shared/solution.js";
 import {sendExtension} from '../shared/messaging.js';
@@ -49,7 +50,11 @@ export async function execute(plan) {
     guard();
     const el = elementFor(a.target);
     const field = current.fields.find(f=>f.id === a.target);
-    if (field.editorKey) {
+    if (field.adapter==='sara-choice') {
+      if(plan.solution.actions.length!==1)throw new Error('SARA requires exactly one answer choice.');
+      await clickSaraChoice(el);
+    }
+    else if (field.editorKey) {
       await sendExtension({type:'writeEditor',planId:plan.id,target:a.target});
     }
     else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
