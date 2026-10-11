@@ -1,5 +1,5 @@
 import {pickedChoices} from "./choices.js";
-import katex from "../vendor/katex/katex.mjs";
+import katex from "../vendor/katex/katex.js";
 
 const el = (tag, className) => { const node = document.createElement(tag); if (className) node.className = className; return node; };
 
