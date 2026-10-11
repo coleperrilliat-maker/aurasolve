@@ -8,37 +8,51 @@ export function createUI() {
   wrap.innerHTML=`
   <nav class="dock" aria-label="AuraSolve modes"><button data-mode="autopilot" title="Practice AutoPilot" aria-label="Practice AutoPilot">✈️</button><button data-mode="field" title="Fill this field" aria-label="Fill this field">✍️</button><button data-mode="explain" title="Explain to me" aria-label="Explain to me">💡</button></nav>
   <aside class="panel" hidden aria-label="AuraSolve practice tutor">
-    <header><div class="brand"><span class="mark">a</span><div><strong>AuraSolve<span class="dot">.</span></strong><small>YOUR PRACTICE COMPANION</small></div></div><button class="icon" id="close" title="Close sidebar" aria-label="Close sidebar">×</button></header>
+    <header id="drag" title="Drag to move"><div class="brand"><span class="mark">a</span><strong>AuraSolve</strong></div><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
     <div class="body">
-      <div class="eyebrow"><span></span> A LITTLE HELP. A LOT MORE CLARITY.</div>
-      <h1>Let’s make it<br><span>make sense.</span></h1>
-      <p class="intro">Work through practice, one clear explanation at a time.</p>
-      <div class="modes"><button data-mode="autopilot"><span>✈️</span><b>AutoPilot</b><small>Practice together</small></button><button data-mode="field"><span>✍️</span><b>Fill a field</b><small>One answer</small></button><button data-mode="explain"><span>💡</span><b>Explain</b><small>Understand why</small></button></div>
-      <section class="notice"><div class="badge" id="badge">READY WHEN YOU ARE</div><p id="status" role="status" aria-live="polite">Open a practice question and choose a mode. For one field, click that field first.</p><button id="stop" class="stop" hidden>■ Stop AutoPilot / request</button></section>
+      <section class="notice"><div class="badge" id="badge">Ready</div><p id="status" role="status" aria-live="polite">Choose a mode. For one field, click that field first.</p></section>
+      <button id="stop" class="stop" hidden>Stop</button>
       <section class="consent" id="consent" hidden><h2>Practice only. Your call.</h2><p>AuraSolve will fill answers and, in AutoPilot, click submit for up to five practice questions. It sends the detected question and field labels to AuraSolve Cloud. It stops if the page appears graded or is unsupported.</p><label class="check"><input id="agree" type="checkbox"> I confirm this is ungraded practice, not homework, a quiz, a test, or an assessment.</label><label class="signature">Type your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Page checks are imperfect. This confirmation lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary">Confirm & continue</button><button id="cancel" class="secondary">Cancel</button></section>
       <div id="results" aria-live="polite"></div>
-      <div class="empty" id="empty"><div class="orb">✦</div><h2>A tutor, right beside you.</h2><p>Your answer previews and explanations will appear here.</p><div class="pill">PRACTICE ONLY · YOU’RE IN CONTROL</div></div>
     </div>
-    <footer><span>AuraSolve Cloud <i>✦</i></span></footer>
   </aside>`;
   shadow.append(wrap);document.documentElement.append(host);
   const $=selector=>shadow.querySelector(selector), panel=$(".panel"), results=$("#results");
   let running=false, token=0, pending=null, consentUrl=null;
   const request=async message=>{const response=await chrome.runtime.sendMessage(message);if(!response?.ok)throw new Error(response?.error || "AuraSolve disconnected. Reload the page.");return response.data;};
-  const open=()=>{panel.classList.add("quick");panel.hidden=false;};
-  const quick=()=>{panel.classList.add("quick");panel.hidden=false;};
-  const status=(text,badge="READY")=>{$("#status").textContent=text;$("#badge").textContent=badge;};
+  const open=()=>{panel.hidden=false;};
+  const status=(text,badge="Ready")=>{$("#status").textContent=text;$("#badge").textContent=badge.toLowerCase().replace(/^./,c=>c.toUpperCase());};
+  $("#drag").addEventListener("pointerdown",event=>{
+    if(event.button!==0 || event.target.closest("button"))return;
+    const rect=panel.getBoundingClientRect(), dx=event.clientX-rect.left, dy=event.clientY-rect.top;
+    panel.classList.add("dragging","moved");
+    Object.assign(panel.style,{left:`${rect.left}px`,top:`${rect.top}px`,right:"auto",transform:"none"});
+    $("#drag").setPointerCapture(event.pointerId);
+    const move=e=>{
+      const x=Math.min(Math.max(8,e.clientX-dx),innerWidth-rect.width-8);
+      const y=Math.min(Math.max(8,e.clientY-dy),innerHeight-48);
+      panel.style.left=`${x}px`;panel.style.top=`${y}px`;
+    };
+    const up=()=>{panel.classList.remove("dragging");$("#drag").removeEventListener("pointermove",move);$("#drag").removeEventListener("pointerup",up);$("#drag").removeEventListener("pointercancel",up);};
+    $("#drag").addEventListener("pointermove",move);$("#drag").addEventListener("pointerup",up);$("#drag").addEventListener("pointercancel",up);
+  });
   function busy(value) {running=value;$("#stop").hidden=!value;shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value);}
   async function stop() {token++;pending=null;consentUrl=null;$("#consent").hidden=true;busy(false);try{await request({type:"stop"});}catch{}status("Stopped. Review any answer already filled or submitted before continuing.","STOPPED");}
   function card(result,mode,number) {
-    $("#empty").hidden=true;
     const article=document.createElement("article");article.className="result";
-    const label=document.createElement("div");label.className="result-label";label.textContent=mode==="autopilot"?`PRACTICE ${number} · TUTOR NOTES`:mode==="field"?"ANSWER PREVIEW":"LET’S WALK THROUGH IT";
+    const label=document.createElement("div");label.className="result-label";label.textContent=mode==="autopilot"?`Practice ${number}`:mode==="field"?"Answer preview":"Explanation";
     const answer=document.createElement("h2");answer.textContent=result.solution.answer;
-    const explanation=document.createElement("p");explanation.textContent=result.solution.explanation;
+    const explanation=document.createElement("p");explanation.className="text clamped";explanation.textContent=result.solution.explanation;
     article.append(label,answer,explanation);
     if (result.solution.limitation) {const note=document.createElement("p");note.className="limitation";note.textContent=result.solution.limitation;article.append(note);}
-    results.prepend(article);return article;
+    results.prepend(article);
+    requestAnimationFrame(()=>{
+      if(explanation.scrollHeight<=explanation.clientHeight+1){explanation.classList.remove("clamped");return;}
+      const toggle=document.createElement("button");toggle.className="expand";toggle.textContent="Expand";
+      toggle.onclick=()=>{const collapsed=explanation.classList.toggle("clamped");toggle.textContent=collapsed?"Expand":"Collapse";panel.classList.toggle("explain",collapsed && panel.dataset.view==="explain");};
+      explanation.after(toggle);
+    });
+    return article;
   }
   async function run(mode) {
     const mine=++token;busy(true);$("#consent").hidden=true;
@@ -81,8 +95,9 @@ export function createUI() {
     finally {if(mine===token)busy(false);}
   }
   async function choose(mode) {
-    if(running)return;quick();
-    results.replaceChildren();$("#empty").hidden=true;
+    if(running)return;
+    panel.dataset.view=mode;panel.classList.toggle("explain",mode==="explain");open();
+    results.replaceChildren();
     status("Checking the current question…","CHECKING");
     const mine=++token;
     shadow.querySelectorAll("[data-mode]").forEach(el=>el.classList.toggle("active",el.dataset.mode===mode));

@@ -23,13 +23,28 @@ function setBusy(value) {
 function card(result, mode, number) {
   const article = document.createElement("article");
   const label = document.createElement("b");
-  label.textContent = mode === "autopilot" ? `PRACTICE ${number}` : mode === "field" ? "ANSWER PREVIEW" : "EXPLANATION";
+  label.textContent = mode === "autopilot" ? `Practice ${number}` : mode === "field" ? "Answer preview" : "Explanation";
   const answer = document.createElement("h2");
   answer.textContent = result.solution.answer;
   const explanation = document.createElement("p");
+  explanation.className = "clamped";
   explanation.textContent = result.solution.explanation;
   article.append(label, answer, explanation);
   $("results").prepend(article);
+  requestAnimationFrame(() => {
+    if (explanation.scrollHeight <= explanation.clientHeight + 1) {
+      explanation.classList.remove("clamped");
+      return;
+    }
+    const toggle = document.createElement("button");
+    toggle.className = "expand";
+    toggle.type = "button";
+    toggle.textContent = "Expand";
+    toggle.onclick = () => {
+      toggle.textContent = explanation.classList.toggle("clamped") ? "Expand" : "Collapse";
+    };
+    explanation.after(toggle);
+  });
 }
 
 async function run(mode) {
@@ -148,6 +163,8 @@ $("stop").onclick = async () => {
 try {
   const health = await send({type: "settingsStatus"});
   $("cloud").textContent = health.configured ? "Cloud online" : "Cloud offline";
+  $("cloud").className = health.configured ? "online" : "offline";
 } catch {
   $("cloud").textContent = "Cloud offline";
+  $("cloud").className = "offline";
 }
