@@ -61,6 +61,13 @@ export function execute(plan) {
   if (plan.submit) findButton("submit").click();
   return {filled:plan.solution.actions.length,submitted:plan.submit};
 }
+export function nextProblem() {
+  guard();
+  let button;
+  try { button = findButton("next"); } catch { return {clicked:false}; }
+  button.click();
+  return {clicked:true};
+}
 export function advance() {
   guard();
   if (feedback().state !== "correct") throw new Error("No correct-answer feedback was detected. Continue manually.");

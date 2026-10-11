@@ -20,10 +20,11 @@ export function createUI() {
       <section class="consent" id="consent" hidden><h2>Honor code</h2><p>AuraSolve fills answers and, in AutoPilot, clicks submit for up to five questions. You are responsible for using it only where it's allowed.</p><label class="signature">Type: <b class="phrase">${HONOR_STATEMENT}</b><input id="statement" type="text" autocomplete="off" spellcheck="false" maxlength="120" placeholder="${HONOR_STATEMENT}" /></label><label class="signature">Sign your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Your signature lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary" disabled>Sign & continue</button><button id="cancel" class="secondary">Cancel</button></section>
       <div id="results" aria-live="polite"></div>
     </div>
+    <footer class="next-bar" id="nextbar" hidden><button id="next" class="primary">Next problem →</button></footer>
   </aside>`;
   shadow.append(wrap);document.documentElement.append(host);
   const $=selector=>shadow.querySelector(selector), panel=$(".panel"), results=$("#results");
-  let running=false, token=0, pending=null, consentUrl=null, explainedPrompt=null, watching=false, seen=null;
+  let running=false, token=0, pending=null, pendingField=null, consentUrl=null, explainedPrompt=null, watching=false, seen=null;
   const request=async message=>{const response=await chrome.runtime.sendMessage(message);if(!response?.ok)throw new Error(response?.error || "AuraSolve disconnected. Reload the page.");return response.data;};
   const open=()=>{panel.hidden=false;};
   const status=text=>{$("#status").textContent=text;};
@@ -89,8 +90,13 @@ export function createUI() {
   grip.addEventListener("dblclick",()=>{try{localStorage.removeItem(DOCK_KEY);}catch{}placeDock();});
   requestAnimationFrame(placeDock);setTimeout(placeDock,1500);
   addEventListener("resize",()=>requestAnimationFrame(placeDock));
-  function busy(value) {running=value;$("#stop").hidden=!value;shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value);}
-  async function stop() {token++;pending=null;consentUrl=null;$("#consent").hidden=true;busy(false);try{await request({type:"stop"});}catch{}status("Stopped. Review any answer already filled or submitted before continuing.","STOPPED");}
+  function busy(value) {
+    running=value;$("#stop").hidden=!value;
+    const canContinue=results.children.length && (panel.dataset.view!=="field" || pendingField);
+    $("#nextbar").hidden=value || !canContinue;
+    shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value);
+  }
+  async function stop() {token++;pending=null;pendingField=null;consentUrl=null;$("#consent").hidden=true;busy(false);try{await request({type:"stop"});}catch{}status("Stopped. Review any answer already filled or submitted before continuing.","STOPPED");}
   function card(result,mode,number) {
     const article=renderSolution(result,mode==="autopilot"?`Question ${number}`:"");
     results.prepend(article);
@@ -116,7 +122,9 @@ export function createUI() {
             await request({type:"apply",planId:result.planId});live();
             const filled=document.createElement("div");filled.className="feedback";filled.textContent="✓ Field filled";
             article.append(filled);
-            status("Field filled. Review it on the page; you choose whether to submit.","FILLED");
+            pendingField={planId:result.planId,hash:result.question.hash};
+            $("#next").textContent="Submit & next →";
+            status("Field filled. Review it, then press Submit & next.","FILLED");
           } else if(mode==="explain") $(".notice").hidden=true;
           else status("Automatic filling is unavailable for this answer. Use the explanation to complete it manually.","MANUAL STEP");
           break;
@@ -143,7 +151,9 @@ export function createUI() {
   }
   async function choose(mode) {
     if(running)return;
+    pendingField=null;
     panel.dataset.view=mode;panel.classList.toggle("explain",mode==="explain");open();
+    $("#next").textContent=mode==="field"?"Submit & next →":"Next problem →";
     results.replaceChildren();$(".notice").hidden=false;
     status("Checking the current question…","CHECKING");
     const mine=++token;
@@ -159,6 +169,45 @@ export function createUI() {
       status("Type the honor statement and sign to continue.","Honor code");
     }catch(error){status(error.message,"NEEDS ATTENTION");}finally{busy(false);}
   }
+  async function nextProblem() {
+    const mode=panel.dataset.view;
+    if(running || !mode)return;
+    const mine=++token;busy(true);$("#nextbar").hidden=true;
+    const fieldPlan=mode==="field" ? pendingField : null;
+    status(fieldPlan?"Submitting your reviewed answer…":"Going to the next problem…","Next");
+    try {
+      let moved;
+      if(fieldPlan){
+        await request({type:"submitField",planId:fieldPlan.planId});
+        let outcome;
+        for(let poll=0;poll<12;poll++){await sleep(500);if(mine!==token)return;outcome=await request({type:"feedback",planId:fieldPlan.planId});if(outcome.state!=="unknown")break;}
+        if(outcome?.state!=="correct"){
+          pendingField=null;
+          throw new Error(outcome?.state==="incorrect"?"The page marked this answer incorrect. Review the explanation.":"The answer was submitted, but page feedback could not be confirmed. Continue manually.");
+        }
+        pendingField=null;
+        status("Correct — going to the next problem…","Next");
+        await request({type:"next",planId:fieldPlan.planId});
+        moved={clicked:true,hash:fieldPlan.hash};
+      } else moved=await request({type:"nextProblem"});
+      let changed=false;
+      for(let poll=0;poll<(moved.clicked?20:1);poll++){
+        await sleep(500);if(mine!==token)return;
+        try{const info=await request({type:"inspect"});if(info.question.hash!==moved.hash){changed=true;break;}}catch{}
+      }
+      if(mine!==token)return;
+      if(!changed)throw new Error(moved.clicked?"The next problem didn't load. Try again, or move to it yourself.":"Couldn't find the page's Next button. Go to the next problem yourself, then press Next problem.");
+    } catch(error) {if(mine===token){busy(false);status(error.message,"Needs attention");}return;}
+    pendingField=null;
+    busy(false);
+    if(mode==="field"){
+      results.replaceChildren();$("#nextbar").hidden=true;
+      status("Next problem ready. Click its answer field, then choose Fill this field.","READY");
+      return;
+    }
+    await choose(mode);
+  }
+  $("#next").onclick=nextProblem;
   shadow.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>choose(button.dataset.mode));
   const explaining=()=>!running && !panel.hidden && panel.dataset.view==="explain" && explainedPrompt && !document.hidden;
   // A new question must look the same on two polls in a row so half-loaded pages don't trigger a solve.

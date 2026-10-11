@@ -92,6 +92,15 @@ async function handle(message,sender) {
     try { await consent(tabId,state); } catch { signed = false; }
     return {question:state.question,signed};
   }
+  if (message.type === "nextProblem") {
+    cancel(tabId);
+    const state = await collect(tabId);
+    for (const documentId of new Set([state.question.documentId, state.top.documentId])) {
+      const result = await frameCall(tabId, documentId, "nextProblem");
+      if (result.clicked) return {clicked:true,hash:state.question.hash};
+    }
+    return {clicked:false,hash:state.question.hash};
+  }
   if (message.type === "consent") {
     const state = await collect(tabId);
     if (!statementMatches(message.statement)) throw new Error(`Type exactly: ${HONOR_STATEMENT}`);
@@ -140,6 +149,20 @@ async function handle(message,sender) {
     const result = await frameCall(tabId,plan.documentId,"execute",{...plan,submit});
     plan.state=submit?"submitted":"filled";
     return result;
+  }
+  if (message.type === "submitField") {
+    if (plan.mode!=="field" || plan.state!=="filled") throw new Error("Fill and review a field before submitting it.");
+    if (state.question.hash!==plan.hash) throw new Error("The question changed. Generate another answer.");
+    if ((await frameCall(tabId,plan.documentId,"feedback")).state!=="unknown") throw new Error("This question already has feedback. Move to a fresh practice question.");
+    plan.state="submitting";
+    try {
+      const result = await frameCall(tabId,plan.documentId,"execute",{...plan,submit:true});
+      plan.state="submitted";
+      return result;
+    } catch (error) {
+      plan.state="filled";
+      throw error;
+    }
   }
   if (message.type === "feedback") {
     if (plan.state!=="submitted") throw new Error("No submitted question to check.");
