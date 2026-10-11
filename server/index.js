@@ -2,7 +2,6 @@ import http from "node:http";
 import {solveWithOpenAI} from "./openai.js";
 
 const PORT = Number(process.env.PORT) || 8787;
-const CLIENT_KEY = process.env.CLIENT_KEY?.trim() || "";
 const MAX_BODY = 256_000;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 40;
@@ -49,11 +48,6 @@ function readBody(req) {
   });
 }
 
-function authorized(req) {
-  if (!CLIENT_KEY) return true;
-  return req.headers["x-aurasolve-key"] === CLIENT_KEY;
-}
-
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -81,10 +75,6 @@ const server = http.createServer(async (req, res) => {
     const ip = clientIp(req);
     if (!rateLimit(ip)) {
       sendJson(res, 429, {error: "Too many requests. Try again in a minute."});
-      return;
-    }
-    if (!authorized(req)) {
-      sendJson(res, 401, {error: "Unauthorized"});
       return;
     }
 
