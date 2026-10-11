@@ -7,7 +7,38 @@ document.querySelector('.brand strong').textContent=`AuraSolve ${BUILD_VERSION}`
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let pending = null;
 let token = 0;
-let busy = false;
+let busy = false, paused=false;
+for(const id of ['time-min','time-max']){
+  for(let seconds=10;seconds<=120;seconds+=10)$(id).add(new Option(seconds+' seconds',seconds));
+}
+$('time-min').value='20';$('time-max').value='40';
+function updateTiming(){
+  $('timing-settings').hidden=$('speed-run').checked;
+  $('max-label').hidden=!$('random-timing').checked;
+  if(+$('time-max').value<+$('time-min').value)$('time-max').value=$('time-min').value;
+}
+for(const id of ['speed-run','random-timing','time-min','time-max','question-limit'])$(id).onchange=()=>{
+  updateTiming();
+  try{localStorage.setItem('pilotSettings',JSON.stringify(Object.fromEntries(['speed-run','random-timing','time-min','time-max','question-limit'].map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]))));}catch{}
+};
+try{
+ const saved=JSON.parse(localStorage.getItem('pilotSettings')||'{}');
+ for(const [id,value] of Object.entries(saved))if(['speed-run','random-timing','time-min','time-max','question-limit'].includes(id)){
+   if($(id).type==='checkbox')$(id).checked=Boolean(value);
+   else if([...$(id).options].some(o=>o.value===String(value)))$(id).value=value;
+ }
+}catch{}
+updateTiming();
+function pauseUI(){
+ $('pause').setAttribute('aria-label',paused?'Resume AutoPilot':'Pause AutoPilot');
+ $('pause').title=paused?'Resume AutoPilot':'Pause AutoPilot';
+ $('pause').innerHTML=paused?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 9 6-9 6Z"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg>';
+}
+$('pause').onclick=()=>{
+ paused=!paused;pauseUI();
+ $('pace-status').textContent=paused?'Paused. An action already sent may finish; the next action will wait.':'Resuming…';
+};
+
 
 async function send(message) {
   return sendExtension(message);
@@ -19,6 +50,11 @@ function status(text) {
 
 function setBusy(value) {
   busy = value;
+  $('start-pilot').disabled=value;
+  document.querySelectorAll('#autopilot-settings input,#autopilot-settings select').forEach(el=>el.disabled=value);
+  $('pause').disabled=!value;
+  if(!value){paused=false;pauseUI();}
+
   $("stop").hidden = !value;
   document.querySelectorAll("[data-mode]").forEach(button => { button.disabled = value; });
 }
@@ -29,20 +65,40 @@ function card(result, mode, number) {
 
 async function run(mode) {
   const mine = ++token;
+  paused=false;pauseUI();
+  const limit=mode==='autopilot'?Number($('question-limit').value):1;
+  $('pilot-progress').hidden=mode!=='autopilot';
+  $('progress').max=limit;$('progress').value=0;
+  $('pace-status').textContent='';
+
   setBusy(true);
   $("consent").hidden = true;
   const live = () => { if (mine !== token) throw new Error("Stopped."); };
+  const checkpoint=async()=>{live();while(paused){await sleep(100);live();}};
+  const delay=async ms=>{
+    let remaining=ms;
+    while(remaining>0){
+      await checkpoint();
+      const started=performance.now();await sleep(Math.min(100,remaining));live();
+      if(!paused)remaining-=performance.now()-started;
+    }
+    await checkpoint();
+  };
   try {
     const settings = await send({type: "settingsStatus"});
     live();
     if (!settings.configured) throw new Error("AuraSolve Cloud is offline. Check Railway, then try again.");
-    for (let i = 1; i <= (mode === "autopilot" ? 5 : 1); i++) {
-      live();
-      status(mode === "autopilot" ? `Working on question ${i} of 5…` : "Reading the question…");
+    for (let i = 1; i <= limit; i++) {
+      await checkpoint();
+      const started=performance.now();
+      const minimum=Number($('time-min').value),maximum=Number($('time-max').value);
+      const target=$('speed-run').checked?0:minimum+($('random-timing').checked?10*Math.floor(Math.random()*((maximum-minimum)/10+1)):0);
+      $('progress-label').textContent='Question '+i+' of '+limit;
+      status(mode === "autopilot" ? `Working on question ${i} of ${limit}…` : "Reading the question…");
       $("loader").hidden = false;
       let result;
       try { result = await send({type: "solve", mode}); } finally { $("loader").hidden = true; }
-      live();
+      await checkpoint();
       card(result, mode, i);
       if (mode !== "autopilot") {
         if (mode === "field" && result.solution.supported && result.solution.actions.length && result.solution.confidence >= .85) {
@@ -57,27 +113,35 @@ async function run(mode) {
       if (!result.solution.supported || result.solution.confidence < .85 || !result.solution.actions.length) {
         throw new Error("AutoPilot paused. This one needs a manual step.");
       }
+      let remaining=Math.max(0,target*1000-(performance.now()-started));
+      while(remaining>0){
+        await checkpoint();
+        $('pace-status').textContent='Submitting in '+Math.ceil(remaining/1000)+'s';
+        const step=Math.min(250,remaining);await delay(step);remaining-=step;
+      }
+      await checkpoint();
+      $('pace-status').textContent=$('speed-run').checked?'Speed run · no extra delay':'Target pace: '+target+' seconds';
       status("Checking the answer…");
       await send({type: "apply", planId: result.planId});
       live();
       let outcome;
       for (let poll = 0; poll < 12; poll++) {
-        await sleep(500);
+        await delay(500);
         live();
         outcome = await send({type: "feedback", planId: result.planId});
         live();
         if (outcome.state !== "unknown") break;
       }
       if (outcome?.state !== "correct") throw new Error("AutoPilot stopped. A correct answer was not confirmed.");
-      status(i === 5 ? "Five questions done." : "Correct. Continuing…");
-      if (i === 5) break;
-      await sleep(2500);
-      live();
+      $('progress').value=i;
+      status(i === limit ? limit+(limit===1?" question done.":" questions done.") : "Correct. Continuing…");
+      if (i === limit) break;
+      await checkpoint();
       await send({type: "next", planId: result.planId});
       live();
       let changed = false;
       for (let poll = 0; poll < 12; poll++) {
-        await sleep(500);
+        await delay(500);
         live();
         const next = await send({type: "inspect"});
         live();
@@ -103,7 +167,7 @@ async function choose(mode) {
   try {
     if(mode==='field')await send({type:'prepareField'});
     const info = await send({type: "inspect"});
-    if (info.signed) { setBusy(false); return run(mode); }
+    if (info.signed) { setBusy(false); return await run(mode); }
     pending = mode;
     $("consent").hidden = false;
     $("statement").value = "";
@@ -119,8 +183,16 @@ async function choose(mode) {
 }
 
 document.querySelectorAll("[data-mode]").forEach(button => {
-  button.onclick = () => choose(button.dataset.mode);
+  button.onclick = () => {
+    const auto=button.dataset.mode==='autopilot';
+    $('autopilot-settings').hidden=!auto;
+    if(auto){
+      document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b===button));
+      $('status').hidden=false;status('Choose your pace, then start AutoPilot.');
+    }else choose(button.dataset.mode);
+  };
 });
+$('start-pilot').onclick=()=>choose('autopilot');
 $("phrase").textContent = HONOR_STATEMENT;
 $("statement").placeholder = HONOR_STATEMENT;
 const signed = () => statementMatches($("statement").value) && $("signature").value.trim().length >= 2;

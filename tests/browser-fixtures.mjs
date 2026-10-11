@@ -194,6 +194,40 @@ try{
   assert.ok(inventory.controls.some(c=>c.tag==='SELECT' && c.options[0].label==='Vertical angles'));
   assert.ok(!JSON.stringify(inventory).includes('private-answer'));
   console.log('PASS: read-only inspector reports dropdown options without entered input values');
+  const pilot=await browser.newPage({viewport:{width:380,height:900}});
+  await pilot.addInitScript(()=>{
+    window.pilotCalls=[];
+    window.chrome={runtime:{sendMessage:async message=>{
+      pilotCalls.push(message.type);
+      if(message.type==='settingsStatus')return {ok:true,data:{configured:true}};
+      if(message.type==='inspect')return {ok:true,data:{signed:true,question:{hash:'fixture'}}};
+      if(message.type==='solve'){
+        await new Promise(resolve=>window.releaseSolve=resolve);
+        return {ok:true,data:{planId:'pilot',question:{hash:'fixture',fields:[]},solution:{answer:'5',explanation:'Solve the equation.',supported:true,confidence:.99,actions:[{kind:'text'}]}}};
+      }
+      if(message.type==='feedback')return {ok:true,data:{state:'correct'}};
+      return {ok:true,data:{}};
+    }}};
+  });
+  await pilot.goto(origin+'/src/popup/popup.html');
+  await pilot.getByRole('button',{name:'AutoPilot',exact:true}).click();
+  assert.equal(await pilot.locator('#autopilot-settings').isVisible(),true);
+  assert.equal(await pilot.locator('#time-min option').count(),12);
+  await pilot.locator('#speed-run').check();
+  assert.equal(await pilot.locator('#timing-settings').isVisible(),false);
+  await pilot.locator('#question-limit').selectOption('1');
+  await pilot.getByRole('button',{name:'Start AutoPilot',exact:true}).click();
+  await pilot.waitForFunction(()=>typeof releaseSolve==='function');
+  await pilot.getByRole('button',{name:'Pause AutoPilot',exact:true}).click();
+  await pilot.evaluate(()=>releaseSolve());
+  await pilot.waitForTimeout(200);
+  assert.equal(await pilot.evaluate(()=>pilotCalls.includes('apply')),false);
+  await pilot.getByRole('button',{name:'Resume AutoPilot',exact:true}).click();
+  await pilot.waitForFunction(()=>document.querySelector('#status').textContent==='1 question done.');
+  assert.equal(await pilot.evaluate(()=>pilotCalls.filter(c=>c==='apply').length),1);
+  assert.equal(await pilot.locator('#progress').getAttribute('value'),'1');
+  await pilot.screenshot({path:'/workspace/scratch/9a7d8c843f26/pilot-sidebar.png'});
+  console.log('PASS: AutoPilot settings, speed run, pause during solve, resume once, and run limit');
   const side=await browser.newPage();
   await side.addInitScript(()=>{
     window.chrome={runtime:{sendMessage:async message=>({ok:true,data:message.type==='settingsStatus'?{configured:true}:message.type==='solve'?{solution:{answer:'5',explanation:'Subtract 7, then divide by 3.',actions:[],choices:[]},question:{fields:[]}}:{}})},windows:{getCurrent:async()=>({id:7})},sidePanel:{close:async options=>{window.closedWindow=options.windowId;}}};
