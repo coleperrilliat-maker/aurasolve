@@ -24,7 +24,7 @@ async function collect(tabId) {
   if (options.length !== 1) throw new Error(options.length ? "Several questions were found. Click an answer field in the question you want." : "No supported question container was found. This page needs a site adapter; try the included practice lab.");
   return {top,question:options[0],contexts:frames.map(f=>f.context)};
 }
-const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,frameIds:[0]},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
+const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,allFrames:true},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
 async function screenshot(tabId, question) {
   const {windowId} = await chrome.tabs.get(tabId);
   await veil(tabId,true);
@@ -85,7 +85,8 @@ async function submitPlan(tabId,plan,state) {
 }
 async function resolveTab(message, sender) {
   if (sender.tab?.id != null) {
-    if (sender.frameId !== 0) throw new Error("Open AuraSolve on a web page first.");
+    if (sender.frameId !== 0 && !["prepareField","solve","apply"].includes(message.type)) throw new Error("Open AuraSolve on a web page first.");
+    if (sender.frameId !== 0 && message.type === "solve" && message.mode !== "field") throw new Error("Open this mode from the extension panel.");
     return sender.tab.id;
   }
   const [tab] = await chrome.tabs.query({active: true, currentWindow: true});

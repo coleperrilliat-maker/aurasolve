@@ -4,7 +4,7 @@ import {BUILD_VERSION} from '../shared/version.js';
 
 export function createUI() {
   const host=document.createElement('div');host.id='aurasolve-root';host.dataset.auraVersion=BUILD_VERSION;
-  host.style.cssText='display:block;position:relative;z-index:2147483646;margin:0;padding:12px 20px;background:#fff;min-height:64px;box-sizing:border-box';
+  host.style.cssText='display:block;float:right;position:relative;z-index:2147483646;margin:10px 16px 12px 20px;padding:0;background:transparent;box-sizing:border-box;max-width:calc(100% - 32px)';
   const shadow=host.attachShadow({mode:'closed'});
   shadow.innerHTML=`<style>
     :host{font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -21,9 +21,13 @@ export function createUI() {
     if(host.isConnected)return;
     const root=questionRoot();
     const frame=[...document.querySelectorAll('iframe')].find(el=>el.getBoundingClientRect().width>400 && el.getBoundingClientRect().height>250);
-    if(root && root!==document.body && root!==document.documentElement)root.prepend(host);
-    else if(frame)frame.before(host);
-    else (document.querySelector('main,[role="main"]') || document.body)?.prepend(host);
+    // The question may live in a child frame. Do not put a second toolbar
+    // above that iframe in its parent document.
+    if(frame)return;
+    if(root && root!==document.body && root!==document.documentElement){
+      const prompt=root.querySelector('#top, [data-testid="question-text"], .question-text') || root;
+      prompt.prepend(host);
+    } else if(window===window.top)(document.querySelector('main,[role="main"]') || document.body)?.prepend(host);
   }
   mount();
   const observer=new MutationObserver(()=>{if(!host.isConnected)mount();});
