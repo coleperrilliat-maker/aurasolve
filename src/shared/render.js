@@ -62,9 +62,16 @@ export function explanationSteps(text) {
   return steps;
 }
 
+export function compactAnswer(text) {
+  // Only shorten explicit option labels; preserve numeric answers and blank labels.
+  const match = String(text).trim().match(/^\(?([A-Za-z])[).:]\s+(.+)$/s);
+  if (!match) return text;
+  return /coordinate plane|line segments? (?:are|is) plotted|graph (?:shows|of)|horizontal x-axis/i.test(match[2]) ? `Graph ${match[1]}` : match[1];
+}
+
 export function answerLines(solution, question) {
   const picks = pickedChoices(solution, question);
-  return picks.length ? picks : lines(solution.answer, /^\s*[-•*]\s+/);
+  return (picks.length ? picks : lines(solution.answer, /^\s*[-•*]\s+/)).map(compactAnswer);
 }
 
 export function renderSolution(result, label) {
@@ -87,3 +94,4 @@ export function renderSolution(result, label) {
   if (result.solution.limitation) { const note = el("p", "note"); note.textContent = result.solution.limitation; card.append(note); }
   return card;
 }
+

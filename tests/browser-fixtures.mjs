@@ -32,6 +32,26 @@ try{
   });
   assert.equal(result.count,1);assert.ok(result.selected);assert.equal(result.value,'5');assert.equal(result.stable,true);assert.equal(result.submit,1);
   console.log('PASS: nested Pearson-style containers, auto-selection, real contenteditable fill, stable snapshot, command button');
+  const mixed=await page.evaluate(async()=>{
+    document.body.innerHTML='<main data-aura-question><p>Choose the dilation and scale factor.</p><svg width="50" height="50"></svg><label><input type="radio" name="kind" value="reduction">Reduction</label><label><input type="radio" name="kind" value="enlargement">Enlargement</label><input id="scale" aria-label="Scale factor"></main><button command="checkanswer">Check answer</button><button command="next">Next</button>';
+    let submits=0, next=0;
+    document.querySelector('[command="checkanswer"]').onclick=()=>submits++;
+    document.querySelector('[command="next"]').onclick=()=>next++;
+    const detector=await import('/src/content/detection.js'), actions=await import('/src/content/actions.js');
+    const snap=detector.snapshot();
+    const radio=snap.fields.find(f=>f.kind==='radio'), blank=snap.fields.find(f=>f.kind==='text');
+    const solution={answer:'Reduction\n1/3',explanation:'Corresponding lengths have ratio one third.',supported:true,confidence:.99,limitation:'',choices:[],actions:[{kind:'radio',target:radio.id,value:'',destination:'',x:null,y:null},{kind:'text',target:blank.id,value:'1/3',destination:'',x:null,y:null}]};
+    const plan={url:snap.url,hash:snap.hash,mode:'field',submit:false,solution,visualRead:true};
+    await actions.execute(plan);
+    await actions.execute({...plan,submit:true});
+    actions.clickControl('next');
+    const {answerLines}=await import('/src/shared/render.js');
+    const compact=answerLines({answer:'B. A coordinate plane has a horizontal x-axis.\nD. It is a translation up four units.',choices:[],actions:[]},{fields:[]});
+    return {checked:document.querySelector('input[type="radio"]').checked,value:document.querySelector('#scale').value,submits,next,compact};
+  });
+  assert.deepEqual(mixed,{checked:true,value:'1/3',submits:1,next:1,compact:['Graph B','D']});
+  console.log('PASS: mixed radio and fraction Fill, visual question submission, Next, compact graph and option answers');
+
   const activated=await page.evaluate(async()=>{
     document.body.innerHTML='<main data-aura-question>Solve 2x = 8<span class="eqEditor inputField" widgetid="fixture">Answer</span></main>';
     const widget=document.querySelector('.eqEditor');
@@ -63,7 +83,7 @@ try{
   });
   await ui.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.includes('Fixture: editor unavailable'));
   const text=await ui.evaluate(()=>testShadow.querySelector('#results').textContent);
-  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.9/);
+  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.10/);
   assert.match(text,/Answer/);assert.match(text,/Explanation/);assert.match(text,/Subtract 7/);
   assert.equal(await ui.evaluate(()=>testShadow.querySelectorAll('.answer-card').length),1);
   console.log('PASS: AutoPilot keeps one answer and explanation visible after a failed fill');
@@ -104,7 +124,7 @@ try{
     const {createUI}=await import('/src/content/ui.js');createUI();
     testShadow.querySelector('[data-mode="field"]').click();
   });
-  await fill.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.startsWith('Field filled.'));
+  await fill.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.startsWith('Answers filled.'));
   assert.equal(await fill.locator('#answer').inputValue(),'5');
   assert.equal(await fill.evaluate(()=>window.submits),0);
   assert.match(await fill.evaluate(()=>testShadow.querySelector('#results').textContent),/Subtract 7/);

@@ -32,7 +32,6 @@ export function validateSolution(solution, snapshot, mode) {
     if (!f || a.kind !== f.kind || typeof a.value !== "string" || a.value.length > 4000) throw new Error("The solution references an unsupported field.");
     if (seen.has(a.target)) throw new Error("Duplicate field actions are not supported.");
     seen.add(a.target);
-    if (mode === "field" && a.target !== snapshot.selected) throw new Error("The solution tried to change a different field.");
     if (a.kind === "select" && !f.options.some(o => o.value === a.value && !o.disabled)) throw new Error("The selected option is unavailable.");
     if (a.kind === "checkbox" && !["true","false"].includes(a.value)) throw new Error("Invalid checkbox state.");
     if (a.kind === "point" && (!Number.isFinite(a.x) || !Number.isFinite(a.y) || a.x < f.bounds.xMin || a.x > f.bounds.xMax || a.y < f.bounds.yMin || a.y > f.bounds.yMax)) throw new Error("The graph point is outside the supported grid.");
@@ -40,3 +39,4 @@ export function validateSolution(solution, snapshot, mode) {
   }
   return solution;
 }
+

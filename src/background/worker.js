@@ -153,22 +153,23 @@ async function handle(message,sender) {
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);
     const timeout = setTimeout(()=>controller.abort(),90000);
-    let solution;
+    let solution, visualRead = false;
     try {
       const {rect, viewport, ...question} = state.question;
       if (question.visual) {
         question.image = await screenshot(tabId, state.question).catch(error => { console.warn("AuraSolve screenshot failed:", error); return null; });
+        visualRead = Boolean(question.image);
         if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
       const missingField=message.mode==='field' && !question.fields.length;
-      solution = await solve(question,missingField?'explain':message.mode,settings,controller.signal);
+      solution = await solve(question,missingField?'explain':message.mode==='field'?'autopilot':message.mode,settings,controller.signal);
       if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const id = crypto.randomUUID();
-    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,mode:message.mode,generation,created:Date.now(),state:"ready"});
+    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,visualRead,mode:message.mode,generation,created:Date.now(),state:"ready"});
     return {planId:id,solution,question:state.question};
   }
   const plan = plans.get(message.planId);

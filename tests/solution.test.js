@@ -7,7 +7,7 @@ const snapshot={question:'3x + 7 = 22',fields:[{id:'a1',kind:'text'},{id:'a2',ki
 const action={kind:'text',target:'a1',value:'5',destination:'',x:null,y:null};
 const solution={answer:'x = 5',explanation:'Subtract 7, then divide by 3.',confidence:.99,supported:true,limitation:'',actions:[action]};
 test('valid selected field answer passes',()=>assert.equal(validateSolution(solution,snapshot,'field'),solution));
-test('model cannot edit a different field or invent a target',()=>{assert.throws(()=>validateSolution({...solution,actions:[{...action,target:'a2'}]},snapshot,'field'));assert.throws(()=>validateSolution({...solution,actions:[{...action,target:'missing'}]},snapshot,'autopilot'));});
+test('Fill permits every detected field but rejects invented targets',()=>{assert.ok(validateSolution({...solution,actions:[action,{...action,target:'a2'}]},snapshot,'field'));assert.throws(()=>validateSolution({...solution,actions:[{...action,target:'missing'}]},snapshot,'autopilot'));});
 test('duplicate actions are rejected',()=>assert.throws(()=>validateSolution({...solution,actions:[action,action]},snapshot,'field')));
 test('graph bounds are enforced',()=>{const snap={...snapshot,fields:[{id:'a1',kind:'point',bounds:{xMin:-5,xMax:5,yMin:-5,yMax:5}}]};assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'point',x:6,y:0}]},snap,'field'));});
 test('invalid select values and unknown drops are rejected',()=>{assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'select',value:'fake'}]},{...snapshot,fields:[{id:'a1',kind:'select',options:[{value:'real'}]}]},'field'));assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'drag',destination:'fake'}]},{...snapshot,fields:[{id:'a1',kind:'drag'}]},'field'));});
@@ -36,3 +36,4 @@ test('literal \\n before a step becomes a line break but LaTeX \\neq is kept',()
   assert.equal(out.explanation,'- Step one \\(x \\neq 2\\).\n- Step two.');
   assert.equal(out.answer,'2) Given\n4) Reflexive');
 });
+

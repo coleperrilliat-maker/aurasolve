@@ -129,13 +129,13 @@ export function createUI() {
         if(mode!=="autopilot") {
           if(mode==="explain")explainedPrompt=result.question.promptHash;
           if(mode==="field" && result.solution.supported && result.solution.actions.length && result.solution.confidence>=.85) {
-            status("Filling your selected field…","FILLING");
+            status("Filling the current question’s answers…","FILLING");
             await request({type:"apply",planId:result.planId});live();
-            const filled=document.createElement("div");filled.className="feedback";filled.textContent="✓ Field filled";
+            const filled=document.createElement("div");filled.className="feedback";filled.textContent="✓ Answers filled";
             article.append(filled);
             pendingField={planId:result.planId,hash:result.question.hash};
             $("#next").textContent="Submit & next →";
-            status("Field filled. Review it, then press Submit & next.","FILLED");
+            status("Answers filled. Review them, then press Submit & next.","FILLED");
           } else if(mode==="explain") $(".notice").hidden=true;
           else status("Automatic filling is unavailable for this answer. Use the explanation to complete it manually.","MANUAL STEP");
           break;
