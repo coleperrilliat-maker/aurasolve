@@ -162,3 +162,5 @@ try {
   $("cloud").className = "offline";
 }
 
+
+$('close').onclick=async()=>{const win=await chrome.windows.getCurrent();await chrome.sidePanel.close({windowId:win.id});};

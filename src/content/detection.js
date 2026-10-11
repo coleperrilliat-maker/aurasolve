@@ -114,10 +114,12 @@ export function snapshot() {
   if (root?.querySelector('canvas, svg:not([data-aura-graph])') && !fields.some(f=>f.kind === 'point')) limitations.push("Canvas/SVG content is not read visually; complex graph actions are unsupported.");
   if (root?.querySelector('img:not([alt]), img[alt=""]')) limitations.push("An image has no description; the model may not have enough information.");
   const readable = root?.cloneNode?.(true);
+  readable?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   readable?.querySelectorAll('[contenteditable], [data-aura-editor], textarea').forEach(el=>{el.textContent='';});
   const question = root ? clean((readable ? readable.textContent : root.innerText) + " " + [...root.querySelectorAll('math, img[alt], [aria-label]')].filter(el=>!el.closest?.('[data-aura-editor]')).map(el=>el.getAttribute('alt') || el.getAttribute('aria-label') || el.textContent).join(" ")).slice(0,16000) : "";
   const hash = fingerprint(JSON.stringify({question,fields,drops}));
   const prompt = root?.cloneNode?.(true);
+  prompt?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   prompt?.querySelectorAll('input, textarea, select, [contenteditable], [data-aura-editor], [role="textbox"], [role="alert"], [data-aura-feedback], .feedback, .answer-feedback').forEach(el=>el.remove());
   const promptHash = fingerprint(clean(prompt?.textContent || question));
   const visual = Boolean(root?.querySelector('img, svg, canvas, figure') || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));

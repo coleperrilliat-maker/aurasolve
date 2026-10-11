@@ -223,3 +223,6 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);});
 
+
+// Keep the extension open while the user interacts with the question.
+chrome.sidePanel?.setPanelBehavior({openPanelOnActionClick:true}).catch(console.error);

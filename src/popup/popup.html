@@ -11,12 +11,12 @@
 <body>
   <header>
     <span class="brand"><img src="../../icons/icon-48.png" alt="" width="22" height="22"><strong>AuraSolve</strong></span>
-    <small id="cloud">Checking cloud…</small>
+    <button id="close" type="button">Close</button>
   </header>
+  <small id="cloud">Checking cloud…</small>
   <div class="modes">
-    <button data-mode="autopilot" type="button"><span>✈️</span>AutoPilot</button>
-    <button data-mode="field" type="button"><span>✍️</span>Fill field</button>
-    <button data-mode="explain" type="button"><span>💡</span>Explain</button>
+    <button data-mode="autopilot" type="button">AutoPilot</button>
+    <button data-mode="explain" type="button">Explain now</button>
   </div>
   <p id="status" role="status">Open a practice question, then choose a mode.</p>
   <section id="consent" hidden>
@@ -31,3 +31,4 @@
   <script type="module" src="popup.js"></script>
 </body>
 </html>
+

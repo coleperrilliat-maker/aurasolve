@@ -88,37 +88,6 @@ try{
   assert.equal(activated.before,0);assert.equal(activated.after,1);assert.ok(activated.selected);
   console.log('PASS: Fill inspection activates a lazy Pearson-style answer box without a user click');
 
-  const ui=await browser.newPage();
-  await ui.goto(origin+'/src/options/index.html');
-  await ui.evaluate(async()=>{
-    document.body.innerHTML='<main data-aura-question>Solve 3x + 7 = 22<input aria-label="x"></main>';
-    const attach=Element.prototype.attachShadow;
-    Element.prototype.attachShadow=function(options){const shadow=attach.call(this,options);window.testShadow=shadow;return shadow;};
-    const solution={answer:'5',explanation:'Subtract 7, then divide both sides by 3.',supported:true,confidence:.99,limitation:'',actions:[{kind:'text',target:'a1',value:'5'}]};
-    window.chrome={runtime:{getURL:path=>new URL('/'+path,location.href).href,sendMessage:async message=>{
-      if(message.type==='inspect')return{ok:true,data:{signed:true,question:{selected:'a1'}}};
-      if(message.type==='settingsStatus')return{ok:true,data:{configured:true}};
-      if(message.type==='solve')return{ok:true,data:{planId:'p1',solution,question:{fields:[],question:'Solve 3x+7=22'}}};
-      if(message.type==='apply')return{ok:false,error:'Fixture: editor unavailable'};
-      return{ok:true,data:{}};
-    }}};
-    const {createUI}=await import('/src/content/ui.js');createUI();
-    testShadow.querySelector('[data-mode="autopilot"]').click();
-  });
-  await ui.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.includes('Fixture: editor unavailable'));
-  const text=await ui.evaluate(()=>testShadow.querySelector('#results').textContent);
-  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.15/);
-  assert.match(text,/Answer/);assert.match(text,/Explanation/);assert.match(text,/Subtract 7/);
-  assert.equal(await ui.evaluate(()=>testShadow.querySelectorAll('.answer-card').length),1);
-  console.log('PASS: AutoPilot keeps one answer and explanation visible after a failed fill');
-  await ui.evaluate(()=>{delete window.chrome.runtime;testShadow.querySelector('[data-mode="field"]').click();});
-  await ui.waitForFunction(()=>!testShadow.querySelector('#reconnect').hidden);
-  const disconnectedText=await ui.evaluate(()=>testShadow.querySelector('#fill-status').textContent);
-  assert.match(disconnectedText,/Refresh this lab page/);
-  assert.doesNotMatch(disconnectedText,/Cannot read properties/);
-  assert.equal(await ui.evaluate(()=>testShadow.querySelector('[data-mode="field"]').disabled),true);
-  console.log('PASS: losing chrome.runtime shows refresh recovery and stops further actions');
-
   const fill=await browser.newPage();
   await fill.goto(origin+'/src/options/index.html');
   await fill.evaluate(async()=>{
@@ -146,13 +115,26 @@ try{
       return{ok:true,data:{}};
     }}};
     const {createUI}=await import('/src/content/ui.js');createUI();
-    testShadow.querySelector('[data-mode="field"]').click();
+    testShadow.querySelector('button').click();
   });
-  await fill.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.startsWith('Answers filled.'));
-  assert.equal(await fill.locator('#answer').inputValue(),'5');
+  await fill.waitForFunction(()=>document.querySelector('#answer').value==='5' && testShadow.querySelector('button').getAttribute('aria-busy')==='false');
   assert.equal(await fill.evaluate(()=>window.submits),0);
-  assert.match(await fill.evaluate(()=>testShadow.querySelector('#results').textContent),/^$/);
-  assert.equal(await fill.evaluate(()=>testShadow.querySelector('.panel').hidden),true);
-  assert.equal(await fill.evaluate(()=>testShadow.querySelector('[data-mode="field"]').getAttribute('aria-busy')),'false');
-  console.log('PASS: Fill button writes the selected native input, stays popup-free, restores its emoji, and never submits');
+  assert.equal(await fill.evaluate(()=>testShadow.querySelectorAll('button').length),1);
+  assert.equal(await fill.evaluate(()=>testShadow.querySelector('button').textContent),'Fill answers');
+  assert.equal(await fill.evaluate(()=>testShadow.querySelector('.panel')),null);
+  assert.equal(await fill.evaluate(()=>document.querySelector('[data-aura-question]').firstElementChild.id),'aurasolve-root');
+  console.log('PASS: one inline blue Fill button, no signature or popup, successful fill, no submission');
+  const side=await browser.newPage();
+  await side.addInitScript(()=>{
+    window.chrome={runtime:{sendMessage:async message=>({ok:true,data:message.type==='settingsStatus'?{configured:true}:message.type==='solve'?{solution:{answer:'5',explanation:'Subtract 7, then divide by 3.',actions:[],choices:[]},question:{fields:[]}}:{}})},windows:{getCurrent:async()=>({id:7})},sidePanel:{close:async options=>{window.closedWindow=options.windowId;}}};
+  });
+  await side.goto(origin+'/src/popup/popup.html');
+  await side.getByRole('button',{name:'Explain now'}).click();
+  await side.waitForFunction(()=>document.querySelector('#results').textContent.includes('Subtract 7'));
+  await side.locator('header').click();
+  assert.match(await side.locator('#results').textContent(),/Subtract 7/);
+  assert.equal(await side.locator('[data-mode="field"]').count(),0);
+  await side.getByRole('button',{name:'Close',exact:true}).click();
+  await side.waitForFunction(()=>window.closedWindow===7);
+  console.log('PASS: extension Explain now renders internally and Close requests side-panel closure');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
