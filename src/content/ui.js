@@ -188,7 +188,7 @@ export function createUI() {
       if(mode==='field')await request({type:'prepareField'});
       const info=await request({type:"inspect"});
       if(mine!==token)return;
-      if(info.signed || consentUrl===location.href){busy(false);return await run(mode);}
+      if(mode==="field" || info.signed || consentUrl===location.href){busy(false);return await run(mode);}
       pending=mode;open();$("#consent").hidden=false;$("#statement").value="";$("#signature").value="";$("#confirm").disabled=true;
       status("Type the honor statement and sign to continue.","Honor code");
     }catch(error){if(mode==="field")fillNotice(error.message);else status(error.message,"NEEDS ATTENTION");}finally{busy(false);}

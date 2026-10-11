@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve \u2014 Practice Tutor",
-  "version": "1.13.13",
+  "version": "1.13.14",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "120",
   "permissions": [

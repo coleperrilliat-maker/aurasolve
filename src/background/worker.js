@@ -98,7 +98,7 @@ async function handle(message,sender) {
   if (message.type==='writeEditor') {
     const tabId=sender.tab?.id, plan=plans.get(message.planId);
     if (!plan || plan.tabId!==tabId || plan.documentId!==sender.documentId || !['applying','submitting'].includes(plan.state) || plan.generation!==rev(tabId) || Date.now()-plan.created>10*60*1000) throw new Error('The editor request is no longer active.');
-    const state=await collect(tabId);await consent(tabId,state);
+    const state=await collect(tabId);if(plan.mode!=="field")await consent(tabId,state);
     if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.hash!==plan.hash) throw new Error('The question changed.');
     const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
     if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
@@ -149,7 +149,7 @@ async function handle(message,sender) {
     if (!["explain","field","autopilot"].includes(message.mode)) throw new Error("Unknown mode.");
     cancel(tabId); const generation = rev(tabId);
     const state = await collect(tabId);
-    if (message.mode !== "explain") await consent(tabId,state);
+    if (message.mode === "autopilot") await consent(tabId,state);
     const {settings={}} = await chrome.storage.local.get("settings");
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);
@@ -175,7 +175,8 @@ async function handle(message,sender) {
   }
   const plan = plans.get(message.planId);
   if (!plan || plan.tabId!==tabId || plan.generation!==rev(tabId) || Date.now()-plan.created>10*60*1000) throw new Error("The answer expired or was stopped. Generate a new answer.");
-  const state = await collect(tabId); await consent(tabId,state);
+  const state = await collect(tabId);
+  if (plan.mode!=="field" || message.type!=="apply") await consent(tabId,state);
   if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.url!==plan.url) throw new Error("The practice page changed. Start again.");
   if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
   if (message.type === "apply") {

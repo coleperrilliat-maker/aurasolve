@@ -22,7 +22,7 @@ globalThis.fetch=async url=>{
 await import('../src/background/worker.js');
 const request=message=>new Promise(resolve=>listener(message,{id:'unit-test',tab:{id:1},frameId:0},resolve));
 test('worker enforces consent, applies once, and invalidates on stop',async()=>{
-  let result=await request({type:'solve',mode:'field'});assert.equal(result.ok,false);assert.match(result.error,/sign/);
+  let result=await request({type:'solve',mode:'autopilot'});assert.equal(result.ok,false);assert.match(result.error,/sign/);
   assert.equal((await request({type:'inspect'})).data.signed,false);
   assert.equal((await request({type:'consent',statement:'yes',signature:'Student'})).ok,false);
   assert.equal((await request({type:'consent',statement:'This is not a graded homework assignment',signature:''})).ok,false);
@@ -99,3 +99,14 @@ test('missing answer controls still return tutoring instead of a click-first err
   } finally {state.fields=fields;state.selected=selected;}
 });
 
+
+test('Fill solves and applies without any signature',async()=>{
+  await request({type:'stop'});
+  assert.equal(session['grant:1'],undefined);
+  const result=await request({type:'solve',mode:'field'});
+  assert.equal(result.ok,true);
+  const filled=await request({type:'apply',planId:result.data.planId});
+  assert.equal(filled.ok,true);
+  assert.equal(filled.data.submitted,false);
+  assert.equal(session['grant:1'],undefined);
+});
