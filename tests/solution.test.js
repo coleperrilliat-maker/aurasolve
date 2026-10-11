@@ -20,6 +20,7 @@ test('multiple-choice picks come from choices, or from chosen radio/checkbox fie
   assert.deepEqual(pickedChoices({choices:['B. 15'],actions:[]},question),['B. 15']);
   assert.deepEqual(pickedChoices({choices:[],actions:[{kind:'checkbox',target:'c1',value:'true'},{kind:'checkbox',target:'c2',value:'true'},{kind:'radio',target:'r1',value:''}]},question),['C. 3','D. 5','A. 12']);
   assert.deepEqual(pickedChoices({choices:[],actions:[{kind:'checkbox',target:'c1',value:'false'}]},question),[]);
+  assert.deepEqual(pickedChoices({answer:'2) Given\n4) Vertical Angles Theorem',choices:['Given','Vertical Angles Theorem'],actions:[]},question),[]);
 });
 test('invalid choices are rejected and missing choices default to none',()=>{
   assert.throws(()=>validateSolution({...solution,choices:[42]},snapshot,'field'),/choices/);
