@@ -6,11 +6,12 @@ const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[],controls:{submit:1,next:1}};
 globalThis.chrome={storage:{local:storage(local),session:storage(session)},runtime:{id:'unit-test',onMessage:{addListener:fn=>listener=fn}},tabs:{onRemoved:{addListener:()=>{}},query:async()=>[{id:1}]},scripting:{executeScript:async input=>{
   if(input.world==='MAIN')return [{result:true}];
-  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];return [{result:{clicked:true}}];}
+  const wrapped=data=>[{result:{ok:true,data}}];
+  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
-  if(input.args[0]==='execute'){applied++;if(staleAfterFill)state.hash='changed-after-fill';return [{result:{filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit}}];}
-  if(input.args[0]==='feedback')return [{result:{state:input.target.documentIds[0]==='doc1'?verdict:'unknown',text:''}}];
-  if(input.args[0]==='nextProblem')return [{result:{clicked:nextButton}}];
+  if(input.args[0]==='execute'){applied++;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
+  if(input.args[0]==='feedback')return wrapped({state:input.target.documentIds[0]==='doc1'?verdict:'unknown',text:''});
+  if(input.args[0]==='nextProblem')return wrapped({clicked:nextButton});
   throw new Error('Unexpected frame call');
 }}};
 const solution={answer:'5',explanation:'Subtract 7, divide by 3.',confidence:.99,supported:true,limitation:'',actions:[{kind:'text',target:'a1',value:'5',destination:'',x:null,y:null}]};

@@ -1,6 +1,7 @@
 import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
 import {editorBridge} from './editors.js';
+import {frameCall} from './frame-call.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map();
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"});
 const rev = id => revisions.get(id) || 0;
@@ -21,15 +22,6 @@ async function collect(tabId) {
   if (options.length > 1 && !known.length) options = [options.reduce((a,b)=>(b.fields.length-a.fields.length || b.question.length-a.question.length)>0?b:a)];
   if (options.length !== 1) throw new Error(options.length ? "Several questions were found. Click an answer field in the question you want." : "No supported question container was found. This page needs a site adapter; try the included practice lab.");
   return {top,question:options[0],contexts:frames.map(f=>f.context)};
-}
-async function frameCall(tabId, documentId, method, payload) {
-  const result = await chrome.scripting.executeScript({target:{tabId,documentIds:[documentId]},func:async(method,payload)=>{
-    await globalThis.__auraReady;
-    if (!globalThis.__aura) throw new Error("AuraSolve is no longer attached to this page.");
-    return globalThis.__aura[method](payload);
-  },args:[method,payload ?? null]});
-  if (!result[0] || result[0].result == null) throw new Error("The page action failed. Check the page before continuing.");
-  return result[0].result;
 }
 const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,frameIds:[0]},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
 async function screenshot(tabId, question) {

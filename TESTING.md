@@ -33,3 +33,12 @@ Before relying on a real practice page, test Explain, then a single field, and t
 An optional `node tests/browser-fixtures.mjs` suite covers actual contenteditable input and keeping tutor cards visible on a failed AutoPilot fill. It requires Playwright and its Chromium browser. It could not be executed in the build environment: Chromium was absent and its download returned invalid ZIP data. These browser cases are therefore **unverified**, not passing.
 
 No live signed-in Pearson/MyMathLab or other lab integration was tested. MathQuill/Dojo tests use API doubles; actual sites must expose the supported API.
+
+## 1.13.6 follow-up: Fill field
+
+- `npm test`: 34 tests pass, including tests that execute the real injected page-call function rather than mocking away its exception handling.
+- The three browser fixtures now pass in Chromium 153: real contenteditable writes and stable snapshots; tutor visibility after an AutoPilot failure; and clicking Fill field to write a selected native input, display the explanation, and leave Submit untouched. The AI response and Chrome messaging are stubbed; these are not live Pearson tests.
+- The browser was obtained through a separately installed Chromium package after the Playwright browser download failed. Run `CHROMIUM_PATH=/path/to/chromium node tests/browser-fixtures.mjs` with an installed Chromium, or omit the variable with Playwright's bundled browser installed.
+- Added recognition of Pearson `span.eqEditor[widgetid]` and lookup through the exposed Dojo registry using the widget ID. It still requires a real supported value API; this is not a promise that all Pearson editors work.
+- Removed the generic “The page action failed” wrapper: synchronous and asynchronous page exceptions now retain their original error message, and stale page scripts give a refresh instruction.
+- No signed-in Pearson session was available to reproduce the reported field failure.

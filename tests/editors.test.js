@@ -8,7 +8,7 @@ function fixture(kind='mathquill',valid=true) {
   const events=[];
   const el={id:'answer',dataset:{},isConnected:true,disabled:false,readOnly:false,
     matches:s=>s.includes(kind==='mathquill'?'.mq-editable-field':'.eqEditor'),getClientRects:()=>[{}],closest:()=>null,
-    removeAttribute:()=>{},dispatchEvent:e=>events.push(e.type)};
+    getAttribute:key=>key==='widgetid'?'pearson-widget':null,removeAttribute:()=>{},dispatchEvent:e=>events.push(e.type)};
   globalThis.document={hidden:false,querySelectorAll:()=>[el]};
   globalThis.getComputedStyle=()=>({visibility:'visible'});
   globalThis.window=kind==='mathquill'?{MathQuill:{getInterface:()=>()=>({focus(){},latex(v){if(v!==undefined && valid)value=v;return value;}})}}:

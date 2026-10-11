@@ -8,7 +8,7 @@ export function idFor(el) {
 }
 export const elementFor = id => elements.get(id);
 const clean = value => String(value || "").replace(/\s+/g," ").trim();
-const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField';
+const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid]';
 const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable]';
 export function labelFor(el) {
   const editable = el.isContentEditable || el.matches?.('[data-aura-editor]');
@@ -80,7 +80,7 @@ export function snapshot() {
     else if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && ["text","number",""].includes(el.type))) fields.push({...base,kind:"text"});
     else if (el.isContentEditable) fields.push({...base,kind:'text',adapter:'contenteditable',format:'plain'});
   }
-  if (root) for (const el of root.querySelectorAll('span.eqEditor.inputField, .mq-editable-field, .mathquill-editable, .acctable .inputcell[role="textbox"]')) {
+  if (root) for (const el of root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .mq-editable-field, .mathquill-editable, .acctable .inputcell[role="textbox"]')) {
     if (visible(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>el===elementFor(f.id) || el.contains(elementFor(f.id)))) limitations.push('A Pearson math or table field needs a supported editor API.');
   }
   const drops = root ? [...root.querySelectorAll('[data-aura-drop]')].filter(visible).map(el=>({id:idFor(el),label:labelFor(el)})) : [];

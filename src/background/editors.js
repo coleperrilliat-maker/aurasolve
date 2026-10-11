@@ -1,7 +1,7 @@
 // Runs in the page's MAIN world. Only known, live editor APIs are supported;
 // never evaluate model text or infer an editor from its appearance alone.
 export function editorBridge(request = {op: "discover"}) {
-  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, .acctable .inputcell[role="textbox"]';
+  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"]';
   function adapterFor(el) {
     if (el.matches('.mq-editable-field, .mathquill-editable')) {
       try {
@@ -11,7 +11,9 @@ export function editorBridge(request = {op: "discover"}) {
       } catch {}
     }
     try {
-      const widget = window.dijit?.byNode?.(el) || (el.id && window.dijit?.byId?.(el.id));
+      const registry=window.dijit?.registry || window.dijit;
+      const widgetId=el.getAttribute('widgetid') || el.id;
+      const widget = registry?.byNode?.(el) || (widgetId && registry?.byId?.(widgetId));
       // Dojo's generic set() would silently create a property on an unsupported
       // widget. Require its actual value setter and a scalar value reader.
       if (widget && typeof widget._setValueAttr === 'function' && typeof widget.set === 'function' && typeof widget.get === 'function' && ['string','number'].includes(typeof widget.get('value')))

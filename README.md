@@ -167,3 +167,7 @@ Chrome documentation used: https://developer.chrome.com/docs/extensions/referenc
 - LaTeX backslashes in the tutor prompt are preserved.
 
 These changes have automated regression coverage but are not a claim of compatibility with every MyLab product. Graphs, custom dropdowns, and editors without an accessible supported API may still require manual input. See TESTING.md for verification limits.
+
+### 1.13.6: Fill-field follow-up
+
+Field actions now carry page errors back intact, so an unsupported or stale editor no longer becomes the unhelpful “The page action failed” message. Pearson equation-editor discovery also recognizes widget IDs and the Dojo registry. The Fill button has a browser regression fixture proving that a selected native input receives the value and is not submitted. Live proprietary Pearson widgets still need verification. After installing an update, reload the extension **and refresh the already-open lab tab** to replace its old page script.

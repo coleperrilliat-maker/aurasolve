@@ -14,7 +14,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin=`http://127.0.0.1:${server.address().port}`;
-const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH || undefined,args:['--no-sandbox','--disable-dev-shm-usage']});
 try{
   const page=await browser.newPage();
   await page.goto(origin+'/src/options/index.html');
@@ -55,4 +55,39 @@ try{
   assert.match(text,/Answer/);assert.match(text,/Explanation/);assert.match(text,/Subtract 7/);
   assert.equal(await ui.evaluate(()=>testShadow.querySelectorAll('.answer-card').length),1);
   console.log('PASS: AutoPilot keeps one answer and explanation visible after a failed fill');
+
+  const fill=await browser.newPage();
+  await fill.goto(origin+'/src/options/index.html');
+  await fill.evaluate(async()=>{
+    document.body.innerHTML='<main data-aura-question>Solve 3x + 7 = 22<input id="answer" aria-label="x"></main><button id="submit">Submit</button>';
+    window.submits=0;document.querySelector('#submit').onclick=()=>window.submits++;
+    const attach=Element.prototype.attachShadow;
+    Element.prototype.attachShadow=function(options){const shadow=attach.call(this,options);window.testShadow=shadow;return shadow;};
+    const detection=await import('/src/content/detection.js');
+    const actions=await import('/src/content/actions.js');
+    const {callPageMethod}=await import('/src/background/frame-call.js');
+    window.__aura={execute:actions.execute};
+    detection.trackSelection();
+    document.querySelector('#answer').focus();
+    let plan;
+    window.chrome={runtime:{getURL:path=>new URL('/'+path,location.href).href,sendMessage:async message=>{
+      const question=detection.snapshot();
+      if(message.type==='inspect')return{ok:true,data:{signed:true,question}};
+      if(message.type==='settingsStatus')return{ok:true,data:{configured:true}};
+      if(message.type==='solve'){
+        const solution={answer:'5',explanation:'Subtract 7. Divide by 3.',supported:true,confidence:.99,limitation:'',actions:[{kind:'text',target:question.selected,value:'5',destination:'',x:null,y:null}]};
+        plan={url:question.url,hash:question.hash,mode:'field',submit:false,solution};
+        return{ok:true,data:{planId:'p1',solution,question}};
+      }
+      if(message.type==='apply')return await callPageMethod('execute',plan);
+      return{ok:true,data:{}};
+    }}};
+    const {createUI}=await import('/src/content/ui.js');createUI();
+    testShadow.querySelector('[data-mode="field"]').click();
+  });
+  await fill.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.startsWith('Field filled.'));
+  assert.equal(await fill.locator('#answer').inputValue(),'5');
+  assert.equal(await fill.evaluate(()=>window.submits),0);
+  assert.match(await fill.evaluate(()=>testShadow.querySelector('#results').textContent),/Subtract 7/);
+  console.log('PASS: Fill button writes the selected native input, shows tutoring, and never submits');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
