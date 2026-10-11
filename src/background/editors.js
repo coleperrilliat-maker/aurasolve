@@ -1,7 +1,7 @@
 // Runs in the page's MAIN world. Only known, live editor APIs are supported;
 // never evaluate model text or infer an editor from its appearance alone.
 export function editorBridge(request = {op: "discover"}) {
-  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"]';
+  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], .dijitSelect, [role="combobox"][widgetid]';
   function adapterFor(el) {
     if (el.matches('.mq-editable-field, .mathquill-editable')) {
       try {
@@ -14,6 +14,18 @@ export function editorBridge(request = {op: "discover"}) {
       const registry=window.dijit?.registry || window.dijit;
       const widgetId=el.getAttribute('widgetid') || el.id;
       const widget = registry?.byNode?.(el) || (widgetId && registry?.byId?.(widgetId));
+      if (widget && typeof widget.getOptions === 'function' && typeof widget.set === 'function' && typeof widget.get === 'function' && typeof widget._setValueAttr === 'function') {
+        const options = widget.getOptions();
+        if (Array.isArray(options) && options.length) return {
+          name:'dojo-select',
+          options:options.filter(o=>o.value != null).map(o=>{
+            const label=document.createElement('span');label.innerHTML=String(o.label ?? o.value);
+            return {value:String(o.value),label:label.textContent || '',disabled:Boolean(o.disabled)};
+          }),
+          read:()=>String(widget.get('value')),
+          write:value=>{if (!options.some(o=>String(o.value)===value && !o.disabled)) throw new Error('The dropdown option is unavailable.');widget.focus?.();widget.set('value',value);}
+        };
+      }
       // Dojo's generic set() would silently create a property on an unsupported
       // widget. Require its actual value setter and a scalar value reader.
       if (widget && typeof widget._setValueAttr === 'function' && typeof widget.set === 'function' && typeof widget.get === 'function' && ['string','number'].includes(typeof widget.get('value')))
@@ -24,8 +36,10 @@ export function editorBridge(request = {op: "discover"}) {
   if (request.op === 'discover') {
     for (const el of document.querySelectorAll(selector)) {
       const adapter = adapterFor(el);
-      if (!adapter) {el.removeAttribute('data-aura-editor');el.removeAttribute('data-aura-editor-key');continue;}
+      if (!adapter) {el.removeAttribute('data-aura-editor');el.removeAttribute('data-aura-editor-key');el.removeAttribute('data-aura-options');continue;}
       el.dataset.auraEditor = adapter.name;
+      if (adapter.options) el.dataset.auraOptions=JSON.stringify(adapter.options);
+      else el.removeAttribute('data-aura-options');
       el.dataset.auraEditorKey ||= crypto.randomUUID();
     }
     return true;

@@ -100,7 +100,7 @@ async function handle(message,sender) {
     const state=await collect(tabId);await consent(tabId,state);
     if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.hash!==plan.hash) throw new Error('The question changed.');
     const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
-    if (!field?.editorKey || !action || action.kind!=='text' || !['mathquill','dojo'].includes(field.adapter)) throw new Error('Unsupported editor action.');
+    if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:action.value}]});
     if (!result[0]?.result?.filled) throw new Error('The editor did not confirm the answer.');

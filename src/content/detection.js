@@ -80,7 +80,7 @@ export function snapshot() {
   const fields = [], limitations = [];
   if (root) for (const el of root.querySelectorAll(fieldSelector)) {
     if (!visible(el) || el.disabled || el.readOnly || el.getAttribute('aria-disabled') === 'true') continue;
-    const editor = el.closest?.(editorSelector);
+    const editor = el.closest?.('[data-aura-editor]') || el.closest?.(editorSelector);
     if (editor && editor !== el) {
       if (editor.matches('[data-aura-editor]')) continue;
       // Hidden MathQuill textareas are keyboard proxies, not answer values.
@@ -88,7 +88,10 @@ export function snapshot() {
     }
     if (el.isContentEditable && el.parentElement?.closest('[contenteditable="true"], [contenteditable="plaintext-only"]')) continue;
     const base = {id:idFor(el),label:labelFor(el)};
-    if (el.matches('[data-aura-editor]')) fields.push({...base,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:el.dataset.auraEditor === 'mathquill' ? 'latex' : 'plain'});
+    if (el.dataset?.auraEditor === 'dojo-select') {
+      try {fields.push({...base,kind:'select',adapter:'dojo-select',editorKey:el.dataset.auraEditorKey,options:JSON.parse(el.dataset.auraOptions)});} catch {limitations.push('Dropdown options could not be read.');}
+    }
+    else if (el.matches('[data-aura-editor]')) fields.push({...base,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:el.dataset.auraEditor === 'mathquill' ? 'latex' : 'plain'});
     else if (el.matches('[data-aura-graph]')) {
       const bounds = Object.fromEntries(["xMin","xMax","yMin","yMax"].map(key=>[key,Number(el.dataset[key])]));
       if (el.dataset.auraGraph === "point" && Object.values(bounds).every(Number.isFinite) && bounds.xMin < bounds.xMax && bounds.yMin < bounds.yMax) fields.push({...base,kind:"point",bounds});

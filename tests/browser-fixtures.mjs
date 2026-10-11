@@ -52,6 +52,30 @@ try{
   assert.deepEqual(mixed,{checked:true,value:'1/3',submits:1,next:1,compact:['Graph B','D']});
   console.log('PASS: mixed radio and fraction Fill, visual question submission, Next, compact graph and option answers');
 
+  const dropdowns=await page.evaluate(async()=>{
+    document.body.innerHTML='<main data-aura-question>The orientations are <div class="dijitSelect" widgetid="orientation" role="combobox">Choose<input type="hidden"></div> so the isometry is a <div class="dijitSelect" widgetid="isometry" role="combobox">Choose</div></main>';
+    const widgets={};
+    for(const [id,labels] of [['orientation',['same','opposite']],['isometry',['rotation','reflection']]]) {
+      let value='';
+      widgets[id]={getOptions:()=>labels.map((label,i)=>({value:String(i),label})),_setValueAttr(){},get:()=>value,set:(key,v)=>{value=v;}};
+    }
+    window.dijit={byId:id=>widgets[id]};
+    const {editorBridge}=await import('/src/background/editors.js');
+    editorBridge({op:'discover'});
+    const detector=await import('/src/content/detection.js');
+    const snap=detector.snapshot();
+    window.chrome={runtime:{sendMessage:async msg=>{
+      const field=snap.fields.find(f=>f.id===msg.target);
+      return {ok:true,data:editorBridge({op:'write',key:field.editorKey,adapter:field.adapter,value:'1'})};
+    }}};
+    const {execute}=await import('/src/content/actions.js');
+    await execute({url:snap.url,hash:snap.hash,mode:'field',submit:false,id:'test',solution:{answer:'opposite\nreflection',explanation:'Compare orientations.',confidence:.99,supported:true,limitation:'',actions:snap.fields.map(f=>({kind:'select',target:f.id,value:'1',destination:'',x:null,y:null}))}});
+    let rejected=false;try{editorBridge({op:'write',key:snap.fields[0].editorKey,adapter:'dojo-select',value:'missing'});}catch{rejected=true;}
+    return {kinds:snap.fields.map(f=>f.kind),options:snap.fields.map(f=>f.options.map(o=>o.label)),values:Object.values(widgets).map(w=>w.get()),stable:snap.hash===detector.snapshot().hash,rejected};
+  });
+  assert.deepEqual(dropdowns,{kinds:['select','select'],options:[['same','opposite'],['rotation','reflection']],values:['1','1'],stable:true,rejected:true});
+  console.log('PASS: two custom Dojo dropdowns expose options, fill both values, reject unavailable options, keep question stable');
+
   const activated=await page.evaluate(async()=>{
     document.body.innerHTML='<main data-aura-question>Solve 2x = 8<span class="eqEditor inputField" widgetid="fixture">Answer</span></main>';
     const widget=document.querySelector('.eqEditor');
@@ -83,7 +107,7 @@ try{
   });
   await ui.waitForFunction(()=>window.testShadow.querySelector('#status').textContent.includes('Fixture: editor unavailable'));
   const text=await ui.evaluate(()=>testShadow.querySelector('#results').textContent);
-  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.10/);
+  assert.match(await ui.evaluate(()=>testShadow.querySelector('.build').textContent),/1\.13\.11/);
   assert.match(text,/Answer/);assert.match(text,/Explanation/);assert.match(text,/Subtract 7/);
   assert.equal(await ui.evaluate(()=>testShadow.querySelectorAll('.answer-card').length),1);
   console.log('PASS: AutoPilot keeps one answer and explanation visible after a failed fill');
