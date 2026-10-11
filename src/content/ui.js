@@ -20,7 +20,7 @@ export function createUI() {
   </aside>`;
   shadow.append(wrap);document.documentElement.append(host);
   const $=selector=>shadow.querySelector(selector), panel=$(".panel"), results=$("#results");
-  let running=false, token=0, pending=null, consentUrl=null;
+  let running=false, token=0, pending=null, consentUrl=null, explainedPrompt=null, watching=false, seen=null;
   const request=async message=>{const response=await chrome.runtime.sendMessage(message);if(!response?.ok)throw new Error(response?.error || "AuraSolve disconnected. Reload the page.");return response.data;};
   const open=()=>{panel.hidden=false;};
   const status=text=>{$("#status").textContent=text;};
@@ -55,6 +55,7 @@ export function createUI() {
         live();status(mode==="autopilot"?`Working on practice question ${i} of 5…`:"Reading the question and thinking it through…","THINKING");
         const result=await request({type:"solve",mode});live();
         if(mode!=="autopilot") {
+          if(mode==="explain")explainedPrompt=result.question.promptHash;
           const article=card(result,mode,i);
           if(mode==="field" && result.solution.supported && result.solution.actions.length && result.solution.confidence>=.85) {
             status("Filling your selected field…","FILLING");
@@ -105,6 +106,19 @@ export function createUI() {
     }catch(error){status(error.message,"NEEDS ATTENTION");}finally{busy(false);}
   }
   shadow.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>choose(button.dataset.mode));
+  const explaining=()=>!running && !panel.hidden && panel.dataset.view==="explain" && explainedPrompt && !document.hidden;
+  // A new question must look the same on two polls in a row so half-loaded pages don't trigger a solve.
+  setInterval(async()=>{
+    if(watching || !explaining())return;
+    watching=true;
+    try {
+      const {question}=await request({type:"inspect"});
+      const fresh=question.promptHash && question.promptHash!==explainedPrompt;
+      if(fresh && seen===question.promptHash && explaining()){seen=null;explainedPrompt=question.promptHash;await choose("explain");}
+      else seen=fresh?question.promptHash:null;
+    } catch {seen=null;}
+    finally {watching=false;}
+  },2000);
   const signed=()=>statementMatches($("#statement").value) && $("#signature").value.trim().length>=2;
   for(const id of ["#statement","#signature"])$(id).addEventListener("input",()=>{$("#confirm").disabled=!signed();$("#statement").classList.toggle("ok",statementMatches($("#statement").value));});
   $("#confirm").onclick=async()=>{const mode=pending;if(!mode || !signed())return;$("#confirm").disabled=true;try{await request({type:"consent",statement:$("#statement").value,signature:$("#signature").value});consentUrl=location.href;pending=null;await run(mode);}catch(error){status(error.message,"Check signature");}finally{$("#confirm").disabled=!signed();}};
