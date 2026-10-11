@@ -1,5 +1,5 @@
 import {sendExtension} from '../shared/messaging.js';
-import {questionRoot} from './detection.js';
+import {questionRoot,snapshot,visible} from './detection.js';
 import {BUILD_VERSION} from '../shared/version.js';
 
 export function createUI() {
@@ -18,8 +18,12 @@ export function createUI() {
   const button=shadow.querySelector('button'),notice=shadow.querySelector('p');
   let running=false;
   function mount(){
-    if(host.isConnected)return;
-    const root=questionRoot();
+    const root=questionRoot(), current=snapshot();
+    const sara=current.fields.some(field=>field.adapter==='sara-choice');
+    const lazy=root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .dijitSelect, [role="combobox"][widgetid], .mq-editable-field')].some(visible);
+    const answering=Boolean(root && current.question && (sara || (!current.fallback && (current.fields.length || lazy))));
+    if(!answering){if(host.isConnected)host.remove();return;}
+    if(host.isConnected && root.contains(host))return;
     const frame=[...document.querySelectorAll('iframe')].find(el=>el.getBoundingClientRect().width>400 && el.getBoundingClientRect().height>250);
     // The question may live in a child frame. Do not put a second toolbar
     // above that iframe in its parent document.
@@ -30,8 +34,9 @@ export function createUI() {
     } else if(window===window.top)(document.querySelector('main,[role="main"]') || document.body)?.prepend(host);
   }
   mount();
-  const observer=new MutationObserver(()=>{if(!host.isConnected)mount();});
-  observer.observe(document.documentElement,{childList:true,subtree:true});
+  let scheduled=false;
+  const observer=new MutationObserver(()=>{if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;mount();});});
+  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class','style','aria-hidden','disabled']});
   button.onclick=async()=>{
     if(running)return;
     running=true;button.disabled=true;button.setAttribute('aria-busy','true');button.innerHTML='<span class="spinner" aria-hidden="true"></span>Filling…';notice.hidden=true;

@@ -124,6 +124,13 @@ try{
   assert.equal(await fill.evaluate(()=>testShadow.querySelector('.panel')),null);
   assert.equal(await fill.evaluate(()=>document.querySelector('[data-aura-question]').firstElementChild.id),'aurasolve-root');
   console.log('PASS: one inline blue Fill button, no signature or popup, successful fill, no submission');
+  await fill.evaluate(()=>{document.querySelector('main').innerHTML='<h1>Course dashboard</h1><input placeholder="Search courses">';});
+  await fill.waitForFunction(()=>!document.querySelector('#aurasolve-root'));
+  await fill.evaluate(()=>{document.querySelector('main').innerHTML='Solve 2x = 8 <input aria-label="x">';});
+  await fill.waitForFunction(()=>Boolean(document.querySelector('#aurasolve-root')));
+  await fill.evaluate(()=>{document.querySelector('main').removeAttribute('data-aura-question');document.querySelector('main').innerHTML='<h1>Account settings</h1><input aria-label="Display name">';});
+  await fill.waitForFunction(()=>!document.querySelector('#aurasolve-root'));
+  console.log('PASS: Fill disappears on dashboards and settings and returns for answerable questions');
   const side=await browser.newPage();
   await side.addInitScript(()=>{
     window.chrome={runtime:{sendMessage:async message=>({ok:true,data:message.type==='settingsStatus'?{configured:true}:message.type==='solve'?{solution:{answer:'5',explanation:'Subtract 7, then divide by 3.',actions:[],choices:[]},question:{fields:[]}}:{}})},windows:{getCurrent:async()=>({id:7})},sidePanel:{close:async options=>{window.closedWindow=options.windowId;}}};
