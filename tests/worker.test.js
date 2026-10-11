@@ -4,7 +4,7 @@ let listener, applied=0;
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[]};
-globalThis.chrome={storage:{local:storage(local),session:storage(session)},runtime:{id:'unit-test',onMessage:{addListener:fn=>listener=fn},openOptionsPage:async()=>{}},action:{onClicked:{addListener:()=>{}}},tabs:{onRemoved:{addListener:()=>{}}},scripting:{executeScript:async input=>{
+globalThis.chrome={storage:{local:storage(local),session:storage(session)},runtime:{id:'unit-test',onMessage:{addListener:fn=>listener=fn}},tabs:{onRemoved:{addListener:()=>{}},query:async()=>[{id:1}]},scripting:{executeScript:async input=>{
   if(!input.args)return [{frameId:0,documentId:'doc1',result:{...state}}];
   if(input.args[0]==='execute'){applied++;return [{result:{filled:1,submitted:input.args[1].submit}}];}
   if(input.args[0]==='feedback')return [{result:{state:'unknown',text:''}}];

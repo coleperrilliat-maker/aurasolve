@@ -19,13 +19,13 @@ export function createUI() {
       <div id="results" aria-live="polite"></div>
       <div class="empty" id="empty"><div class="orb">✦</div><h2>A tutor, right beside you.</h2><p>Your answer previews and explanations will appear here.</p><div class="pill">PRACTICE ONLY · YOU’RE IN CONTROL</div></div>
     </div>
-    <footer><span>AuraSolve Cloud <i>✦</i></span><button id="settings">Settings ↗</button></footer>
+    <footer><span>AuraSolve Cloud <i>✦</i></span></footer>
   </aside>`;
   shadow.append(wrap);document.documentElement.append(host);
   const $=selector=>shadow.querySelector(selector), panel=$(".panel"), results=$("#results");
   let running=false, token=0, pending=null, consentUrl=null;
   const request=async message=>{const response=await chrome.runtime.sendMessage(message);if(!response?.ok)throw new Error(response?.error || "AuraSolve disconnected. Reload the page.");return response.data;};
-  const open=()=>{panel.classList.remove("quick");panel.hidden=false;};
+  const open=()=>{panel.classList.add("quick");panel.hidden=false;};
   const quick=()=>{panel.classList.add("quick");panel.hidden=false;};
   const status=(text,badge="READY")=>{$("#status").textContent=text;$("#badge").textContent=badge;};
   function busy(value) {running=value;$("#stop").hidden=!value;shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value);}
@@ -103,7 +103,6 @@ export function createUI() {
   $("#cancel").onclick=()=>{pending=null;$("#consent").hidden=true;status("Choose a mode whenever you’re ready.");};
   $("#close").onclick=()=>{if(running)stop();panel.hidden=true;};
   $("#stop").onclick=stop;
-  $("#settings").onclick=()=>request({type:"settings"}).catch(error=>status(error.message));
   document.addEventListener("visibilitychange",()=>{if(document.hidden && running)stop();});
   return {open};
 }

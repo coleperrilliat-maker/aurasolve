@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AuraSolve</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="mark">a</span>
+    <div>
+      <strong>AuraSolve<span>.</span></strong>
+      <small id="cloud">Checking cloud…</small>
+    </div>
+  </header>
+  <div class="modes">
+    <button data-mode="autopilot" type="button"><span>✈️</span>AutoPilot</button>
+    <button data-mode="field" type="button"><span>✍️</span>Fill field</button>
+    <button data-mode="explain" type="button"><span>💡</span>Explain</button>
+  </div>
+  <p id="status" role="status">Open a practice question, then choose a mode.</p>
+  <section id="consent" hidden>
+    <label class="check"><input id="agree" type="checkbox"> This is ungraded practice, not a quiz, test, or homework.</label>
+    <input id="signature" type="text" maxlength="100" placeholder="Type your name" autocomplete="off">
+    <button id="confirm" type="button" class="primary">Confirm & continue</button>
+  </section>
+  <button id="stop" type="button" class="stop" hidden>Stop</button>
+  <div id="results"></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -6,5 +6,5 @@ async function scan(path){const entries=await readdir(path,{withFileTypes:true})
 await scan(root);
 const manifest=JSON.parse(await readFile(join(root,'manifest.json'),'utf8'));
 if(manifest.manifest_version!==3)throw new Error('Manifest must be v3');
-for(const file of [manifest.background.service_worker,manifest.options_page,...manifest.content_scripts.flatMap(s=>s.js)])await access(join(root,file));
+for(const file of [manifest.background.service_worker,manifest.action.default_popup,...manifest.content_scripts.flatMap(s=>s.js)])await access(join(root,file));
 console.log('JavaScript syntax and manifest entry files verified.');

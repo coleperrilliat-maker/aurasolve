@@ -35,6 +35,16 @@ function cancel(tabId) {
   jobs.get(tabId)?.abort(); jobs.delete(tabId);
   for (const [id,p] of plans) if (p.tabId===tabId) plans.delete(id);
 }
+async function resolveTab(message, sender) {
+  if (sender.tab?.id != null) {
+    if (sender.frameId !== 0) throw new Error("Open AuraSolve on a web page first.");
+    return sender.tab.id;
+  }
+  const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+  if (!tab?.id) throw new Error("Open a practice page first.");
+  await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},files:["src/content/bootstrap.js"]});
+  return tab.id;
+}
 async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");
   if (message.type === "settingsStatus") {
@@ -46,9 +56,7 @@ async function handle(message,sender) {
       return {configured:false,model:settings.model || "gpt-4.1-mini",service:"AuraSolve Cloud"};
     }
   }
-  if (message.type === "settings") { await chrome.runtime.openOptionsPage(); return {}; }
-  const tabId = sender.tab?.id;
-  if (tabId == null || sender.frameId !== 0) throw new Error("Open AuraSolve on a web page first.");
+  const tabId = await resolveTab(message, sender);
   if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); return {}; }
   if (message.type === "inspect") {
     const state = await collect(tabId);
@@ -110,11 +118,5 @@ async function handle(message,sender) {
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message}));
   return true;
-});
-chrome.action.onClicked.addListener(async tab=>{
-  try {
-    await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},files:["src/content/bootstrap.js"]});
-    await chrome.scripting.executeScript({target:{tabId:tab.id},func:async()=>{await globalThis.__auraReady;globalThis.__aura?.open();}});
-  } catch { await chrome.runtime.openOptionsPage(); }
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);});
