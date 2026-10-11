@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateSolution} from '../src/shared/solution.js';
+import {solve} from '../src/background/openai.js';
+const snapshot={question:'3x + 7 = 22',fields:[{id:'a1',kind:'text'},{id:'a2',kind:'text'}],selected:'a1',dropTargets:[],limitations:[]};
+const action={kind:'text',target:'a1',value:'5',destination:'',x:null,y:null};
+const solution={answer:'x = 5',explanation:'Subtract 7, then divide by 3.',confidence:.99,supported:true,limitation:'',actions:[action]};
+test('valid selected field answer passes',()=>assert.equal(validateSolution(solution,snapshot,'field'),solution));
+test('model cannot edit a different field or invent a target',()=>{assert.throws(()=>validateSolution({...solution,actions:[{...action,target:'a2'}]},snapshot,'field'));assert.throws(()=>validateSolution({...solution,actions:[{...action,target:'missing'}]},snapshot,'autopilot'));});
+test('duplicate actions are rejected',()=>assert.throws(()=>validateSolution({...solution,actions:[action,action]},snapshot,'field')));
+test('graph bounds are enforced',()=>{const snap={...snapshot,fields:[{id:'a1',kind:'point',bounds:{xMin:-5,xMax:5,yMin:-5,yMax:5}}]};assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'point',x:6,y:0}]},snap,'field'));});
+test('invalid select values and unknown drops are rejected',()=>{assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'select',value:'fake'}]},{...snapshot,fields:[{id:'a1',kind:'select',options:[{value:'real'}]}]},'field'));assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'drag',destination:'fake'}]},{...snapshot,fields:[{id:'a1',kind:'drag'}]},'field'));});
+test('Responses API uses structured outputs and no storage',async()=>{const original=globalThis.fetch;globalThis.fetch=async(url,request)=>{const body=JSON.parse(request.body);assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(body.store,false);assert.equal(body.text.format.type,'json_schema');assert.equal(body.text.format.strict,true);assert.equal(request.headers.Authorization,'Bearer test-only');return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(solution)}]}]})};};try{assert.deepEqual(await solve(snapshot,'field',{apiKey:'test-only'},undefined),solution);}finally{globalThis.fetch=original;}});
+test('incomplete API responses never produce an action plan',async()=>{const original=globalThis.fetch;globalThis.fetch=async()=>({ok:true,json:async()=>({status:'incomplete'})});try{await assert.rejects(solve(snapshot,'field',{apiKey:'test-only'}),/did not finish/);}finally{globalThis.fetch=original;}});
+test('missing key fails without a network request',async()=>await assert.rejects(solve(snapshot,'field',{}),/API key/));
