@@ -8,7 +8,7 @@ export function createUI() {
   const style=document.createElement("link");style.rel="stylesheet";style.href=chrome.runtime.getURL("src/content/ui.css");shadow.append(style);
   const wrap=document.createElement("div");
   wrap.innerHTML=`
-  <nav class="dock" aria-label="AuraSolve modes"><button data-mode="autopilot" title="Practice AutoPilot" aria-label="Practice AutoPilot">✈️</button><button data-mode="field" title="Fill this field" aria-label="Fill this field">✍️</button><button data-mode="explain" title="Explain to me" aria-label="Explain to me">💡</button></nav>
+  <nav class="dock" aria-label="AuraSolve modes"><span class="dock-grip" title="Drag to move · double-click to reset" aria-hidden="true"></span><button data-mode="autopilot" title="Practice AutoPilot" aria-label="Practice AutoPilot">✈️</button><button data-mode="field" title="Fill this field" aria-label="Fill this field">✍️</button><button data-mode="explain" title="Explain to me" aria-label="Explain to me">💡</button></nav>
   <aside class="panel" hidden aria-label="AuraSolve practice tutor">
     <header id="drag" title="Drag to move"><span class="grip" aria-hidden="true"></span><button class="icon" id="close" title="Close" aria-label="Close">×</button></header>
     <div class="body">
@@ -38,6 +38,54 @@ export function createUI() {
     const up=()=>{panel.classList.remove("dragging");$("#drag").removeEventListener("pointermove",move);$("#drag").removeEventListener("pointerup",up);$("#drag").removeEventListener("pointercancel",up);};
     $("#drag").addEventListener("pointermove",move);$("#drag").addEventListener("pointerup",up);$("#drag").addEventListener("pointercancel",up);
   });
+  const dock=$(".dock"), DOCK_KEY="aurasolve-dock";
+  // Some sites (SARA) have a white work area beside a grey sidebar; sit the dock on that edge instead of over the sidebar.
+  function seam() {
+    const y=Math.round(innerHeight*.45);
+    const bgAt=x=>{
+      for(const el of document.elementsFromPoint(x,y)){
+        if(el===host)continue;
+        const parts=getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+        if(parts && (parts[3]===undefined || +parts[3]>.5))return parts.slice(0,3).map(Number);
+      }
+      return [255,255,255];
+    };
+    const light=c=>c.every(v=>v>=246);
+    let prev=bgAt(innerWidth-2);
+    for(let x=innerWidth-6;x>innerWidth*.4;x-=4){const cur=bgAt(x);if(light(cur)&&!light(prev))return x+2;prev=cur;}
+    return null;
+  }
+  function placeDock() {
+    const saved=(()=>{try{return JSON.parse(localStorage.getItem(DOCK_KEY));}catch{return null;}})();
+    const width=dock.offsetWidth||48, height=dock.offsetHeight||150;
+    let left=null, top=null;
+    if(saved && Number.isFinite(saved.left)){left=saved.left;top=saved.top;}
+    else if(/(^|\.)raydass\.com$/.test(location.hostname)){const edge=seam();if(edge)left=edge-width/2;}
+    if(left==null){Object.assign(dock.style,{left:"",right:"",top:""});if(!panel.classList.contains("moved"))panel.style.right="";return;}
+    left=Math.min(Math.max(4,left),innerWidth-width-4);
+    if(top!=null)top=Math.min(Math.max(4,top),innerHeight-height-4);
+    Object.assign(dock.style,{left:`${left}px`,right:"auto",top:top==null?"":`${top}px`});
+    if(!panel.classList.contains("moved"))panel.style.right=`${Math.max(8,innerWidth-left+8)}px`;
+  }
+  const grip=$(".dock-grip");
+  grip.addEventListener("pointerdown",event=>{
+    if(event.button!==0)return;
+    const rect=dock.getBoundingClientRect(), dx=event.clientX-rect.left, dy=event.clientY-rect.top;
+    grip.setPointerCapture(event.pointerId);dock.classList.add("dragging");
+    const move=e=>{
+      const left=Math.min(Math.max(4,e.clientX-dx),innerWidth-rect.width-4), top=Math.min(Math.max(4,e.clientY-dy),innerHeight-rect.height-4);
+      Object.assign(dock.style,{left:`${left}px`,top:`${top}px`,right:"auto"});
+    };
+    const up=()=>{
+      dock.classList.remove("dragging");grip.removeEventListener("pointermove",move);grip.removeEventListener("pointerup",up);grip.removeEventListener("pointercancel",up);
+      const r=dock.getBoundingClientRect();try{localStorage.setItem(DOCK_KEY,JSON.stringify({left:r.left,top:r.top}));}catch{}
+      placeDock();
+    };
+    grip.addEventListener("pointermove",move);grip.addEventListener("pointerup",up);grip.addEventListener("pointercancel",up);
+  });
+  grip.addEventListener("dblclick",()=>{try{localStorage.removeItem(DOCK_KEY);}catch{}placeDock();});
+  requestAnimationFrame(placeDock);setTimeout(placeDock,1500);
+  addEventListener("resize",()=>requestAnimationFrame(placeDock));
   function busy(value) {running=value;$("#stop").hidden=!value;shadow.querySelectorAll("[data-mode]").forEach(el=>el.disabled=value);}
   async function stop() {token++;pending=null;consentUrl=null;$("#consent").hidden=true;busy(false);try{await request({type:"stop"});}catch{}status("Stopped. Review any answer already filled or submitted before continuing.","STOPPED");}
   function card(result,mode,number) {
