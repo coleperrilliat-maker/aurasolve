@@ -59,7 +59,10 @@ export function snapshot() {
   if (root?.querySelector('img:not([alt]), img[alt=""]')) limitations.push("An image has no description; the model may not have enough information.");
   const question = root ? clean(root.innerText + " " + [...root.querySelectorAll('math, img[alt], [aria-label]')].map(el=>el.getAttribute('alt') || el.getAttribute('aria-label') || el.textContent).join(" ")).slice(0,16000) : "";
   const hash = fingerprint(JSON.stringify({question,fields,drops}));
+  const visual = Boolean(root?.querySelector('img, svg, canvas, figure') || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));
+  const box = root?.getBoundingClientRect?.();
   return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:fields.some(f=>f.id===selected)?selected:null,hash,limitations,
+    visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
 export function feedback() {

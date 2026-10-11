@@ -25,6 +25,31 @@ async function frameCall(tabId, documentId, method, payload) {
   if (!result[0] || result[0].result == null) throw new Error("The page action failed. Check the page before continuing.");
   return result[0].result;
 }
+const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,frameIds:[0]},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
+async function screenshot(tabId, question) {
+  const {windowId} = await chrome.tabs.get(tabId);
+  await veil(tabId,true);
+  let shot;
+  try { await new Promise(resolve=>setTimeout(resolve,80)); shot = await chrome.tabs.captureVisibleTab(windowId,{format:"png"}); }
+  finally { await veil(tabId,false); }
+  const bitmap = await createImageBitmap(await (await fetch(shot)).blob());
+  let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
+  const r = question.rect;
+  // Rects from child frames are relative to the iframe, so only crop for top-frame questions.
+  if (question.frameId === 0 && r && question.viewport) {
+    const scale = bitmap.width / question.viewport, pad = 16 * scale;
+    sx = Math.max(0, r.x * scale - pad); sy = Math.max(0, r.y * scale - pad);
+    sw = Math.min(bitmap.width, (r.x + r.width) * scale + pad) - sx; sh = Math.min(bitmap.height, (r.y + r.height) * scale + pad) - sy;
+    if (sw < 40 || sh < 40) { sx = 0; sy = 0; sw = bitmap.width; sh = bitmap.height; }
+  }
+  const fit = Math.min(1, 1400 / sw, 1400 / sh);
+  const canvas = new OffscreenCanvas(Math.round(sw * fit), Math.round(sh * fit));
+  canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  const bytes = new Uint8Array(await (await canvas.convertToBlob({type:"image/jpeg",quality:.82})).arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:image/jpeg;base64,${btoa(binary)}`;
+}
 async function consent(tabId, state) {
   const data = await chrome.storage.session.get(`grant:${tabId}`);
   validateConsent(data[`grant:${tabId}`],state.top.url);
@@ -81,7 +106,15 @@ async function handle(message,sender) {
     const controller = new AbortController(); jobs.set(tabId,controller);
     const timeout = setTimeout(()=>controller.abort(),90000);
     let solution;
-    try { solution = await solve(state.question,message.mode,settings,controller.signal); }
+    try {
+      const {rect, viewport, ...question} = state.question;
+      if (question.visual) {
+        question.image = await screenshot(tabId, state.question).catch(() => null);
+        if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
+      }
+      if (rev(tabId)!==generation) throw new Error("Stopped.");
+      solution = await solve(question,message.mode,settings,controller.signal);
+    }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const id = crypto.randomUUID();

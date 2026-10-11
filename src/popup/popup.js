@@ -41,6 +41,7 @@ function card(result, mode, number) {
     if (picks.length > 1) label.textContent += ` · ${picks.length} answers`;
   } else {
     answer = document.createElement("h2");
+    answer.classList.toggle("multi", result.solution.answer.includes("\n"));
     const bold = document.createElement("strong");
     bold.textContent = result.solution.answer;
     answer.append(bold);

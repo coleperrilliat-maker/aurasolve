@@ -49,7 +49,7 @@ export function createUI() {
       answer=document.createElement("ul");answer.className="choices";
       for(const pick of picks){const item=document.createElement("li");const bold=document.createElement("strong");bold.textContent=pick;item.append(bold);answer.append(item);}
       if(picks.length>1)label.textContent+=` · ${picks.length} answers`;
-    } else {answer=document.createElement("h2");const bold=document.createElement("strong");bold.textContent=result.solution.answer;answer.append(bold);}
+    } else {answer=document.createElement("h2");answer.classList.toggle("multi",result.solution.answer.includes("\n"));const bold=document.createElement("strong");bold.textContent=result.solution.answer;answer.append(bold);}
     const explanation=document.createElement("p");explanation.className="text clamped";explanation.textContent=result.solution.explanation;
     if(mode==="explain"){article.classList.add("flat");article.append(answer,explanation);}
     else article.append(label,answer,explanation);
@@ -130,5 +130,5 @@ export function createUI() {
   $("#close").onclick=()=>{if(running)stop();panel.hidden=true;};
   $("#stop").onclick=stop;
   document.addEventListener("visibilitychange",()=>{if(document.hidden && running)stop();});
-  return {open};
+  return {open,veil:hidden=>{host.style.visibility=hidden?"hidden":"";}};
 }

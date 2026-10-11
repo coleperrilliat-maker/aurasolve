@@ -62,6 +62,7 @@ button:focus-visible,input:focus-visible{outline:2px solid #6366f1;outline-offse
 .limitation{margin:8px 0 0;font-size:11px;line-height:1.45;color:#92400e;background:#fffbeb;padding:7px 9px;border-radius:9px}
 .result.flat{margin:0;padding:0;border:0;background:none;box-shadow:none}
 .result.flat h2{margin:0 0 8px;font-size:19px;line-height:1.3}
+.result h2.multi,.result.flat h2.multi{font-size:13.5px;line-height:1.55}
 .result.flat .choices{margin:0 0 8px;gap:4px}
 .result.flat .choices li{padding:0;background:none;border:0;font-size:15px;color:#0f172a}
 .result.flat .text{padding-top:8px;border-top:1px solid rgba(15,23,42,.07)}

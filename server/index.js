@@ -2,7 +2,7 @@ import http from "node:http";
 import {solveWithOpenAI} from "./openai.js";
 
 const PORT = Number(process.env.PORT) || 8787;
-const MAX_BODY = 256_000;
+const MAX_BODY = 4_000_000;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 40;
 const hits = new Map();
