@@ -74,7 +74,18 @@ export function answerLines(solution, question) {
   const fields=question?.fields || [];
   const isChoice=fields.some(field=>field.kind==='radio' || field.kind==='checkbox' || field.adapter==='sara-choice');
   const picks = isChoice ? pickedChoices(solution, question) : [];
-  return (picks.length ? picks : lines(solution.answer, /^\s*[-•*]\s+/)).map(line=>compactAnswer(line,isChoice));
+    const raw=picks.length ? picks : lines(solution.answer, /^\s*[-•*]\s+/);
+  return raw.map(line=>{
+    if(!isChoice)return compactAnswer(line,false);
+    // Resolve a bare value only against a unique, explicitly lettered page option.
+    const candidates=fields.map(f=>f.label || '').filter(label=>{
+      const match=label.match(/^\(?([A-Za-z])[).:]\s+(.+)$/s);
+      return match && (match[2].trim()===String(line).trim() || match[1].toUpperCase()===String(line).trim().toUpperCase());
+    });
+    const text=candidates.length===1?candidates[0]:line;
+    const graph=/coordinate plane|horizontal x-axis|graph (?:shows|of)/i.test(text);
+    return graph?compactAnswer(text,true):text;
+  });
 }
 
 export function renderSolution(result, label) {

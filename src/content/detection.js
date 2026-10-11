@@ -122,7 +122,7 @@ export function snapshot() {
   prompt?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   prompt?.querySelectorAll('input, textarea, select, [contenteditable], [data-aura-editor], [role="textbox"], [role="alert"], [data-aura-feedback], .feedback, .answer-feedback').forEach(el=>el.remove());
   const promptHash = fingerprint(clean(prompt?.textContent || question));
-  const visual = Boolean(root?.querySelector('img, svg, canvas, figure') || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));
+  const visual = Boolean(root?.querySelector('img, svg, canvas, figure, object, embed') || fields.some(f=>f.kind==='radio' || f.kind==='checkbox') || (root && [...root.querySelectorAll('*')].some(el=>visible(el) && getComputedStyle(el).backgroundImage.includes('url('))) || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));
   const box = root?.getBoundingClientRect?.();
   const selectedElement = elementFor(selected);
   const chosen = fields.find(f=>f.id === selected) || fields.find(f=>elementFor(f.id)?.contains?.(selectedElement));
