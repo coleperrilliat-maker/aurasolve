@@ -57,3 +57,6 @@ button:focus-visible,input:focus-visible{outline:2px solid #0066ff;outline-offse
 .note{margin:10px 0 0;font-size:12px;font-style:italic;color:#888}
 .feedback{margin-top:8px;font-size:12px;color:#16a34a;font-weight:600}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.math .katex{font-size:1.08em}
+.katex-display{margin:.35em 0;overflow-x:auto;overflow-y:hidden}
+.answer .katex,.answers .katex{font-size:1.12em}

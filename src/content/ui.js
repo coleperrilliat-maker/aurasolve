@@ -1,11 +1,13 @@
-import {renderSolution} from "../shared/render.js";
+import {renderSolution, loadMathFonts} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export function createUI() {
   const host = document.createElement("div"); host.id="aurasolve-root";
   host.style.cssText="all:initial;position:fixed;z-index:2147483647;top:0;left:0;width:0;height:0";
   const shadow=host.attachShadow({mode:"closed"});
-  const style=document.createElement("link");style.rel="stylesheet";style.href=chrome.runtime.getURL("src/content/ui.css");shadow.append(style);
+  for(const sheet of ["src/vendor/katex/katex.min.css","src/content/ui.css"]){const link=document.createElement("link");link.rel="stylesheet";link.href=chrome.runtime.getURL(sheet);shadow.append(link);}
+  // @font-face rules don't apply inside a shadow root, so KaTeX's fonts are registered on the document.
+  loadMathFonts(path=>chrome.runtime.getURL(path)).catch(()=>{});
   const wrap=document.createElement("div");
   wrap.innerHTML=`
   <nav class="dock" aria-label="AuraSolve modes"><span class="dock-grip" title="Drag to move · double-click to reset" aria-hidden="true"></span><button data-mode="autopilot" title="Practice AutoPilot" aria-label="Practice AutoPilot">✈️</button><button data-mode="field" title="Fill this field" aria-label="Fill this field">✍️</button><button data-mode="explain" title="Explain to me" aria-label="Explain to me">💡</button></nav>

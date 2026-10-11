@@ -1,15 +1,50 @@
 import {pickedChoices} from "./choices.js";
+import katex from "../vendor/katex/katex.mjs";
 
 const el = (tag, className) => { const node = document.createElement(tag); if (className) node.className = className; return node; };
 
-// Renders "**bold**" spans as <strong> using text nodes only.
+// \( \), \[ \] and $$ $$ are math; a lone "$" stays text so prices like $20,000 are not typeset.
+const MATH = /(\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]|\$\$[\s\S]+?\$\$)/g;
+
+function math(node, text) {
+  text.split(MATH).forEach((part, i) => {
+    if (!part) return;
+    if (!(i % 2)) { node.append(part); return; }
+    const display = !part.startsWith("\\(");
+    const span = el("span", "math");
+    try { katex.render((display ? "" : "\\displaystyle ") + part.slice(2, -2), span, {displayMode: display, throwOnError: false, output: "html", strict: "ignore"}); }
+    catch { span.textContent = part; }
+    node.append(span);
+  });
+}
+
+function italics(node, text) {
+  text.split(/(?<![*\w])\*(?![\s*])([^*\n]+?)(?<!\s)\*(?![*\w])/g).forEach((part, i) => {
+    if (!part) return;
+    if (i % 2) { const em = el("em"); math(em, part); node.append(em); }
+    else math(node, part);
+  });
+}
+
+// Text nodes and KaTeX output only: "**bold**", "*italic*" and LaTeX math.
 function rich(node, text) {
   text.split(/\*\*(.+?)\*\*/g).forEach((part, i) => {
     if (!part) return;
-    if (i % 2) { const bold = el("strong"); bold.textContent = part; node.append(bold); }
-    else node.append(part);
+    if (i % 2) { const bold = el("strong"); italics(bold, part); node.append(bold); }
+    else italics(node, part);
   });
   return node;
+}
+
+export async function loadMathFonts(urlFor) {
+  const css = await (await fetch(urlFor("src/vendor/katex/katex.min.css"))).text();
+  for (const [, rule] of css.matchAll(/@font-face\{([^}]+)\}/g)) {
+    const family = rule.match(/font-family:([^;]+)/)?.[1], file = rule.match(/url\((fonts\/[^)]+\.woff2)\)/)?.[1];
+    if (!family || !file) continue;
+    document.fonts.add(new FontFace(family, `url(${urlFor(`src/vendor/katex/${file}`)})`, {
+      style: rule.match(/font-style:([^;]+)/)?.[1] || "normal", weight: rule.match(/font-weight:([^;]+)/)?.[1] || "400",
+    }));
+  }
 }
 
 const lines = (text, bullet) => String(text || "").split(/\n+/).map(line => line.replace(bullet, "").trim()).filter(Boolean);
