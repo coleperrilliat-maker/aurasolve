@@ -1,7 +1,7 @@
 // Runs in the page's MAIN world. Only known, live editor APIs are supported;
 // never evaluate model text or infer an editor from its appearance alone.
 export function editorBridge(request = {op: "discover"}) {
-  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], .dijitSelect, [role="combobox"][widgetid]';
+  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], .acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid]';
   function adapterFor(el) {
     if (el.matches('.mq-editable-field, .mathquill-editable')) {
       try {
@@ -31,6 +31,30 @@ export function editorBridge(request = {op: "discover"}) {
       if (widget && typeof widget._setValueAttr === 'function' && typeof widget.set === 'function' && typeof widget.get === 'function' && ['string','number'].includes(typeof widget.get('value')))
         return {name:'dojo',read:()=>String(widget.get('value')),write:value=>{widget.focus?.();widget.set('value',value);}};
     } catch {}
+    // Pearson also exposes answer dropdowns without a global Dojo registry.
+    // Only use a menu explicitly linked to this control, never a page-wide menu.
+    if (el.matches('.acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid]')) {
+      const ids=[el.getAttribute('aria-controls'),el.getAttribute('aria-owns'),
+        (el.getAttribute('widgetid') || el.id) && (el.getAttribute('widgetid') || el.id)+'_dropdown']
+        .filter(Boolean).flatMap(id=>id.split(/\s+/));
+      const menus=[...new Set(ids.map(id=>document.getElementById(id)).filter(Boolean))];
+      if(menus.length===1) {
+        const items=[...menus[0].querySelectorAll('[role="option"],[role="menuitem"],.dijitMenuItem')]
+          .filter(item=>!item.parentElement?.closest('[role="option"],[role="menuitem"],.dijitMenuItem'));
+        const label=item=>(item.querySelector('.dijitMenuItemLabel') || item).textContent.trim();
+        const labels=items.map(label);
+        if(items.length && labels.every(Boolean) && new Set(labels).size===labels.length) return {
+          name:'dojo-select',
+          options:items.map(item=>({value:label(item),label:label(item),disabled:item.getAttribute('aria-disabled')==='true' || item.classList.contains('dijitDisabled')})),
+          read:()=>(el.querySelector('.dijitSelectLabel,.textbasecell span') || el).textContent.trim(),
+          write:value=>{
+            const item=items.find(item=>label(item)===value && item.getAttribute('aria-disabled')!=='true' && !item.classList.contains('dijitDisabled'));
+            if(!item)throw new Error('The dropdown option is unavailable.');
+            el.click();item.click();
+          }
+        };
+      }
+    }
     return null;
   }
   if (request.op === 'discover') {

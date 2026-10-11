@@ -76,6 +76,23 @@ try{
   assert.deepEqual(dropdowns,{kinds:['select','select'],options:[['same','opposite'],['rotation','reflection']],values:['1','1'],stable:true,rejected:true});
   console.log('PASS: two custom Dojo dropdowns expose options, fill both values, reject unavailable options, keep question stable');
 
+  const pearsonListbox=await page.evaluate(async()=>{
+    delete window.dijit;
+    document.body.innerHTML='<main data-aura-question><p>Determine whether the following statement is always, sometimes, or never true.</p><div class="acctable"><span class="inputcell" role="listbox" id="truth" aria-controls="truth_dropdown"><span class="textbasecell"><span>Choose</span></span></span></div><iframe style="width:500px;height:300px"></iframe></main><div id="truth_dropdown" hidden><div role="option">always</div><div role="option">sometimes</div><div role="option">never</div></div>';
+    const control=document.querySelector('#truth'),menu=document.querySelector('#truth_dropdown');
+    control.onclick=()=>menu.hidden=false;
+    for(const item of menu.children)item.onclick=()=>{control.querySelector('.textbasecell span').textContent=item.textContent;menu.hidden=true;};
+    const {createUI}=await import('/src/content/ui.js');createUI();
+    const shown=Boolean(document.querySelector('#aurasolve-root'));
+    const {editorBridge}=await import('/src/background/editors.js');editorBridge();
+    const detector=await import('/src/content/detection.js'),before=detector.snapshot();
+    const field=before.fields[0];
+    editorBridge({op:'write',key:field.editorKey,adapter:field.adapter,value:'always'});
+    return {shown,kind:field.kind,options:field.options.map(o=>o.label),value:control.textContent,stable:before.hash===detector.snapshot().hash};
+  });
+  assert.deepEqual(pearsonListbox,{shown:true,kind:'select',options:['always','sometimes','never'],value:'always',stable:true});
+  console.log('PASS: Pearson listbox shows Fill before discovery and fills a linked DOM dropdown without a global registry');
+
   const activated=await page.evaluate(async()=>{
     document.body.innerHTML='<main data-aura-question>Solve 2x = 8<span class="eqEditor inputField" widgetid="fixture">Answer</span></main>';
     const widget=document.querySelector('.eqEditor');

@@ -32,14 +32,14 @@ export function createUI() {
   function mount(){
     const root=questionRoot(), current=snapshot();
     const sara=current.fields.some(field=>field.adapter==='sara-choice');
-    const lazy=root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .dijitSelect, [role="combobox"][widgetid], .mq-editable-field')].some(visible);
+    const lazy=root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid], .mq-editable-field')].some(visible);
     const answering=Boolean(root && current.question && (sara || (!current.fallback && (current.fields.length || lazy))));
     if(!answering){if(host.isConnected)host.remove();return;}
     if(host.isConnected && root.contains(host))return;
     const frame=[...document.querySelectorAll('iframe')].find(el=>el.getBoundingClientRect().width>400 && el.getBoundingClientRect().height>250);
     // The question may live in a child frame. Do not put a second toolbar
     // above that iframe in its parent document.
-    if(frame)return;
+    if(frame && !current.fields.length && !lazy)return;
     if(root && root!==document.body && root!==document.documentElement){
       const prompt=promptBox(root);
       prompt.prepend(host);
