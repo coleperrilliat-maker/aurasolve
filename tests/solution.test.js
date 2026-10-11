@@ -21,6 +21,11 @@ test('multiple-choice picks come from choices, or from chosen radio/checkbox fie
   assert.deepEqual(pickedChoices({choices:[],actions:[{kind:'checkbox',target:'c1',value:'true'},{kind:'checkbox',target:'c2',value:'true'},{kind:'radio',target:'r1',value:''}]},question),['C. 3','D. 5','A. 12']);
   assert.deepEqual(pickedChoices({choices:[],actions:[{kind:'checkbox',target:'c1',value:'false'}]},question),[]);
   assert.deepEqual(pickedChoices({answer:'2) Given\n4) Vertical Angles Theorem',choices:['Given','Vertical Angles Theorem'],actions:[]},question),[]);
+  const all=['(A) -2x - 4','(B) -2x + 1','(C) 2x + 4','(D) 12x + 1','(E) 12x + 4'];
+  const mc={question:'Subtract 5x - 1 from 7x + 3. (A) -2x - 4 (B) -2x + 1 (C) 2x + 4 (D) 12x + 1 (E) 12x + 4',fields:[]};
+  assert.deepEqual(pickedChoices({answer:all.join('\n'),choices:all,explanation:'- Combine like terms.\n- The correct answer is (C) 2x + 4.',actions:[]},mc),['(C) 2x + 4']);
+  assert.deepEqual(pickedChoices({answer:'(C) 2x + 4',choices:all,explanation:'',actions:[]},mc),['(C) 2x + 4']);
+  assert.deepEqual(pickedChoices({answer:'(A), (C)',choices:['(A) 2','(C) 11'],explanation:'',actions:[]},{question:'Select all that apply.',fields:[]}),['(A) 2','(C) 11']);
 });
 test('invalid choices are rejected and missing choices default to none',()=>{
   assert.throws(()=>validateSolution({...solution,choices:[42]},snapshot,'field'),/choices/);
