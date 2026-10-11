@@ -20,8 +20,21 @@ export function questionRoot() {
   if (nearest && visible(nearest)) return nearest;
   const roots = [...document.querySelectorAll(rootSelector)].filter(visible);
   if (roots.length === 1) return roots[0];
-  return null;
+  return roots.length ? null : fallbackRoot(active);
 }
+// Sites without a known layout: use the smallest container holding every visible answer control plus some prompt text.
+function fallbackRoot(active) {
+  const fields = [...document.querySelectorAll('input[type="radio"], input[type="checkbox"], input[type="text"], input[type="number"], input:not([type]), textarea, select, [contenteditable="true"]')]
+    .filter(el => visible(el) && !el.closest('nav, header, footer, [role="navigation"], [role="search"], form[action*="search" i]') &&
+      !/search|login|user ?name|email|password/i.test([el.type, el.name, el.id, el.placeholder, el.getAttribute('aria-label')].join(" ")));
+  if (!fields.length) return document.querySelector('main, [role="main"]') || document.body;
+  const anchor = active && fields.includes(active) ? active : fields[0];
+  let node = anchor.parentElement;
+  while (node && node !== document.body && !fields.every(f => node.contains(f))) node = node.parentElement;
+  while (node && node !== document.body && clean(node.innerText).length < 40) node = node.parentElement;
+  return node && node !== document.documentElement ? node : null;
+}
+export const isFallback = root => Boolean(root?.matches && !root.matches(rootSelector));
 export function trackSelection() {
   const remember = event => {
     if (event.composedPath().some(el=>el?.id === "aurasolve-root")) return;
@@ -65,7 +78,7 @@ export function snapshot() {
   const visual = Boolean(root?.querySelector('img, svg, canvas, figure') || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));
   const box = root?.getBoundingClientRect?.();
   return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:fields.some(f=>f.id===selected)?selected:null,hash,limitations,
-    promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
+    fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
 export function feedback() {

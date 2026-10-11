@@ -10,9 +10,13 @@ async function collect(tabId) {
   const frames = results.filter(r=>r.result).map(r=>({...r.result,frameId:r.frameId,documentId:r.documentId}));
   const top = frames.find(f=>f.frameId===0);
   if (!top) throw new Error("Reload this page and open AuraSolve again.");
-  const candidates = frames.filter(f=>f.question);
+  const found = frames.filter(f=>f.question);
+  const known = found.filter(f=>!f.fallback);
+  const candidates = known.length ? known : found;
   const focused = candidates.filter(f=>f.selected);
-  const options = focused.length === 1 ? focused : candidates;
+  let options = focused.length === 1 ? focused : candidates;
+  // Several guessed containers (e.g. a sidebar form and the question frame): use the one with the most answer controls.
+  if (options.length > 1 && !known.length) options = [options.reduce((a,b)=>(b.fields.length-a.fields.length || b.question.length-a.question.length)>0?b:a)];
   if (options.length !== 1) throw new Error(options.length ? "Several questions were found. Click an answer field in the question you want." : "No supported question container was found. This page needs a site adapter; try the included practice lab.");
   return {top,question:options[0],contexts:frames.map(f=>f.context)};
 }
