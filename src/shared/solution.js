@@ -18,6 +18,10 @@ export function validateSolution(solution, snapshot, mode) {
       !Number.isFinite(solution.confidence) || solution.confidence < 0 || solution.confidence > 1 || !Array.isArray(solution.actions))
     throw new Error("The model returned an invalid solution. Nothing was filled.");
   if (solution.choices === undefined) solution.choices = [];
+  // Models sometimes emit a literal "\n" before the next step; LaTeX like \neq must survive.
+  const breaks = text => text.replace(/\\n(?=\s*(?:[-•*]|\d{1,2}[.)])\s)/g, "\n");
+  solution.explanation = breaks(solution.explanation);
+  solution.answer = breaks(solution.answer);
   if (!Array.isArray(solution.choices) || solution.choices.length > 12 || solution.choices.some(c => typeof c !== "string" || c.length > 500))
     throw new Error("The model returned invalid answer choices.");
   if (solution.actions.length > 24) throw new Error("Too many actions in the response.");

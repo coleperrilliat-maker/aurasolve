@@ -31,3 +31,8 @@ test('invalid choices are rejected and missing choices default to none',()=>{
   assert.throws(()=>validateSolution({...solution,choices:[42]},snapshot,'field'),/choices/);
   const copy={...solution};delete copy.choices;assert.deepEqual(validateSolution(copy,snapshot,'field').choices,[]);
 });
+test('literal \\n before a step becomes a line break but LaTeX \\neq is kept',()=>{
+  const out=validateSolution({...solution,actions:[],explanation:String.raw`- Step one \(x \neq 2\).\n- Step two.`,answer:String.raw`2) Given\n4) Reflexive`},snapshot,'explain');
+  assert.equal(out.explanation,'- Step one \\(x \\neq 2\\).\n- Step two.');
+  assert.equal(out.answer,'2) Given\n4) Reflexive');
+});
