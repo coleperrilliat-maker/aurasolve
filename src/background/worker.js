@@ -34,18 +34,12 @@ async function screenshot(tabId, question) {
   finally { await veil(tabId,false); }
   const bitmap = await createImageBitmap(await (await fetch(shot)).blob());
   let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
-  const r = question.rect;
-  // Rects from child frames are relative to the iframe, so only crop for top-frame questions.
-  if (question.frameId === 0 && r && question.viewport) {
-    const scale = bitmap.width / question.viewport, pad = 16 * scale;
-    sx = Math.max(0, r.x * scale - pad); sy = Math.max(0, r.y * scale - pad);
-    sw = Math.min(bitmap.width, (r.x + r.width) * scale + pad) - sx; sh = Math.min(bitmap.height, (r.y + r.height) * scale + pad) - sy;
-    if (sw < 40 || sh < 40) { sx = 0; sy = 0; sw = bitmap.width; sh = bitmap.height; }
-  }
-  const fit = Math.min(1, 1400 / sw, 1400 / sh);
+  // Keep sibling diagram panels and the active answer area together.
+  // A detected input container is not a reliable boundary for the problem.
+  const fit = Math.min(1, 2048 / sw, 2048 / sh);
   const canvas = new OffscreenCanvas(Math.round(sw * fit), Math.round(sh * fit));
   canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-  const bytes = new Uint8Array(await (await canvas.convertToBlob({type:"image/jpeg",quality:.82})).arrayBuffer());
+  const bytes = new Uint8Array(await (await canvas.convertToBlob({type:"image/jpeg",quality:.92})).arrayBuffer());
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return `data:image/jpeg;base64,${btoa(binary)}`;

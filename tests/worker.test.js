@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+let captureFails=false, captured=0, solveCalls=0, lastSnapshot;
 let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false;
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[],controls:{submit:1,next:1}};
-globalThis.chrome={storage:{local:storage(local),session:storage(session)},runtime:{id:'unit-test',onMessage:{addListener:fn=>listener=fn}},tabs:{onRemoved:{addListener:()=>{}},query:async()=>[{id:1}]},scripting:{executeScript:async input=>{
+globalThis.chrome={storage:{local:storage(local),session:storage(session)},runtime:{id:'unit-test',onMessage:{addListener:fn=>listener=fn}},tabs:{get:async()=>({windowId:1,active:true}),captureVisibleTab:async()=>{if(captureFails)throw new Error('capture failed');captured++;return 'data:image/png;base64,fixture';},onRemoved:{addListener:()=>{}},query:async()=>[{id:1}]},scripting:{executeScript:async input=>{
+  if(typeof input.args?.[0]==='boolean')return [];
   if(input.world==='MAIN')return [{result:true}];
   const wrapped=data=>[{result:{ok:true,data}}];
   if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];return wrapped({clicked:true});}
@@ -15,8 +17,13 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   throw new Error('Unexpected frame call');
 }}};
 const solution={answer:'5',explanation:'Subtract 7, divide by 3.',confidence:.99,supported:true,limitation:'',actions:[{kind:'text',target:'a1',value:'5',destination:'',x:null,y:null}]};
-globalThis.fetch=async url=>{
+globalThis.createImageBitmap=async()=>({width:1800,height:1000});
+globalThis.OffscreenCanvas=class {constructor(w,h){this.width=w;this.height=h;}getContext(){return {drawImage(){}};}async convertToBlob(){return new Blob(['fixture']);}};
+globalThis.fetch=async (url,options)=>{
+  if(String(url).startsWith('data:'))return {blob:async()=>new Blob(['fixture'])};
+
   if(String(url).includes('/health'))return{ok:true,json:async()=>({ok:true,keyConfigured:true,model:'test-model'})};
+  solveCalls++;lastSnapshot=JSON.parse(options.body).snapshot;
   return{ok:true,json:async()=>({solution})};
 };
 await import('../src/background/worker.js');
@@ -111,10 +118,29 @@ test('Fill solves and applies without any signature',async()=>{
   assert.equal(session['grant:1'],undefined);
 });
 test('a visual question never silently falls back to text when capture fails',async()=>{
-  state.visual=true;
+  state.visual=true;captureFails=true;
   try {
     const result=await request({type:'solve',mode:'field'});
     assert.equal(result.ok,false);
     assert.match(result.error,/Could not capture the question image/);
-  } finally {state.visual=false;}
+  } finally {state.visual=false;captureFails=false;}
+});
+
+test('text-only questions do not capture or send screenshots',async()=>{
+  state.visual=false;
+  const before=solveCalls, shots=captured;
+  const result=await request({type:'solve',mode:'field'});
+  assert.equal(result.ok,true);
+  assert.equal(solveCalls,before+1);assert.equal(captured,shots);
+  assert.equal(lastSnapshot.image,undefined);
+});
+test('visual questions include a screenshot in the same single solve call',async()=>{
+  state.visual=true;
+  const before=solveCalls,shots=captured;
+  try {
+    const result=await request({type:'solve',mode:'field'});
+    assert.equal(result.ok,true);
+    assert.equal(solveCalls,before+1);assert.equal(captured,shots+1);
+    assert.match(lastSnapshot.image,/^data:image\/jpeg;base64,/);
+  }finally{state.visual=false;}
 });

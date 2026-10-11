@@ -12,6 +12,7 @@ export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, re
   const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort}} : {};
 
   const image = typeof snapshot.image === "string" && snapshot.image.length < 3_500_000 && /^data:image\/(jpeg|png);base64,/.test(snapshot.image) ? snapshot.image : null;
+  if(snapshot.image && !image)throw new Error("The question screenshot is invalid or too large. Reduce the browser window size and try again.");
   const text = JSON.stringify({
     mode,
     question: snapshot.question,
@@ -73,3 +74,4 @@ export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, re
     throw new Error(`Could not use the answer: ${error.message}`);
   }
 }
+
