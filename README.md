@@ -61,11 +61,11 @@ No OpenAI setup in the browser. Usage is billed through your Railway server.
 
 Closing the sidebar during a running request, switching tabs, or pressing Stop cancels further work. Already completed fills or submissions cannot be undone by Stop. A synchronous fill-and-submit operation already in progress may finish before cancellation is processed.
 
-## Practice-only behavior
+## Honor code
 
-The confirmation is page-bound, expires in 30 minutes, and is cleared on Stop or tab close. The extension checks titles, headings, breadcrumbs, page paths, and grading attributes in accessible frames before actions. Exam, quiz, test, assessment, homework, grading, proctoring, and related indicators block filling and AutoPilot. A positive practice or study-plan indicator is required; unknown pages remain explain-only. A signed notice never overrides a detected grading indicator.
+AuraSolve does not try to guess whether a page is graded. Before **Fill a field** or **AutoPilot** runs, you must type exactly **This is not a graded homework assignment** and sign your name. Capitalization, extra spaces, and a trailing period are ignored; any other wording is rejected. **Explain** never needs a signature because it doesn't change the page.
 
-These are conservative heuristics, not a guarantee that a site is ungraded. Some practice pages will be blocked. Hidden/inaccessible frames or misleading site text can prevent reliable classification. Use only activities you know are ungraded; do not represent this extension as enforcing a school's grading policy.
+The signature is tied to the page, lasts 30 minutes, and is cleared on Stop or when the tab closes. You are responsible for using fill and AutoPilot only where your course allows it.
 
 ## Supported controls and limits
 

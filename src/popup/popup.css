@@ -17,8 +17,11 @@ small.offline::before{background:#ef4444}
 #consent{border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:12px;margin-bottom:10px}
 .check{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#334155;line-height:1.45}
 .check input{margin-top:2px;accent-color:#6366f1}
-#signature{width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:10px;padding:9px 10px;font:inherit;font-size:12px}
-#signature:focus{outline:2px solid #c7d2fe;border-color:#818cf8}
+.honor{margin:0;font-size:12px;color:#334155;line-height:1.45}
+.honor b{color:#0f172a}
+#statement,#signature{width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:10px;padding:9px 10px;font:inherit;font-size:12px}
+#statement:focus,#signature:focus{outline:2px solid #c7d2fe;border-color:#818cf8}
+#statement.ok{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.12)}
 .primary,.stop{width:100%;border:0;border-radius:10px;padding:9px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
 .primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;margin-top:8px;box-shadow:0 6px 16px rgba(99,102,241,.3)}
 .stop{background:#fef2f2;color:#dc2626;margin-bottom:8px}

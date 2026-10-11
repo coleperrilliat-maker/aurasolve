@@ -1,4 +1,5 @@
 import {pickedChoices} from "../shared/choices.js";
+import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let pending = null;
@@ -138,13 +139,15 @@ async function choose(mode) {
   setBusy(true);
   try {
     const info = await send({type: "inspect"});
-    if (info.status.state !== "practice") throw new Error(info.status.reason);
     if (mode === "field" && !info.question.selected) throw new Error("Click the answer field on the page first.");
+    if (info.signed) { setBusy(false); return run(mode); }
     pending = mode;
     $("consent").hidden = false;
-    $("agree").checked = false;
+    $("statement").value = "";
+    $("statement").classList.remove("ok");
     $("signature").value = "";
-    status("Confirm this is ungraded practice.");
+    $("confirm").disabled = true;
+    status("Type the honor statement and sign to continue.");
   } catch (error) {
     status(error.message);
   } finally {
@@ -155,18 +158,27 @@ async function choose(mode) {
 document.querySelectorAll("[data-mode]").forEach(button => {
   button.onclick = () => choose(button.dataset.mode);
 });
+$("phrase").textContent = HONOR_STATEMENT;
+$("statement").placeholder = HONOR_STATEMENT;
+const signed = () => statementMatches($("statement").value) && $("signature").value.trim().length >= 2;
+for (const id of ["statement", "signature"]) {
+  $(id).addEventListener("input", () => {
+    $("confirm").disabled = !signed();
+    $("statement").classList.toggle("ok", statementMatches($("statement").value));
+  });
+}
 $("confirm").onclick = async () => {
   const mode = pending;
-  if (!mode) return;
+  if (!mode || !signed()) return;
   $("confirm").disabled = true;
   try {
-    await send({type: "consent", agree: $("agree").checked, signature: $("signature").value});
+    await send({type: "consent", statement: $("statement").value, signature: $("signature").value});
     pending = null;
     await run(mode);
   } catch (error) {
     status(error.message);
   } finally {
-    $("confirm").disabled = false;
+    $("confirm").disabled = !signed();
   }
 };
 $("stop").onclick = async () => {

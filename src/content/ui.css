@@ -37,7 +37,10 @@ button:focus-visible,input:focus-visible{outline:2px solid #6366f1;outline-offse
 .consent p{margin:0;font-size:11.5px;line-height:1.5;color:#64748b}
 .check{display:flex;gap:8px;align-items:flex-start;margin:10px 0;font-size:12px;color:#334155;line-height:1.45}
 .check input{margin-top:2px;accent-color:#6366f1}
+.signature{display:block;margin-top:10px;font-size:11.5px;color:#334155;line-height:1.45}
+.phrase{font-weight:700;color:#0f172a}
 .signature input{display:block;width:100%;margin-top:4px;padding:9px 10px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;font-size:12px}
+.signature input.ok{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.12)}
 .consent>small{display:block;font-size:10.5px;color:#94a3b8;margin:8px 0 0;line-height:1.4}
 .primary{display:block;width:100%;margin-top:10px;padding:9px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-weight:600;font-size:12px;box-shadow:0 6px 16px rgba(99,102,241,.3)}
 .primary:hover{transform:translateY(-1px)}

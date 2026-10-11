@@ -1,4 +1,4 @@
-import {requirePractice, validateConsent, classify} from "../shared/policy.js";
+import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
 const plans = new Map(), jobs = new Map(), revisions = new Map();
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"});
@@ -26,7 +26,6 @@ async function frameCall(tabId, documentId, method, payload) {
   return result[0].result;
 }
 async function consent(tabId, state) {
-  requirePractice(state.contexts);
   const data = await chrome.storage.session.get(`grant:${tabId}`);
   validateConsent(data[`grant:${tabId}`],state.top.url);
 }
@@ -60,14 +59,15 @@ async function handle(message,sender) {
   if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); return {}; }
   if (message.type === "inspect") {
     const state = await collect(tabId);
-    let status;
-    try {requirePractice(state.contexts);status=classify("practice");} catch(error) {status={state:"blocked",reason:error.message};}
-    return {question:state.question,status};
+    let signed = true;
+    try { await consent(tabId,state); } catch { signed = false; }
+    return {question:state.question,signed};
   }
   if (message.type === "consent") {
-    const state = await collect(tabId); requirePractice(state.contexts);
-    if (message.agree !== true || typeof message.signature !== "string" || message.signature.trim().length < 2 || message.signature.length > 100) throw new Error("Check the notice and type your name.");
-    await chrome.storage.session.set({[`grant:${tabId}`]:{url:state.top.url,signature:message.signature.trim(),expires:Date.now()+30*60*1000}});
+    const state = await collect(tabId);
+    if (!statementMatches(message.statement)) throw new Error(`Type exactly: ${HONOR_STATEMENT}`);
+    if (typeof message.signature !== "string" || message.signature.trim().length < 2 || message.signature.length > 100) throw new Error("Sign with your name.");
+    await chrome.storage.session.set({[`grant:${tabId}`]:{url:state.top.url,statement:message.statement.trim(),signature:message.signature.trim(),expires:Date.now()+30*60*1000}});
     return {};
   }
   if (message.type === "solve") {

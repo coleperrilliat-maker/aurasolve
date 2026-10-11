@@ -19,7 +19,11 @@ await import('../src/background/worker.js');
 const request=message=>new Promise(resolve=>listener(message,{id:'unit-test',tab:{id:1},frameId:0},resolve));
 test('worker enforces consent, applies once, and invalidates on stop',async()=>{
   let result=await request({type:'solve',mode:'field'});assert.equal(result.ok,false);assert.match(result.error,/sign/);
-  assert.equal((await request({type:'consent',agree:true,signature:'Student'})).ok,true);
+  assert.equal((await request({type:'inspect'})).data.signed,false);
+  assert.equal((await request({type:'consent',statement:'yes',signature:'Student'})).ok,false);
+  assert.equal((await request({type:'consent',statement:'This is not a graded homework assignment',signature:''})).ok,false);
+  assert.equal((await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'})).ok,true);
+  assert.equal((await request({type:'inspect'})).data.signed,true);
   result=await request({type:'solve',mode:'field'});assert.equal(result.ok,true);const planId=result.data.planId;
   assert.equal((await request({type:'apply',planId})).ok,true);assert.equal(applied,1);
   assert.equal((await request({type:'apply',planId})).ok,false);assert.equal(applied,1);
@@ -28,14 +32,14 @@ test('worker enforces consent, applies once, and invalidates on stop',async()=>{
   assert.equal((await request({type:'apply',planId:next.data.planId})).ok,false);assert.equal(applied,1);
   assert.equal(session['grant:1'],undefined);
 });
-test('worker rechecks practice status between answer generation and application',async()=>{
-  await request({type:'consent',agree:true,signature:'Student'});
+test('page wording no longer blocks a signed AutoPilot run',async()=>{
+  state.context='Homework quiz graded';
+  await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
   const result=await request({type:'solve',mode:'autopilot'});assert.equal(result.ok,true);
-  state.context='Practice graded assessment';
-  const appliedResult=await request({type:'apply',planId:result.data.planId});assert.equal(appliedResult.ok,false);assert.match(appliedResult.error,/indicator/);assert.equal(applied,1);
+  assert.equal((await request({type:'apply',planId:result.data.planId})).ok,true);assert.equal(applied,2);
   state.context='Ungraded practice';
 });
 test('worker rejects changed question snapshots',async()=>{
   const result=await request({type:'solve',mode:'field'});assert.equal(result.ok,true);state.hash='q2';
-  const answer=await request({type:'apply',planId:result.data.planId});assert.equal(answer.ok,false);assert.match(answer.error,/question changed/);assert.equal(applied,1);state.hash='q1';
+  const answer=await request({type:'apply',planId:result.data.planId});assert.equal(answer.ok,false);assert.match(answer.error,/question changed/);assert.equal(applied,2);state.hash='q1';
 });

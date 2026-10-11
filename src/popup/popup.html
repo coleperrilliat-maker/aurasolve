@@ -21,9 +21,10 @@
   </div>
   <p id="status" role="status">Open a practice question, then choose a mode.</p>
   <section id="consent" hidden>
-    <label class="check"><input id="agree" type="checkbox"> This is ungraded practice, not a quiz, test, or homework.</label>
-    <input id="signature" type="text" maxlength="100" placeholder="Type your name" autocomplete="off">
-    <button id="confirm" type="button" class="primary">Confirm & continue</button>
+    <p class="honor">Honor code: type <b id="phrase"></b></p>
+    <input id="statement" type="text" maxlength="120" autocomplete="off" spellcheck="false">
+    <input id="signature" type="text" maxlength="100" placeholder="Sign your name" autocomplete="off">
+    <button id="confirm" type="button" class="primary" disabled>Sign & continue</button>
   </section>
   <button id="stop" type="button" class="stop" hidden>Stop</button>
   <div id="results"></div>

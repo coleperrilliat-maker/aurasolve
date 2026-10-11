@@ -1,9 +1,7 @@
-import {snapshot,elementFor,visible,findButton,feedback,context} from "./detection.js";
-import {classify} from "../shared/policy.js";
+import {snapshot,elementFor,visible,findButton,feedback} from "./detection.js";
 import {validateSolution} from "../shared/solution.js";
 function guard() {
   if (document.hidden) throw new Error("The practice page is hidden. AutoPilot stopped.");
-  if (classify(context()).state === "blocked") throw new Error("A grading indicator appeared. Actions stopped.");
 }
 function setValue(el,value) {
   const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;

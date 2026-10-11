@@ -1,4 +1,5 @@
 import {pickedChoices} from "../shared/choices.js";
+import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export function createUI() {
   const host = document.createElement("div"); host.id="aurasolve-root";
@@ -13,7 +14,7 @@ export function createUI() {
     <div class="body">
       <section class="notice"><div class="badge" id="badge">Ready</div><p id="status" role="status" aria-live="polite">Choose a mode. For one field, click that field first.</p></section>
       <button id="stop" class="stop" hidden>Stop</button>
-      <section class="consent" id="consent" hidden><h2>Practice only. Your call.</h2><p>AuraSolve will fill answers and, in AutoPilot, click submit for up to five practice questions. It sends the detected question and field labels to AuraSolve Cloud. It stops if the page appears graded or is unsupported.</p><label class="check"><input id="agree" type="checkbox"> I confirm this is ungraded practice, not homework, a quiz, a test, or an assessment.</label><label class="signature">Type your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Page checks are imperfect. This confirmation lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary">Confirm & continue</button><button id="cancel" class="secondary">Cancel</button></section>
+      <section class="consent" id="consent" hidden><h2>Honor code</h2><p>AuraSolve fills answers and, in AutoPilot, clicks submit for up to five questions. You are responsible for using it only where it's allowed.</p><label class="signature">Type: <b class="phrase">${HONOR_STATEMENT}</b><input id="statement" type="text" autocomplete="off" spellcheck="false" maxlength="120" placeholder="${HONOR_STATEMENT}" /></label><label class="signature">Sign your name<input id="signature" type="text" autocomplete="off" maxlength="100" placeholder="Your name" /></label><small>Your signature lasts 30 minutes on this page and is cleared when you stop.</small><button id="confirm" class="primary" disabled>Sign & continue</button><button id="cancel" class="secondary">Cancel</button></section>
       <div id="results" aria-live="polite"></div>
     </div>
   </aside>`;
@@ -113,15 +114,16 @@ export function createUI() {
     try {
       const info=await request({type:"inspect"});
       if(mine!==token)return;
-      if(info.status.state!=="practice")throw new Error(info.status.reason);
       if(mode==="field" && !info.question.selected)throw new Error("Click the answer field on the page first, then choose Fill a field.");
-      if(consentUrl===location.href){busy(false);return await run(mode);}
-      pending=mode;$("#consent").hidden=false;$("#agree").checked=false;$("#signature").value="";
-      status("Confirm this is ungraded practice before continuing.","YOUR CONFIRMATION");
+      if(info.signed || consentUrl===location.href){busy(false);return await run(mode);}
+      pending=mode;$("#consent").hidden=false;$("#statement").value="";$("#signature").value="";$("#confirm").disabled=true;
+      status("Type the honor statement and sign to continue.","Honor code");
     }catch(error){status(error.message,"NEEDS ATTENTION");}finally{busy(false);}
   }
   shadow.querySelectorAll("[data-mode]").forEach(button=>button.onclick=()=>choose(button.dataset.mode));
-  $("#confirm").onclick=async()=>{const mode=pending;if(!mode)return;$("#confirm").disabled=true;try{await request({type:"consent",agree:$("#agree").checked,signature:$("#signature").value});consentUrl=location.href;pending=null;await run(mode);}catch(error){status(error.message,"CHECK CONFIRMATION");}finally{$("#confirm").disabled=false;}};
+  const signed=()=>statementMatches($("#statement").value) && $("#signature").value.trim().length>=2;
+  for(const id of ["#statement","#signature"])$(id).addEventListener("input",()=>{$("#confirm").disabled=!signed();$("#statement").classList.toggle("ok",statementMatches($("#statement").value));});
+  $("#confirm").onclick=async()=>{const mode=pending;if(!mode || !signed())return;$("#confirm").disabled=true;try{await request({type:"consent",statement:$("#statement").value,signature:$("#signature").value});consentUrl=location.href;pending=null;await run(mode);}catch(error){status(error.message,"Check signature");}finally{$("#confirm").disabled=!signed();}};
   $("#cancel").onclick=()=>{pending=null;$("#consent").hidden=true;status("Choose a mode whenever you’re ready.");};
   $("#close").onclick=()=>{if(running)stop();panel.hidden=true;};
   $("#stop").onclick=stop;

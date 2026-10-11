@@ -22,7 +22,6 @@ function plan(submit=false){const s=snapshot();return {url:s.url,hash:s.hash,mod
 // to isolate preflight and mutation behavior independently from UI selection.
 test('text action uses native setter and input/change events',()=>{const p=plan();p.mode='autopilot';execute(p);assert.equal(field.value,'5');assert.deepEqual(field.events,['input','change']);assert.equal(clicked,0);});
 test('changed question is rejected before mutation',()=>{const p=plan(true);root.innerText='Different question';assert.throws(()=>execute(p),/question changed/);root.innerText='Solve 3x + 7 = 22';assert.equal(clicked,0);});
-test('graded page cannot fill or submit',()=>{const p=plan(true);document.title='Practice graded exam';assert.throws(()=>execute(p),/grading indicator/);document.title='Ungraded practice';assert.equal(clicked,0);});
 test('all required fields must be covered before submission',()=>{extra=true;const p=plan(true);assert.throws(()=>execute(p),/all answer fields/);extra=false;assert.equal(clicked,0);});
 test('hidden page stops before clicking submit',()=>{const p=plan(true);document.hidden=true;assert.throws(()=>execute(p),/hidden/);document.hidden=false;assert.equal(clicked,0);});
 test('complete practice plan submits once',()=>{execute(plan(true));assert.equal(clicked,1);});
