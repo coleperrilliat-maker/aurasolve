@@ -5,12 +5,12 @@
 button,input{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
 button:disabled{opacity:.45;cursor:default}
-button:focus-visible,input:focus-visible{outline:2px solid #111;outline-offset:2px}
+button:focus-visible,input:focus-visible{outline:2px solid #0066ff;outline-offset:2px}
 
 .dock{position:fixed;right:16px;top:42%;display:flex;flex-direction:column;gap:4px;padding:4px;border-radius:12px;background:#fff;border:1px solid #e5e5e5;box-shadow:0 4px 16px rgba(0,0,0,.08)}
 .dock button{width:38px;height:38px;border-radius:9px;font-size:17px;display:grid;place-items:center}
 .dock button:hover{background:#f3f3f3}
-.dock .active{background:#ececec}
+.dock .active{background:#e6f0ff;box-shadow:inset 0 0 0 1.5px #0066ff}
 
 .panel{position:fixed;right:72px;top:50%;transform:translateY(-50%);width:min(340px,calc(100vw - 96px));max-height:min(540px,84dvh);display:flex;flex-direction:column;background:#fff;border:1px solid #e5e5e5;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.12);overflow:hidden}
 .panel.explain{width:min(320px,calc(100vw - 96px))}
@@ -18,7 +18,7 @@ button:focus-visible,input:focus-visible{outline:2px solid #111;outline-offset:2
 
 .panel header{display:flex;align-items:center;justify-content:center;position:relative;height:26px;cursor:grab;touch-action:none}
 .panel.dragging header{cursor:grabbing}
-.grip{width:32px;height:4px;border-radius:4px;background:#ddd}
+.grip{width:32px;height:4px;border-radius:4px;background:#cfe0ff}
 .icon{position:absolute;right:6px;top:3px;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:#888;font-size:17px;line-height:1}
 .icon:hover{background:#f3f3f3;color:#111}
 
@@ -35,21 +35,22 @@ button:focus-visible,input:focus-visible{outline:2px solid #111;outline-offset:2
 .signature input{display:block;width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:13px}
 .signature input.ok{border-color:#16a34a}
 .consent>small{display:block;font-size:12px;color:#888;margin-top:8px}
-.primary{display:block;width:100%;margin-top:10px;padding:8px;border-radius:8px;background:#111;color:#fff;font-weight:600;font-size:13px}
-.primary:hover{background:#333}
+.primary{display:block;width:100%;margin-top:10px;padding:8px;border-radius:8px;background:#0066ff;color:#fff;font-weight:600;font-size:13px}
+.primary:hover{background:#0052cc}
 .secondary{display:block;width:100%;margin-top:4px;padding:7px;border-radius:8px;color:#666;font-size:13px}
 .secondary:hover{background:#f6f6f6}
 
 .answer-card{padding:4px 0 2px}
 .answer-card+.answer-card{margin-top:14px;padding-top:14px;border-top:1px solid #eee}
 .tag{font-size:12px;color:#888;margin-bottom:2px}
-.answer-card h3{margin:10px 0 4px;font-size:14px;font-weight:700;color:#111}
+.answer-card h3{margin:10px 0 4px;font-size:13px;font-weight:700;color:#0066ff}
 .answer-card h3:first-of-type{margin-top:4px}
 .answer{margin:0;font-size:17px;font-weight:700;overflow-wrap:anywhere;white-space:pre-wrap}
 .answers{margin:0;padding-left:18px;font-weight:700;font-size:15px}
 .steps{margin:0;padding-left:18px;color:#222}
 .answers li,.steps li{margin:3px 0;overflow-wrap:anywhere}
 .steps strong{font-weight:700}
+.answers li::marker,.steps li::marker{color:#0066ff}
 .note{margin:10px 0 0;font-size:12px;font-style:italic;color:#888}
 .feedback{margin-top:8px;font-size:12px;color:#16a34a;font-weight:600}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
