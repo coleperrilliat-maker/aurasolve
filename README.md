@@ -20,10 +20,8 @@ Users install the extension and start practicing. **No API key in Chrome.** Your
    - `OPENAI_MODEL` — e.g. `gpt-4.1-mini`
    - `CLIENT_KEY` — a long random string (e.g. run `openssl rand -hex 32`)
 4. Railway → **Settings** → **Networking** → **Generate Domain**. Copy the public URL (e.g. `https://aurasolve-production.up.railway.app`).
-5. Edit `src/shared/config.js` in this repo:
-   - Set `API_BASE` to your Railway domain
-   - Set `CLIENT_KEY` to the same value as Railway's `CLIENT_KEY`
-6. Commit, push, and **reload the extension** in Chrome.
+5. Set Railway variable `CLIENT_KEY` to match `src/shared/config.js` (already configured for `aurasolve-production.up.railway.app`).
+6. **Reload the extension** in Chrome after pulling updates.
 
 Railway runs `npm start` (`node server/index.js`). Health check: `/api/v1/health`.
 
@@ -36,15 +34,22 @@ npm start              # http://localhost:8787
 
 Point `src/shared/config.js` at `http://localhost:8787` while developing, then switch back to your Railway URL before sharing the extension.
 
-## Install the extension
+## Install the extension (no ZIP)
 
-1. Clone or download this folder.
-2. Open `chrome://extensions` and enable **Developer mode**.
-3. Click **Load unpacked** and select the folder that directly contains `manifest.json`.
-4. Pin AuraSolve. Open **Settings** to confirm the server shows **Online**.
-5. Refresh any already-open practice page. On other HTTP(S) websites, click the toolbar icon to attach AuraSolve for that visit.
+One-time setup — after this, code updates are just `git pull` + **Reload** in Chrome.
 
-No OpenAI setup in the browser. Usage is billed through your Railway server's OpenAI account.
+1. Clone once (or use the copy already at `~/Projects/aurasolve`):
+   ```sh
+   git clone git@github.com:coleperrilliat-maker/aurasolve.git ~/Projects/aurasolve
+   ```
+2. Open `chrome://extensions` → enable **Developer mode**.
+3. Click **Load unpacked** → select **`~/Projects/aurasolve`** (the folder with `manifest.json`).
+4. Pin AuraSolve. Open **Settings** — server should show **Online**.
+5. Refresh any open practice page.
+
+**After updates:** in Terminal run `git -C ~/Projects/aurasolve pull`, then click **Reload** on the AuraSolve card in `chrome://extensions`. No ZIP, no re-download.
+
+No OpenAI setup in the browser. Usage is billed through your Railway server.
 
 ## Modes
 

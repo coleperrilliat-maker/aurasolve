@@ -1,5 +1,3 @@
-// Production Railway URL — update after first deploy (Railway → Settings → Domains).
 export const API_BASE = "https://aurasolve-production.up.railway.app";
 
-// Must match the CLIENT_KEY env var on Railway. Generate a long random string for production.
-export const CLIENT_KEY = "aurasolve-client-change-me";
+export const CLIENT_KEY = "81327b4960956fd15e9f8a01aa27151852e6b5e0c93c4701561ad675f1bea2a5";
