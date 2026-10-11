@@ -55,7 +55,7 @@ No OpenAI setup in the browser. Usage is billed through your Railway server.
 
 **✈️ AutoPilot:** On a clearly identified practice page, check the practice-only declaration and type your name. AuraSolve solves one question, fills supported answers, clicks the page's check/submit button, displays a tutor paragraph, and waits for explicit correct feedback. After a short reading pause, it clicks Next. Each run is limited to five questions. A wrong answer, uncertain result, unsupported control, changed page, missing feedback, expired confirmation, or ambiguous button stops the run. It does not retry incorrect answers automatically. Navigating the full page ends the current run.
 
-**✍️ Fill a field:** Click a supported field on the page, then choose Fill a field. Confirm practice status, review the generated preview, and click Fill this field. This mode never submits. Graph points and draggable items count as fields only when an explicit adapter exists.
+**✍️ Fill a field:** Click a supported field on the page, then choose Fill a field. Confirm practice status; the answer and explanation appear, then the selected supported field is filled. Review it before clicking Submit & next. When there is exactly one supported text field or dropdown, it is selected automatically. Graph points and draggable items count as fields only when an explicit adapter exists.
 
 **💡 Explain:** Reads the detected question and returns a paragraph explaining the solution without filling, submitting, or advancing.
 
@@ -71,16 +71,17 @@ The signature is tied to the page, lasts 30 minutes, and is cleared on Stop or w
 
 | Feature | Implemented support |
 | --- | --- |
-| Text answers | Native text/number inputs and textareas, using native value setters with input/change events |
+| Text answers | Native text/number inputs, textareas, and plain contenteditable controls; focus, input/change, blur, and read-back checks |
 | Choices | Native radio buttons, checkboxes, single-select dropdowns |
 | Graphs | One point on an explicit coordinate-grid adapter; not arbitrary graph canvases, lines, curves, or regions |
 | Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment |
 | Pearson detection | Common question-container selectors, text, accessible math labels, and accessible matching frames |
-| Pearson graph/math widgets | Not verified; custom math editors and proprietary graph/drag controls need dedicated adapters |
-| Images | Alt text only; no screenshot vision or OCR |
-| AutoPilot | Exactly identified check/submit and next controls; visible correctness feedback required |
+| Math editors | Capability-checked MathQuill API and Pearson-style Dojo widgets with a real value setter; unsupported proprietary editors remain manual. Not verified on live Pearson. |
+| Pearson graph widgets | Proprietary graph/drag controls still need dedicated adapters |
+| Images | Text/alt labels plus a question screenshot for visual problems when capture succeeds |
+| AutoPilot | Exactly identified check/submit and next controls in the question or parent frame; visible correctness feedback required |
 
-This is a working implementation with a local practice lab, not universal automation for every Pearson question. It has not been tested against a signed-in live Pearson activity. Detection refuses pages without a recognized question container. If several questions are visible, click a field in the intended question to disambiguate.
+This is a working implementation with a local practice lab, not universal automation for every Pearson question. It has not been tested against a signed-in live Pearson activity. Detection prefers recognized question containers and falls back to a container around visible answer controls. If several questions are visible, click a field in the intended question to disambiguate.
 
 ## Try the included practice lab
 
@@ -147,7 +148,7 @@ Tests cover practice blocking, consent expiry/page binding, model-action validat
 - **Manifest missing:** select the extracted folder directly containing `manifest.json`.
 - **Server offline:** confirm Railway is deployed, variables are set, and `src/shared/config.js` matches your domain and `CLIENT_KEY`.
 - **No question found:** the site needs a selector/adapter or is inside a frame the extension cannot access.
-- **Explain only:** the activity is unknown or has a grading indicator.
+- **Filling unavailable:** confirm the practice declaration and inspect the displayed limitation. Unsupported answer editors require a dedicated adapter.
 - **401 / 429:** check Railway `OPENAI_API_KEY`, API credits, limits, and model access.
 - **No visible buttons:** refresh the page or click the toolbar icon. Chrome internal pages and Chrome Web Store pages cannot be injected.
 - **Graph/drag stopped:** complete it manually; do not assume a generic canvas can accept automated actions.
@@ -155,3 +156,14 @@ Tests cover practice blocking, consent expiry/page binding, model-action validat
 
 API documentation used: https://developers.openai.com/api/reference/resources/responses/methods/create
 Chrome documentation used: https://developer.chrome.com/docs/extensions/reference/api/scripting and https://developer.chrome.com/docs/extensions/reference/api/storage
+
+
+## 1.13.5 filling and tutor fixes
+
+- Both the page panel and toolbar popup render Answer and Explanation before attempting to fill, so an editor or Submit failure no longer hides the tutor.
+- Nested question containers no longer count as separate questions. A single supported text/select field is selected automatically.
+- Plain editable fields, exposed MathQuill editors, and Pearson-style Dojo widgets with a real value setter have explicit adapters. MathQuill receives raw LaTeX; normal inputs receive plain text. Values are read back before success is reported.
+- A question iframe can use Submit/Next and feedback in its parent frame. Ambiguous buttons and changed questions stop the operation.
+- LaTeX backslashes in the tutor prompt are preserved.
+
+These changes have automated regression coverage but are not a claim of compatibility with every MyLab product. Graphs, custom dropdowns, and editors without an accessible supported API may still require manual input. See TESTING.md for verification limits.

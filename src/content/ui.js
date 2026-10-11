@@ -114,9 +114,9 @@ export function createUI() {
         let result;
         try{result=await request({type:"solve",mode});}finally{$("#loader").hidden=true;}
         live();
+        const article=card(result,mode,i);
         if(mode!=="autopilot") {
           if(mode==="explain")explainedPrompt=result.question.promptHash;
-          const article=card(result,mode,i);
           if(mode==="field" && result.solution.supported && result.solution.actions.length && result.solution.confidence>=.85) {
             status("Filling your selected field…","FILLING");
             await request({type:"apply",planId:result.planId});live();
@@ -129,10 +129,9 @@ export function createUI() {
           else status("Automatic filling is unavailable for this answer. Use the explanation to complete it manually.","MANUAL STEP");
           break;
         }
-        if(!result.solution.supported || result.solution.confidence<.85 || !result.solution.actions.length) {card(result,mode,i);throw new Error("AutoPilot paused: this answer needs a manual step or more certainty.");}
+        if(!result.solution.supported || result.solution.confidence<.85 || !result.solution.actions.length) {throw new Error(result.solution.limitation || "AutoPilot paused: use the answer and explanation below to complete this step manually.");}
         status("Filling the practice answer and checking it…","CHECKING");
         await request({type:"apply",planId:result.planId});live();
-        const article=card(result,mode,i);
         const feedbackLabel=document.createElement("div");feedbackLabel.className="feedback";feedbackLabel.textContent="Submitted · waiting for page feedback";article.append(feedbackLabel);
         let outcome;
         for(let poll=0;poll<12;poll++){await sleep(500);live();outcome=await request({type:"feedback",planId:result.planId});live();if(outcome.state!=="unknown")break;}
@@ -146,7 +145,7 @@ export function createUI() {
         for(let poll=0;poll<12;poll++){await sleep(500);live();const next=await request({type:"inspect"});live();if(next.question.hash!==result.question.hash){changed=true;break;}}
         if(!changed)throw new Error("The next question did not load. AutoPilot stopped.");
       }
-    } catch(error) {if(mine===token)status(error.message,"NEEDS ATTENTION");}
+    } catch(error) {if(mine===token)status(`${error.message}${results.children.length ? ' Your answer and explanation are below.' : ''}`,"NEEDS ATTENTION");}
     finally {if(mine===token)busy(false);}
   }
   async function choose(mode) {
@@ -231,3 +230,4 @@ export function createUI() {
   document.addEventListener("visibilitychange",()=>{if(document.hidden && running)stop();});
   return {open,veil:hidden=>{host.style.visibility=hidden?"hidden":"";}};
 }
+

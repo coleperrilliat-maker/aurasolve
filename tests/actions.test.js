@@ -20,8 +20,9 @@ const {execute}=await import('../src/content/actions.js');
 function plan(submit=false){const s=snapshot();return {url:s.url,hash:s.hash,mode:submit?'autopilot':'field',submit,solution:{answer:'5',explanation:'Subtract 7 and divide by 3.',confidence:.99,supported:true,limitation:'',actions:[{kind:'text',target:s.fields[0].id,value:'5',destination:'',x:null,y:null}]}};}
 // Field mode requires a selected target; these tests use autopilot without submission
 // to isolate preflight and mutation behavior independently from UI selection.
-test('text action uses native setter and input/change events',()=>{const p=plan();p.mode='autopilot';execute(p);assert.equal(field.value,'5');assert.deepEqual(field.events,['input','change']);assert.equal(clicked,0);});
-test('changed question is rejected before mutation',()=>{const p=plan(true);root.innerText='Different question';assert.throws(()=>execute(p),/question changed/);root.innerText='Solve 3x + 7 = 22';assert.equal(clicked,0);});
-test('all required fields must be covered before submission',()=>{extra=true;const p=plan(true);assert.throws(()=>execute(p),/all answer fields/);extra=false;assert.equal(clicked,0);});
-test('hidden page stops before clicking submit',()=>{const p=plan(true);document.hidden=true;assert.throws(()=>execute(p),/hidden/);document.hidden=false;assert.equal(clicked,0);});
-test('complete practice plan submits once',()=>{execute(plan(true));assert.equal(clicked,1);});
+test('text action uses native setter and input/change events',async()=>{const p=plan();p.mode='autopilot';await execute(p);assert.equal(field.value,'5');assert.deepEqual(field.events,['input','change']);assert.equal(clicked,0);});
+test('changed question is rejected before mutation',async()=>{const p=plan(true);root.innerText='Different question';await assert.rejects(()=>execute(p),/question changed/);root.innerText='Solve 3x + 7 = 22';assert.equal(clicked,0);});
+test('all required fields must be covered before submission',async()=>{extra=true;const p=plan(true);await assert.rejects(()=>execute(p),/all answer fields/);extra=false;assert.equal(clicked,0);});
+test('hidden page stops before clicking submit',async()=>{const p=plan(true);document.hidden=true;await assert.rejects(()=>execute(p),/hidden/);document.hidden=false;assert.equal(clicked,0);});
+test('complete practice plan submits once',async()=>{await execute(plan(true));assert.equal(clicked,1);});
+

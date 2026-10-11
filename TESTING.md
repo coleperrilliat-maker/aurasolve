@@ -22,3 +22,14 @@ Inspected the user's Chrome Pearson player without changing any answer. The prom
 - Live signed-in Pearson/MyLab pages, their proprietary graph widgets, and custom drag controls.
 
 Before relying on a real practice page, test Explain, then a single field, and then a short AutoPilot run on known ungraded material. Review actual page feedback. The local lab provides repeatable controls for each implemented action family.
+
+
+## 1.13.5 verification
+
+`npm test`: 30 passing Node regression tests, including native inputs, editor API read-back, missing Dojo setters, parent-frame submission/feedback, changed-question rejection, and preservation of LaTeX instructions.
+
+`npm run check`: syntax and manifest entry-point validation.
+
+An optional `node tests/browser-fixtures.mjs` suite covers actual contenteditable input and keeping tutor cards visible on a failed AutoPilot fill. It requires Playwright and its Chromium browser. It could not be executed in the build environment: Chromium was absent and its download returned invalid ZIP data. These browser cases are therefore **unverified**, not passing.
+
+No live signed-in Pearson/MyMathLab or other lab integration was tested. MathQuill/Dojo tests use API doubles; actual sites must expose the supported API.

@@ -4,15 +4,27 @@ function guard() {
   if (document.hidden) throw new Error("The practice page is hidden. AutoPilot stopped.");
 }
 function setValue(el,value) {
+  el.focus?.();
+  if (el.isContentEditable) {
+    const selection = window.getSelection(), range = document.createRange();
+    range.selectNodeContents(el);selection.removeAllRanges();selection.addRange(range);
+    if (!document.execCommand('insertText',false,value) || el.textContent !== value) throw new Error('The editable field did not retain the answer. Review it manually.');
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+    el.blur?.();
+    if (el.textContent !== value) throw new Error('The page changed the answer after filling. Review it manually.');
+    return;
+  }
   const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto,"value")?.set;
   if (!setter) throw new Error("This field cannot be filled safely.");
   setter.call(el,value);
   el.dispatchEvent(new Event("input",{bubbles:true}));
   el.dispatchEvent(new Event("change",{bubbles:true}));
+  el.blur?.();
   if (el.value !== value) throw new Error("The page did not retain the requested value.");
 }
-export function execute(plan) {
+export async function execute(plan) {
   guard();
   const current = snapshot();
   if (current.hash !== plan.hash || current.url !== plan.url) throw new Error("The question changed. Generate a new answer first.");
@@ -31,11 +43,16 @@ export function execute(plan) {
     const el = elementFor(a.target);
     if (!visible(el) || el.disabled || el.readOnly) throw new Error("An answer field is no longer available.");
   }
-  if (plan.submit) findButton("submit");
+  if (plan.submit && !plan.deferSubmit) findButton("submit");
   for (const a of plan.solution.actions) {
     guard();
     const el = elementFor(a.target);
-    if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
+    const field = current.fields.find(f=>f.id === a.target);
+    if (field.editorKey) {
+      const response = await chrome.runtime.sendMessage({type:'writeEditor',planId:plan.id,target:a.target});
+      if (!response?.ok) throw new Error(response?.error || 'Could not reach the math editor.');
+    }
+    else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
     else if (a.kind === "radio") { el.click(); if (!el.checked) throw new Error("The radio answer was not accepted by the page."); }
     else if (a.kind === "checkbox") { if (el.checked !== (a.value === "true")) el.click(); if (el.checked !== (a.value === "true")) throw new Error("Checkbox state was not retained."); }
     else if (a.kind === "point") {
@@ -58,8 +75,14 @@ export function execute(plan) {
     }
   }
   guard();
-  if (plan.submit) findButton("submit").click();
-  return {filled:plan.solution.actions.length,submitted:plan.submit};
+  if (plan.submit && !plan.deferSubmit) findButton("submit").click();
+  return {filled:plan.solution.actions.length,submitted:plan.submit && !plan.deferSubmit};
+}
+export function clickControl(kind) {
+  guard();
+  if (!['submit','next'].includes(kind)) throw new Error('Unknown control.');
+  findButton(kind).click();
+  return {clicked:true};
 }
 export function nextProblem() {
   guard();
@@ -74,3 +97,4 @@ export function advance() {
   findButton("next").click();
   return {advanced:true};
 }
+

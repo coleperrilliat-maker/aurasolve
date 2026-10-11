@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-let listener, applied=0, nextButton=true;
+let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false;
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
-const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[]};
+const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[],controls:{submit:1,next:1}};
 globalThis.chrome={storage:{local:storage(local),session:storage(session)},runtime:{id:'unit-test',onMessage:{addListener:fn=>listener=fn}},tabs:{onRemoved:{addListener:()=>{}},query:async()=>[{id:1}]},scripting:{executeScript:async input=>{
-  if(!input.args)return [{frameId:0,documentId:'doc1',result:{...state}}];
-  if(input.args[0]==='execute'){applied++;return [{result:{filled:1,submitted:input.args[1].submit}}];}
-  if(input.args[0]==='feedback')return [{result:{state:'unknown',text:''}}];
+  if(input.world==='MAIN')return [{result:true}];
+  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];return [{result:{clicked:true}}];}
+  if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
+  if(input.args[0]==='execute'){applied++;if(staleAfterFill)state.hash='changed-after-fill';return [{result:{filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit}}];}
+  if(input.args[0]==='feedback')return [{result:{state:input.target.documentIds[0]==='doc1'?verdict:'unknown',text:''}}];
   if(input.args[0]==='nextProblem')return [{result:{clicked:nextButton}}];
   throw new Error('Unexpected frame call');
 }}};
@@ -60,3 +62,27 @@ test('a reviewed field answer can be explicitly submitted once',async()=>{
   assert.equal(applied,before+2);
   assert.equal((await request({type:'submitField',planId:result.data.planId})).ok,false);
 });
+test('AutoPilot fills a child frame and submits and reads feedback in the parent',async()=>{
+  split=true;clickedDocument=null;
+  try {
+    const result=await request({type:'solve',mode:'autopilot'});assert.equal(result.ok,true);
+    assert.equal((await request({type:'apply',planId:result.data.planId})).data.submitted,true);
+    assert.equal(clickedDocument,'doc1');
+    verdict='correct';
+    assert.equal((await request({type:'feedback',planId:result.data.planId})).data.state,'correct');
+    assert.equal((await request({type:'next',planId:result.data.planId})).ok,true);
+  } finally {split=false;verdict='unknown';}
+});
+test('changed question after filling prevents submit',async()=>{
+  clickedDocument=null;staleAfterFill=true;
+  try {
+    const result=await request({type:'solve',mode:'autopilot'});
+    const appliedResult=await request({type:'apply',planId:result.data.planId});
+    assert.equal(appliedResult.ok,false);assert.match(appliedResult.error,/changed/);assert.equal(clickedDocument,null);
+  } finally {staleAfterFill=false;state.hash='q1';}
+});
+test('an unsolicited editor mutation is rejected',async()=>{
+  const result=await request({type:'writeEditor',planId:'made-up',target:'a1'});
+  assert.equal(result.ok,false);assert.match(result.error,/no longer active/);
+});
+

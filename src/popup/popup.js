@@ -42,8 +42,8 @@ async function run(mode) {
       let result;
       try { result = await send({type: "solve", mode}); } finally { $("loader").hidden = true; }
       live();
+      card(result, mode, i);
       if (mode !== "autopilot") {
-        card(result, mode, i);
         if (mode === "field" && result.solution.supported && result.solution.actions.length && result.solution.confidence >= .85) {
           status("Filling the selected field…");
           await send({type: "apply", planId: result.planId});
@@ -54,13 +54,11 @@ async function run(mode) {
         break;
       }
       if (!result.solution.supported || result.solution.confidence < .85 || !result.solution.actions.length) {
-        card(result, mode, i);
         throw new Error("AutoPilot paused. This one needs a manual step.");
       }
       status("Checking the answer…");
       await send({type: "apply", planId: result.planId});
       live();
-      card(result, mode, i);
       let outcome;
       for (let poll = 0; poll < 12; poll++) {
         await sleep(500);
@@ -87,7 +85,7 @@ async function run(mode) {
       if (!changed) throw new Error("The next question did not load.");
     }
   } catch (error) {
-    if (mine === token) status(error.message);
+    if (mine === token) status(`${error.message}${$("results").children.length ? ' Your answer and explanation are below.' : ''}`);
   } finally {
     if (mine === token) setBusy(false);
   }
@@ -162,3 +160,4 @@ try {
   $("cloud").textContent = "Cloud offline";
   $("cloud").className = "offline";
 }
+
