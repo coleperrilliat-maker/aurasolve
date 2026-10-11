@@ -37,3 +37,12 @@ test('literal \\n before a step becomes a line break but LaTeX \\neq is kept',()
   assert.equal(out.answer,'2) Given\n4) Reflexive');
 });
 
+
+test('plain fields use slash fractions while LaTeX editors retain commands',async()=>{
+  const {fieldValue}=await import('../src/shared/solution.js');
+  const plain={kind:'text'};
+  assert.equal(fieldValue(String.raw`\frac{1}{3}`,plain),'1/3');
+  assert.equal(fieldValue(String.raw`\(\frac{x+1}{x-2}\)`,plain),'(x+1)/(x-2)');
+  assert.equal(fieldValue(String.raw`\frac{1}{3}`,{kind:'text',format:'latex'}),String.raw`\frac{1}{3}`);
+  assert.equal(fieldValue('option/1',{kind:'select'}),'option/1');
+});

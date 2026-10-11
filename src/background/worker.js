@@ -1,3 +1,4 @@
+import {fieldValue} from '../shared/solution.js';
 import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
 import {editorBridge} from './editors.js';
@@ -102,7 +103,7 @@ async function handle(message,sender) {
     const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
     if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-    const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:action.value}]});
+    const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:fieldValue(action.value,field)}]});
     if (!result[0]?.result?.filled) throw new Error('The editor did not confirm the answer.');
     return result[0].result;
   }
