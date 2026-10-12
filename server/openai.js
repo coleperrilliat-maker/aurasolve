@@ -8,7 +8,7 @@ const EFFORTS = ["none", "minimal", "low", "medium", "high"];
 async function solveOnce(snapshot, mode, requestedModel, signal, requestedEffort, independent=false) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("Server is missing OPENAI_API_KEY.");
-  const model = process.env.OPENAI_MODEL?.trim() || requestedModel || DEFAULT_MODEL;
+  const model = requestedModel?.trim() || process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
   const effort = EFFORTS.includes(requestedEffort) ? requestedEffort : process.env.OPENAI_REASONING_EFFORT?.trim() || "low";
   const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort}} : {};
 

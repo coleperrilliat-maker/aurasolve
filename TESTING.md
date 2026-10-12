@@ -73,3 +73,7 @@ Pearson references consulted:
 - https://help.pearsoncmg.com/mfdl/student/Content/player_activity_html.htm
 
 Navigation and score reading use no AI. The budget is 50, 200 (default), or 500 solves per assignment, with at most two model calls per solve. Failed requests consume a budget slot conservatively. This is a client workflow limit, not an account-wide dollar cap; actual costs depend on model, token/image size, and usage from other clients.
+
+## 1.15.1 — honor the extension's selected model
+
+The production health check exposed a legacy Railway `OPENAI_MODEL=gpt-4.1-mini` default overriding the extension's gpt-4.1 preference. Model selection now uses the explicit extension preference first, with the Railway model as a fallback, matching the existing Settings UI contract. The example environment now defaults to gpt-4.1. A regression checks the actual OpenAI request payload in both cases without spending API credits. All 85 tests and syntax/manifest checks passed.
