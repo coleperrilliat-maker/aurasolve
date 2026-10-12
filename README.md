@@ -53,7 +53,7 @@ No OpenAI setup in the browser. Usage is billed through your Railway server.
 
 ## Modes
 
-**AutoPilot:** Starts at the question and part currently visible. The default **All unfinished** run follows the Pearson question list, skips questions already marked correct, and returns to earlier incomplete questions after reaching the end. It uses Continue for another part, closes answer feedback with OK, and chooses No on the specific incomplete-question warning. Partial/incorrect completed questions use Similar question, up to five times, to try for full credit. It never clicks Save best score or final assignment Submit.
+**AutoPilot:** Starts at the question and part currently visible. The default **All unfinished** run follows the Pearson question list, skips questions already marked correct, and returns to earlier incomplete questions after reaching the end. It uses the explicitly labeled Check answer control for each part, then Continue or the question list to advance. It closes answer feedback with OK and chooses No on the specific incomplete-question warning. Partial/incorrect completed questions use Similar question, up to five times, to try for full credit. It never clicks Save best score or final assignment Submit; unlabeled command metadata is not enough to authorize an answer check.
 
 AutoPilot keeps a local checkpoint before submitting, so a reopened panel reads the live page before continuing. If a submission's result is uncertain, it waits and pauses instead of replaying it. Keep the question tab and panel open while running; reopen and start again to resume after closing them. A new run is bound to its original tab and invalidates older runs.
 
