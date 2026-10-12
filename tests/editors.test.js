@@ -40,7 +40,7 @@ test('tutor instructions preserve LaTeX backslashes',()=>{
 test('an ARIA-linked answer menu is discovered and confirms its selected label',async()=>{
   const menu={querySelectorAll:()=>[item]};
   const el={dataset:{},textContent:'Choose',isConnected:true,disabled:false,readOnly:false,
-    matches:selector=>selector.includes('[role="combobox"][aria-controls]'),getClientRects:()=>[{}],closest:()=>null,
+    matches:selector=>selector.includes('[role="combobox"]'),getClientRects:()=>[{}],closest:()=>null,
     getAttribute:key=>key==='aria-controls'?'answer-menu':null,removeAttribute(){},querySelector:()=>null,click(){},dispatchEvent(){}};
   const item={textContent:'Square root',parentElement:{closest:()=>null},classList:{contains:()=>false},
     getAttribute:()=>null,getClientRects:()=>[{}],querySelector:()=>null,click(){el.textContent='Square root';}};
