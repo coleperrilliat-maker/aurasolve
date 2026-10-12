@@ -1,7 +1,7 @@
 import {solutionSchema, validateSolution} from "../src/shared/solution.js";
 import {TUTOR_INSTRUCTIONS} from "../src/shared/instructions.js";
 
-export const DEFAULT_MODEL = "gpt-4.1-mini";
+export const DEFAULT_MODEL = "gpt-4.1";
 const EFFORTS = ["none", "minimal", "low", "medium", "high"];
 
 export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, requestedEffort) {

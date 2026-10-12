@@ -4,7 +4,12 @@ import {checkBackend, solve} from "./api.js";
 import {editorBridge} from './editors.js';
 import {frameCall} from './frame-call.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map();
-const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"});
+const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
+  const {settings={}}=await chrome.storage.local.get("settings");
+  if(!settings.modelUpgrade128){
+    await chrome.storage.local.set({settings:{...settings,model:!settings.model || settings.model==="gpt-4.1-mini"?"gpt-4.1":settings.model,modelUpgrade128:true}});
+  }
+});
 const rev = id => revisions.get(id) || 0;
 async function collect(tabId) {
   await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:'MAIN',func:editorBridge,args:[{op:'discover'}]}).catch(()=>{});
@@ -113,9 +118,9 @@ async function handle(message,sender) {
     const {settings={}} = await chrome.storage.local.get("settings");
     try {
       const health = await checkBackend(AbortSignal.timeout(8000));
-      return {configured:health.keyConfigured !== false,model:settings.model || health.model || "gpt-4.1-mini",service:"AuraSolve Cloud"};
+      return {configured:health.keyConfigured !== false,model:settings.model || health.model || "gpt-4.1",service:"AuraSolve Cloud"};
     } catch {
-      return {configured:false,model:settings.model || "gpt-4.1-mini",service:"AuraSolve Cloud"};
+      return {configured:false,model:settings.model || "gpt-4.1",service:"AuraSolve Cloud"};
     }
   }
   const tabId = await resolveTab(message, sender);
