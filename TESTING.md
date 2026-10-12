@@ -101,3 +101,9 @@ Validation: `npm test` passed 96 tests; `npm run check` passed; `git diff --chec
 AutoPilot now requires a visible, explicit per-question label such as `Check answer` before clicking the answer-check control. An unlabeled `command="checkanswer"` is insufficient because Pearson may reuse command metadata. Assignment-level labels including Submit, Finish, Turn in, and Save best score take precedence over conflicting metadata and are rejected.
 
 Validation: `npm test` passed 97 tests; `npm run check` and `git diff --check main...HEAD` passed. The regression covers an unlabeled `checkanswer` command, conflicting `Submit`/`Check answer` labels, assignment Finish/Turn in variants, and the permitted explicit `Check answer` label.
+
+## 1.16.2 — lazy Pearson dropdown popups
+
+Dropdown discovery now covers native selects, Dojo registry widgets, ARIA combobox/listbox controls, and older Pearson controls whose popup is created only after opening the arrow. For an unlinked legacy control, AuraSolve proceeds only when opening it reveals exactly one visible option popup; it binds that popup to the control, records unique options, clicks an exact enabled option, and verifies the retained display value.
+
+Validation: `npm test` passed 98 tests; `npm run check` and `git diff --check main...HEAD` passed. The new regression opens a lazy unlinked popup, discovers its option, writes the selected value, and confirms read-back. It is a DOM fixture rather than a live signed-in Pearson assignment.
