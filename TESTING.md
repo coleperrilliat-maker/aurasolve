@@ -54,3 +54,22 @@ The Fill-button browser fixture now explicitly avoids focusing or clicking the a
 ## 1.13.9: disconnected extension runtime
 
 41 Node tests and five Chromium fixtures pass; syntax/manifest checks pass. A browser fixture removes chrome.runtime after creating the panel, then clicks Fill and verifies a refresh recovery button, a clear reconnect message, and disabled action buttons instead of a sendMessage TypeError. The messaging helper also tests context invalidation, absent replies, successful replies and real application errors. Writes are not retried automatically. This verifies recovery behavior, not live Pearson compatibility.
+
+## 1.15.0 — resumable Pearson AutoPilot (2026-10-12)
+
+Validation: `npm test` passed 84 tests; `npm run check` passed JavaScript syntax and manifest checks. `git diff --check` passed. These are workflow/validation checks, not an answer-accuracy benchmark.
+
+New automated scenarios cover resuming Part 3 without restarting, OK feedback, Continue versus Next despite reused Pearson command attributes, partial credit, Similar retries, returning to earlier incomplete questions, No on the incomplete-question warning, already-correct questions, unknown scores, delayed feedback, pending-submit recovery, three-attempt/five-similar limits, cumulative request budgets, Stop during solve, changed questions, switched tabs, and replaced runs. Verification tests cover independent disagreement, repeated rejected answers, local arithmetic, and retaining two model calls for diagrams or ambiguous prompts.
+
+In Chrome, `node scripts/browser-test-server.js` served `/tests/browser-scenarios.html`. The actual DOM reader and content actions completed a simulated flow from Question 21's last part, handled the leave warning, moved to Question 22, continued after a wrong first part, generated one Similar retry, and finished both questions. Exactly five mock solves and five submissions occurred. No locked field was overwritten. The browser suite was rerun against the final source.
+
+The same server's `/tests/popup-fixture.html` exercised the actual panel. It displayed Question 21, Part 3 of 3, paused while the mock solve finished (zero submissions), resumed once (one submission), respected the one-question limit, and displayed the correct part-level result. The existing optional Playwright suite's panel transport fixture was updated for the new protocol; that optional suite was not rerun in this environment because Playwright is not installed.
+
+Read-only inspection of the signed-in Pearson player established the live heading, Part n of n, question-label status, disabled-field, and command-button structures. No real assignment answers were submitted during verification. Proprietary graphs, inaccessible editors, native browser dialogs, unavailable Similar retries, and changed site layouts may still require manual work. The engine pauses on ambiguous transitions or unconfirmed submissions rather than guessing or replaying them. Keep the tab and panel open; after reopening, Start reads the live page and the saved checkpoint.
+
+Pearson references consulted:
+- https://help.pearsoncmg.com/xl/student/bb/Content/do_homework.htm
+- https://help.pearsoncmg.com/mfdl/student/player/Content/use_player_html5.htm
+- https://help.pearsoncmg.com/mfdl/student/Content/player_activity_html.htm
+
+Navigation and score reading use no AI. The budget is 50, 200 (default), or 500 solves per assignment, with at most two model calls per solve. Failed requests consume a budget slot conservatively. This is a client workflow limit, not an account-wide dollar cap; actual costs depend on model, token/image size, and usage from other clients.

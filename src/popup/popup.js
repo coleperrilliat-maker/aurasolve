@@ -1,3 +1,4 @@
+import {runPilot} from '../shared/pilot-engine.js';
 import {renderSolution} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 import {BUILD_VERSION} from '../shared/version.js';
@@ -5,7 +6,7 @@ import {sendExtension} from '../shared/messaging.js';
 const $ = id => document.getElementById(id);
 document.querySelector('.brand strong').textContent=`AuraSolve ${BUILD_VERSION}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let pending = null;
+let pending = null, pilotTabId=null;
 let token = 0;
 let busy = false, paused=false, runLog=[];
 for(const id of ['time-min','time-max']){
@@ -17,13 +18,13 @@ function updateTiming(){
   $('max-label').hidden=!$('random-timing').checked;
   if(+$('time-max').value<+$('time-min').value)$('time-max').value=$('time-min').value;
 }
-for(const id of ['speed-run','random-timing','time-min','time-max','question-limit'])$(id).onchange=()=>{
+for(const id of ['speed-run','random-timing','time-min','time-max','question-limit','solve-budget'])$(id).onchange=()=>{
   updateTiming();
-  try{localStorage.setItem('pilotSettings',JSON.stringify(Object.fromEntries(['speed-run','random-timing','time-min','time-max','question-limit'].map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]))));}catch{}
+  try{localStorage.setItem('pilotSettings',JSON.stringify(Object.fromEntries(['speed-run','random-timing','time-min','time-max','question-limit','solve-budget'].map(id=>[id,$(id).type==='checkbox'?$(id).checked:$(id).value]))));}catch{}
 };
 try{
  const saved=JSON.parse(localStorage.getItem('pilotSettings')||'{}');
- for(const [id,value] of Object.entries(saved))if(['speed-run','random-timing','time-min','time-max','question-limit'].includes(id)){
+ for(const [id,value] of Object.entries(saved))if(['speed-run','random-timing','time-min','time-max','question-limit','solve-budget'].includes(id)){
    if($(id).type==='checkbox')$(id).checked=Boolean(value);
    else if([...$(id).options].some(o=>o.value===String(value)))$(id).value=value;
  }
@@ -41,7 +42,7 @@ $('pause').onclick=()=>{
 
 
 async function send(message) {
-  return sendExtension(message);
+  return sendExtension(pilotTabId===null?message:{...message,pilotTabId:message.pilotTabId ?? pilotTabId});
 }
 
 function status(text) {
@@ -68,7 +69,7 @@ function breakdown(){
   $('results').replaceChildren();
   const heading=document.createElement('h2');heading.textContent='Run breakdown';
   const summary=document.createElement('p');summary.className='run-summary';
-  summary.textContent=runLog.filter(item=>item.outcome==='Correct').length+' of '+runLog.length+' attempted questions confirmed correct.';
+  summary.textContent=runLog.filter(item=>item.outcome==='Correct').length+' of '+runLog.length+' submitted parts confirmed correct.';
   $('results').append(heading,summary);
   for(const item of runLog){
     const details=document.createElement('details');details.className='run-item';
@@ -78,154 +79,72 @@ function breakdown(){
 }
 
 async function run(mode) {
-  const mine = ++token;
-  runLog=[];
-  let similarRetries=0, attemptHadError=false, partAttempts=0;
-  paused=false;pauseUI();
-  const limit=mode==='autopilot'?Number($('question-limit').value):1;
-  $('pilot-progress').hidden=mode!=='autopilot';
-  $('progress').max=limit;$('progress').value=0;
-  $('pace-status').textContent='';
-
-  setBusy(true);
-  $("consent").hidden = true;
-  const live = () => { if (mine !== token) throw new Error("Stopped."); };
+  const mine=++token;runLog=[];paused=false;pauseUI();setBusy(true);
+  $('consent').hidden=true;$('pilot-progress').hidden=mode!=='autopilot';
+  $('pace-status').textContent='';$('progress').value=0;
+  const live=()=>{if(mine!==token)throw new Error('Stopped.');};
   const checkpoint=async()=>{live();while(paused){await sleep(100);live();}};
-  const delay=async ms=>{
-    let remaining=ms;
-    while(remaining>0){
-      await checkpoint();
-      const started=performance.now();await sleep(Math.min(100,remaining));live();
-      if(!paused)remaining-=performance.now()-started;
-    }
-    await checkpoint();
-  };
-  try {
-    const settings = await send({type: "settingsStatus"});
-    live();
-    if (!settings.configured) throw new Error("AuraSolve Cloud is offline. Check Railway, then try again.");
-    for (let i = 1; i <= limit; i++) {
-      await checkpoint();
-      const started=performance.now();
-      const minimum=Number($('time-min').value),maximum=Number($('time-max').value);
-      const target=$('speed-run').checked?0:minimum+($('random-timing').checked?10*Math.floor(Math.random()*((maximum-minimum)/10+1)):0);
-      $('progress-label').textContent='Question '+i+' of '+limit;
-      status(mode === "autopilot" ? `Working on question ${i} of ${limit}…` : "Reading the question…");
-      $("loader").hidden = false;
-      let result;
-      try { result = await send({type: "solve", mode}); } finally { $("loader").hidden = true; }
-      await checkpoint();
-      if(mode==='autopilot')runLog.push({number:i,result,outcome:'Not submitted'});
-      else card(result,mode,i);
-      if (mode !== "autopilot") {
-        if (mode === "field" && result.solution.supported && result.solution.actions.length && result.solution.confidence >= .85) {
-          status("Filling the selected field…");
-          await send({type: "apply", planId: result.planId});
-          live();
-          status("Field filled. You choose whether to submit.");
-        } else if (mode === "explain") $("status").hidden = true;
-        else status("Fill this one yourself using the explanation.");
-        break;
-      }
-      if (!result.solution.supported || result.solution.confidence < .85 || !result.solution.actions.length) {
-        throw new Error("AutoPilot paused. This one needs a manual step.");
-      }
-      let remaining=Math.max(0,target*1000-(performance.now()-started));
-      while(remaining>0){
-        await checkpoint();
-        $('pace-status').textContent='Submitting in '+Math.ceil(remaining/1000)+'s';
-        const step=Math.min(250,remaining);await delay(step);remaining-=step;
-      }
-      await checkpoint();
-      $('pace-status').textContent=$('speed-run').checked?'Speed run · no extra delay':'Target pace: '+target+' seconds';
-      status("Checking the answer…");
-      runLog[runLog.length-1].outcome="Submission requested · result unconfirmed";
-      await send({type: "apply", planId: result.planId});
-      live();
-      runLog[runLog.length-1].outcome='Submitted · result unconfirmed';
-      let outcome;
-      for (let poll = 0; poll < 30; poll++) {
-        await delay(500);
-        live();
-        outcome = await send({type: "feedback", planId: result.planId});
-        live();
-        if (outcome.state !== "unknown") break;
-      }
-      runLog[runLog.length-1].outcome=outcome?.state==='correct'?'Correct':outcome?.state==='incorrect'?'Incorrect':'Submitted · result unconfirmed';
-      if(outcome?.state==='correct' || outcome?.state==='incorrect'){
-        await checkpoint();
-        await send({type:'acknowledge',planId:result.planId});
-        await delay(250);
-      }
-      if(!['correct','incorrect'].includes(outcome?.state))throw new Error('No feedback was detected. AutoPilot stopped without guessing the result.');
-      attemptHadError ||= outcome?.state==='incorrect';
-      let continuation;
-      for(let poll=0;poll<12;poll++){
-        await delay(250);
-        continuation=await send({type:'continuation',planId:result.planId});
-        if(continuation.controls.submit || continuation.controls.similar || continuation.controls.next)break;
-      }
-      if(continuation?.controls.submit && !continuation.controls.similar){
-        if(++partAttempts>30)throw new Error('Stopped after 30 part attempts without completing this question.');
-        status('Continuing the remaining parts of this question…');
-        i--;continue;
-      }
-      if(attemptHadError){
-        if(similarRetries>=5)throw new Error('Stopped after five similar-question retries. Review the breakdown before continuing.');
-        status('Incorrect. Looking for Similar question…');
-        let available=false;
-        for(let poll=0;poll<12;poll++){
-          await delay(250);
-          try{await send({type:'similar',planId:result.planId});available=true;break;}
-          catch(error){if(!/exactly one similar/.test(error.message))throw error;}
+  const delay=async ms=>{let left=ms;while(left>0){await checkpoint();const step=Math.min(100,left);await sleep(step);live();if(!paused)left-=step;}await checkpoint();};
+  try{
+    const settings=await send({type:'settingsStatus'});live();
+    if(!settings.configured)throw new Error('AuraSolve Cloud is offline. Check Railway, then try again.');
+    if(mode==='autopilot'){
+      const limit=Number($('question-limit').value),budget=Number($('solve-budget').value);
+      let completed=0;
+      await runPilot({request:async message=>{
+        const response=await send(message);live();
+        if(message.type==='pilotOpen')pilotTabId=response.view.tabId;
+        return response;
+      },checkpoint,delay,limit,budget,onEvent:async event=>{
+        live();const v=event.view,p=v.progress;
+        const label=p.current?`Question ${p.current}${p.part?`, Part ${p.part} of ${p.totalParts}`:''}`:'Current question';
+        if(event.kind==='start'){
+          const remaining=p.questions.filter(q=>q.status!=='correct').length;
+          $('progress').max=limit || remaining || 1;
+          status(`${event.resumed?'Resuming':'Starting'} at ${label.toLowerCase()}…`);
         }
-        if(!available)throw new Error('Similar question is not available. Pearson may require another attempt or limit retries.');
-        let changed=false;
-        for(let poll=0;poll<20;poll++){
-          await delay(300);
-          const next=await send({type:'inspect'});
-          if(next.question.hash!==result.question.hash){changed=true;break;}
+        $('progress-label').textContent=label;
+        if(event.kind==='solve'){
+          status(`Solving ${label.toLowerCase()}…`);$('loader').hidden=false;
+          $('pace-status').textContent=`${event.spent} of ${budget} AI solves used`;
         }
-        if(!changed)throw new Error('The similar question did not load. Stopped without reusing the old answer.');
-        similarRetries++;attemptHadError=false;partAttempts=0;i--;continue;
-      }
-      if (outcome?.state !== "correct") throw new Error("AutoPilot stopped. A correct answer was not confirmed.");
-
-      $('progress').value=i;
-      status(i === limit ? limit+(limit===1?" question done.":" questions done.") : "Correct. Continuing…");
-      if (i === limit) break;
-      await checkpoint();
-      await send({type: "next", planId: result.planId});
-      live();
-      let changed = false, stayed=false;
-      for (let poll = 0; poll < 12; poll++) {
-        await delay(500);
-        live();
-        const warning=await send({type:"stayIfIncomplete"});
-        live();
-        if(warning.stayed){stayed=true;break;}
-        const next = await send({type: "inspect"});
-        live();
-        if (next.question.hash !== result.question.hash) { changed = true; break; }
-      }
-      if(stayed){
-        status("Chose No. Continuing the unfinished question…");
-        $('progress').value=Math.max(0,i-1);
-        if(++partAttempts>30)throw new Error("The question still has unfinished steps after repeated attempts.");
-        i--;continue;
-      }
-      if (!changed) throw new Error("The next question did not load.");
-      similarRetries=0;attemptHadError=false;partAttempts=0;
+        if(event.kind==='answer'){
+          $('loader').hidden=true;
+          runLog.push({number:`${p.current || '?'}${p.part?' · Part '+p.part:''}`,result:event.result,outcome:'Not submitted'});
+        }
+        if(event.kind==='pace'){
+          const min=Number($('time-min').value),max=Number($('time-max').value);
+          const seconds=$('speed-run').checked?0:min+($('random-timing').checked?10*Math.floor(Math.random()*((max-min)/10+1)):0);
+          let left=Math.max(0,seconds*1000-(Date.now()-event.started));
+          while(left>0){$('pace-status').textContent=`Submitting in ${Math.ceil(left/1000)}s`;const step=Math.min(250,left);await delay(step);left-=step;}
+        }
+        if(event.kind==='submit'){
+          status('Checking the answer…');if(runLog.length)runLog.at(-1).outcome='Submitted · awaiting feedback';
+        }
+        if(event.kind==='feedback' && runLog.length)runLog.at(-1).outcome=event.outcome==='correct'?'Correct':event.outcome==='incorrect'?'Incorrect':'Step advanced · score pending';
+        if(event.kind==='complete'){$('progress').value=++completed;}
+        const labels={stay:'Choosing No and staying on the unfinished question…',dismiss:'Closing answer feedback…',continue:'Continuing the next part…',similar:'Starting a similar question to improve the score…',question:`Moving to question ${event.number}…`,next:'Moving to the next question…'};
+        if(labels[event.kind])status(labels[event.kind]);
+        if(event.kind==='done'){
+          status(event.all?'All questions in the list are marked correct.':`${event.completed} question${event.completed===1?'':'s'} done.`);
+          $('pace-status').textContent=`${event.spent} of ${budget} AI solves used`;
+        }
+      }});
+    }else{
+      status('Reading the question…');$('loader').hidden=false;
+      const result=await send({type:'solve',mode});await checkpoint();card(result,mode,1);
+      if(mode==='field' && result.solution.supported && result.solution.actions.length && result.solution.confidence>=.85){
+        await send({type:'apply',planId:result.planId});live();status('Field filled. You choose whether to submit.');
+      }else if(mode==='explain')$('status').hidden=true;
+      else status('Fill this one yourself using the explanation.');
     }
-  } catch (error) {
-    if (mine === token) status(`${error.message}${$("results").children.length ? ' Your answer and explanation are below.' : ''}`);
-  } finally {
-    if (mine === token) {setBusy(false);if(mode==='autopilot')breakdown();}
-  }
+  }catch(error){if(mine===token)status(error.message);}
+  finally{if(mine===token){$('loader').hidden=true;setBusy(false);if(mode==='autopilot')breakdown();}}
 }
 
 async function choose(mode) {
   if (busy) return;
+  pilotTabId=null;
   document.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   $("results").replaceChildren();
   $("status").hidden = false;
@@ -235,6 +154,7 @@ async function choose(mode) {
   try {
     if(mode==='field')await send({type:'prepareField'});
     const info = await send({type: "inspect"});
+    if(mode==='autopilot')pilotTabId=info.tabId;
     if (info.signed) { setBusy(false); return await run(mode); }
     pending = mode;
     $("consent").hidden = false;
@@ -290,7 +210,7 @@ $("stop").onclick = async () => {
   $("consent").hidden = true;
   setBusy(false);
   try { await send({type: "stop"}); } catch {}
-  status("Stopped.");
+  $("loader").hidden=true;status("Stopped. Progress is saved; start again to resume from this page.");
   breakdown();
 };
 
@@ -304,7 +224,7 @@ try {
 }
 
 
-$('close').onclick=async()=>{const win=await chrome.windows.getCurrent();await chrome.sidePanel.close({windowId:win.id});};
+$('close').onclick=async()=>{if(busy){token++;await send({type:'stop'}).catch(()=>{});}const win=await chrome.windows.getCurrent();await chrome.sidePanel.close({windowId:win.id});};
 
 let inspectionReport=null;
 $('inspect-page').onclick=async()=>{

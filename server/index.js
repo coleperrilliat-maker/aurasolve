@@ -1,3 +1,4 @@
+import {BUILD_VERSION} from '../src/shared/version.js';
 import http from "node:http";
 import {solveWithOpenAI, DEFAULT_MODEL} from "./openai.js";
 
@@ -65,6 +66,7 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, 200, {
       ok: true,
       service: "aurasolve",
+      version: BUILD_VERSION,
       model: process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL,
       keyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
     });

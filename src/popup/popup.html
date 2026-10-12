@@ -19,14 +19,16 @@
     <button data-mode="explain" type="button">Explain now</button>
   </div>
   <section id="autopilot-settings" class="pilot-panel" hidden>
-    <div class="pilot-heading"><div><h2>AutoPilot</h2><p>Your practice, at your pace.</p></div><span class="pilot-badge">Practice</span></div>
+    <div class="pilot-heading"><div><h2>AutoPilot</h2><p>Resume at the current question and part.</p></div><span class="pilot-badge">Practice</span></div>
     <label class="setting-row" for="speed-run"><span><strong>Speed run</strong><small>No extra wait between questions</small></span><input id="speed-run" type="checkbox" role="switch"></label>
     <div id="timing-settings">
       <label class="setting-row" for="random-timing"><span>Randomize timing</span><input id="random-timing" type="checkbox" checked></label>
       <div class="timing-grid"><label>Minimum<select id="time-min"></select></label><label id="max-label">Maximum<select id="time-max"></select></label></div>
       <p class="setting-hint">Time per question in 10-second steps. Solving may take longer.</p>
     </div>
-    <label class="setting-row" for="question-limit"><span>Questions per run</span><select id="question-limit"><option>1</option><option selected>5</option><option>10</option><option>20</option></select></label>
+    <label class="setting-row" for="question-limit"><span>Questions per run</span><select id="question-limit"><option value="0" selected>All unfinished</option><option>1</option><option>5</option><option>10</option><option>20</option></select></label>
+    <label class="setting-row" for="solve-budget"><span>AI solves per assignment</span><select id="solve-budget"><option>50</option><option selected>200</option><option>500</option></select></label>
+    <p class="setting-hint">Keep this tab and panel open. Progress and spending limits are saved for resuming. Up to two model calls per solve; basic arithmetic can be checked locally.</p>
     <button id="start-pilot" class="primary" type="button">Start AutoPilot</button>
     <div id="pilot-progress" hidden><div class="progress-heading"><span id="progress-label">Ready</span><button id="pause" type="button" aria-label="Pause AutoPilot" title="Pause AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button></div><progress id="progress" max="5" value="0"></progress><p id="pace-status" class="setting-hint" aria-live="polite"></p></div>
   </section>

@@ -201,3 +201,26 @@ test('feedback in an intermediate frame is found and its OK is clicked',async()=
   assert.equal((await request({type:'continuation',planId})).data.controls.submit,1);
  }finally{chrome.scripting.executeScript=original;}
 });
+
+const panelRequest=message=>new Promise(resolve=>listener(message,{id:'unit-test'},resolve));
+test('AutoPilot pins its tab, rejects stale navigation, and rejects replaced runs',async()=>{
+ const originalGet=chrome.tabs.get;
+ chrome.tabs.get=async id=>({id,windowId:1,active:true});
+ state.player={progress:{current:21,part:3,totalParts:3,status:'partial',questions:[{number:21,status:'partial'}]},controls:{submit:1,submitPresent:1,next:1},incompleteWarning:false};
+ try{
+  await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+  const opened=await panelRequest({type:'pilotOpen'});assert.equal(opened.ok,true);
+  const run=opened.data,base={pilotTabId:1,pilotRunId:run.runId};
+  assert.equal(run.view.progress.current,21);assert.equal(run.view.controls.submitPresent,1);
+  const {expectedPage}=await import('../src/shared/pilot-engine.js');
+  const wrong=await panelRequest({...base,type:'pilotAction',expected:expectedPage(run.view),action:{kind:'next'}});
+  assert.equal(wrong.ok,false);assert.match(wrong.error,/no longer ready/);
+  const stale=await panelRequest({...base,type:'solve',mode:'autopilot',expected:{...expectedPage(run.view),hash:'stale'}});
+  assert.equal(stale.ok,false);assert.match(stale.error,/question changed/);
+  chrome.tabs.get=async id=>({id,windowId:1,active:false});
+  assert.match((await panelRequest({...base,type:'pilotRead'})).error,/Return to/);
+  chrome.tabs.get=async id=>({id,windowId:1,active:true});
+  await panelRequest({type:'pilotOpen',pilotTabId:1});
+  assert.match((await panelRequest({...base,type:'pilotRead'})).error,/replaced or stopped/);
+ }finally{chrome.tabs.get=originalGet;delete state.player;}
+});

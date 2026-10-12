@@ -17,7 +17,7 @@ Users install the extension and start practicing. **No API key in Chrome.** Your
 2. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select `aurasolve`.
 3. In Railway → **Variables**, add:
    - `OPENAI_API_KEY` — your OpenAI API key
-   - `OPENAI_MODEL` — e.g. `gpt-4.1-mini`
+   - `OPENAI_MODEL` — e.g. `gpt-4.1`
    - `CLIENT_KEY` — a long random string (e.g. run `openssl rand -hex 32`)
 4. Railway → **Settings** → **Networking** → **Generate Domain**. Copy the public URL (e.g. `https://aurasolve-production.up.railway.app`).
 5. Set Railway variable `CLIENT_KEY` to match `src/shared/config.js` (already configured for `aurasolve-production.up.railway.app`).
@@ -53,19 +53,21 @@ No OpenAI setup in the browser. Usage is billed through your Railway server.
 
 ## Modes
 
-**✈️ AutoPilot:** On a clearly identified practice page, check the practice-only declaration and type your name. AuraSolve solves one question, fills supported answers, clicks the page's check/submit button, displays a tutor paragraph, and waits for explicit correct feedback. After a short reading pause, it clicks Next. Each run is limited to five questions. A wrong answer, uncertain result, unsupported control, changed page, missing feedback, expired confirmation, or ambiguous button stops the run. It does not retry incorrect answers automatically. Navigating the full page ends the current run.
+**AutoPilot:** Starts at the question and part currently visible. The default **All unfinished** run follows the Pearson question list, skips questions already marked correct, and returns to earlier incomplete questions after reaching the end. It uses Continue for another part, closes answer feedback with OK, and chooses No on the specific incomplete-question warning. Partial/incorrect completed questions use Similar question, up to five times, to try for full credit. It never clicks Save best score or final assignment Submit.
 
-**✍️ Fill a field:** Click a supported field on the page, then choose Fill a field. Confirm practice status; the answer and explanation appear, then the selected supported field is filled. Review it before clicking Submit & next. When there is exactly one supported text field or dropdown, it is selected automatically. Graph points and draggable items count as fields only when an explicit adapter exists.
+AutoPilot keeps a local checkpoint before submitting, so a reopened panel reads the live page before continuing. If a submission's result is uncertain, it waits and pauses instead of replaying it. Keep the question tab and panel open while running; reopen and start again to resume after closing them. A new run is bound to its original tab and invalidates older runs.
 
-**💡 Explain:** Reads the detected question and returns a paragraph explaining the solution without filling, submitting, or advancing.
+**Fill answers:** The inline button fills all supported active answer fields and shows explanations without opening another popup. It needs no signature. Disabled/completed fields are excluded.
 
-Closing the sidebar during a running request, switching tabs, or pressing Stop cancels further work. Already completed fills or submissions cannot be undone by Stop. A synchronous fill-and-submit operation already in progress may finish before cancellation is processed.
+**Explain:** Reads the current question and returns a worked explanation without changing answers.
+
+**Cost controls:** Navigation and score reading make no AI calls. The default assignment budget is 200 solves (select 50, 200, or 500); usage and retry counts survive a panel reopen. Each solve uses at most two model calls. A narrow arithmetic parser checks unambiguous calculations locally after one model call; other actionable answers retain independent verification. Repeated rejected answers are blocked, and page feedback is provided when reconsidering a wrong answer. These checks do not guarantee answer accuracy. For an account-wide dollar limit, configure the API account's budget separately.
+
+Pause waits before the next action. Stop cancels pending model requests and prevents further actions, but cannot undo a submission already sent. Unsupported controls, unreadable figures, exhausted attempts, missing feedback, or model disagreement pause with a reason.
 
 ## Honor code
 
-AuraSolve does not try to guess whether a page is graded. Before **Fill a field** or **AutoPilot** runs, you must type exactly **This is not a graded homework assignment** and sign your name. Capitalization, extra spaces, and a trailing period are ignored; any other wording is rejected. **Explain** never needs a signature because it doesn't change the page.
-
-The signature is tied to the page, lasts 30 minutes, and is cleared on Stop or when the tab closes. You are responsible for using fill and AutoPilot only where your course allows it.
+AutoPilot requires typing **This is not a graded homework assignment** and signing your name. Capitalization, extra spaces, and a trailing period are ignored. The signature is tied to this page for up to four hours, and cleared on Stop or tab close. Fill and Explain do not require it. Use the tool where your course permits it.
 
 ## Supported controls and limits
 
@@ -76,12 +78,12 @@ The signature is tied to the page, lasts 30 minutes, and is cleared on Stop or w
 | Graphs | One point on an explicit coordinate-grid adapter; not arbitrary graph canvases, lines, curves, or regions |
 | Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment |
 | Pearson detection | Common question-container selectors, text, accessible math labels, and accessible matching frames |
-| Math editors | Capability-checked MathQuill API and Pearson-style Dojo widgets with a real value setter; unsupported proprietary editors remain manual. Not verified on live Pearson. |
+| Math editors | Capability-checked MathQuill API and Pearson-style Dojo widgets with a real value setter; unsupported proprietary editors remain manual. DOM detection inspected on a live MyLab player; automated writes verified on local fixtures. |
 | Pearson graph widgets | Proprietary graph/drag controls still need dedicated adapters |
 | Images | Text/alt labels plus a question screenshot for visual problems when capture succeeds |
-| AutoPilot | Exactly identified check/submit and next controls in the question or parent frame; visible correctness feedback required |
+| AutoPilot | Pearson multipart progress, per-question correctness, all-frame feedback, Continue, Similar question, and remaining-question navigation; ambiguous states pause |
 
-This is a working implementation with a local practice lab, not universal automation for every Pearson question. It has not been tested against a signed-in live Pearson activity. Detection prefers recognized question containers and falls back to a container around visible answer controls. If several questions are visible, click a field in the intended question to disambiguate.
+This is a working implementation with a local practice lab, not universal automation for every Pearson question. The live Pearson DOM was inspected read-only; the new submission flow was exercised on browser fixtures, not a complete live assignment. Detection prefers recognized question containers and falls back to a container around visible answer controls. If several questions are visible, click a field in the intended question to disambiguate.
 
 ## Try the included practice lab
 
@@ -92,7 +94,7 @@ npm start          # AuraSolve Cloud API (required for AI)
 npm run demo       # practice lab on http://localhost:4318
 ```
 
-Open `http://localhost:4318`. There are five questions: a text answer, a radio choice, a plotted point, an even/odd drag, and a dropdown. They are real local practice controls, not prerecorded results. Toggle **Simulate graded assignment** to verify the mutation gate. No packages need to be installed. Press Ctrl+C in the terminal to stop the lab.
+Open `http://localhost:4318`. There are five questions: a text answer, a radio choice, a plotted point, an even/odd drag, and a dropdown. They are real local practice controls, not prerecorded results. The title toggle changes the demo label; the signed declaration, not automatic title classification, controls AutoPilot consent. No packages need to be installed. Press Ctrl+C in the terminal to stop the lab.
 
 ## Organization
 
@@ -104,7 +106,11 @@ src/background/worker.js       Request routing, consent, cancellation, plans
 src/background/api.js          Extension → Railway client
 src/content/detection.js       Question, field, feedback, and button detection
 src/content/actions.js         Validated field changes and practice navigation
-src/content/ui.js              Sidebar and bounded AutoPilot controller
+src/content/ui.js              Inline Fill answers button
+src/shared/pilot-engine.js      Durable AutoPilot controller
+src/shared/player-state.js      Question/part navigation decisions
+src/content/player.js           Pearson progress and question-list reader
+src/popup/popup.js              AutoPilot controls and results
 src/content/ui.css             White-and-blue isolated sidebar styling
 src/content/app.js             Content runtime assembly
 src/content/bootstrap.js       Content module loader
@@ -131,7 +137,7 @@ Do not add generic clicks returned by the model. Action targets must exist in th
 - No accounts, subscriptions, or analytics in the extension.
 - Detected questions and field descriptors are sent to your Railway server, then to OpenAI. Conversation storage is disabled in the API request.
 - The OpenAI API key lives only on Railway, not in Chrome.
-- The user signature stays in Chrome session storage. Tutor notes stay in the current tab's sidebar and are lost on refresh.
+- The user signature stays in Chrome session storage. Run checkpoints (question IDs, attempt counts, and recent rejected answers) stay in trusted extension local storage for resuming. Screenshots and credentials are not saved in those checkpoints.
 - Automatic content-script access is limited to the listed Pearson-family domains and the local lab. The toolbar uses activeTab permission for other pages.
 
 ## Verification
@@ -141,7 +147,7 @@ npm test
 npm run check
 ```
 
-Tests cover practice blocking, consent expiry/page binding, model-action validation, graph bounds, native field events, changed-question rejection, complete-field submission, hidden-tab stopping, Railway API client behavior, and mocked worker flows. These do not replace live browser/site integration testing. See `TESTING.md` for build results.
+Tests cover multipart resume/retries, cost limits, consent expiry/page binding, model-action validation, graph bounds, native field events, changed-question rejection, complete-field submission, hidden-tab stopping, Railway API client behavior, and mocked worker flows. These do not replace live browser/site integration testing. See `TESTING.md` for build results.
 
 ## Troubleshooting
 

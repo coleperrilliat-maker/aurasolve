@@ -1,3 +1,4 @@
+import {goToQuestion} from "./player.js";
 import {clickSaraChoice} from './sara.js';
 import {snapshot,elementFor,visible,findButton,feedback} from "./detection.js";
 import {validateSolution} from "../shared/solution.js";
@@ -85,7 +86,7 @@ export async function execute(plan) {
 }
 export function clickControl(kind) {
   guard();
-  if (!['submit','next','similar'].includes(kind)) throw new Error('Unknown control.');
+  if (!['submit','next','similar','continue'].includes(kind)) throw new Error('Unknown control.');
   findButton(kind).click();
   return {clicked:true};
 }
@@ -109,7 +110,7 @@ export async function advance() {
 
 export function dismissFeedback(){
   guard();
-  const dialogs=[...document.querySelectorAll('[role="dialog"],.dijitDialog,.feedbackDialog,.correctDialog,[role="alert"]')].filter(visible)
+  const dialogs=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.correctDialog,[role="alert"]')].filter(visible)
     .filter(el=>/incorrect|correct|excellent|well done|great job|fantastic|nice work|try again/i.test(el.innerText));
   const buttons=[...new Set(dialogs.flatMap(dialog=>[...dialog.querySelectorAll('button,[role="button"],input[type="button"]')]))]
     .filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].some(value=>/^(ok|okay)$/i.test((value || '').trim())));
@@ -131,3 +132,5 @@ export function stayOnIncompleteQuestion(){
   buttons[0].click();
   return {stayed:true};
 }
+
+export function navigateQuestion(number){guard();return goToQuestion(document,number,visible);}

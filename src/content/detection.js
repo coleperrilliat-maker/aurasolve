@@ -1,3 +1,5 @@
+import {readPlayer} from "./player.js";
+import {controlKind} from "../shared/player-state.js";
 import {saraChoices} from './sara.js';
 import {fingerprint} from "../shared/policy.js";
 const ids = new WeakMap(), elements = new Map();
@@ -127,11 +129,12 @@ export function snapshot() {
   readable?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   readable?.querySelectorAll('[contenteditable], [data-aura-editor], textarea').forEach(el=>{el.textContent='';});
   const question = root ? clean((readable ? readable.textContent : root.innerText) + " " + [...root.querySelectorAll('math, img[alt], [aria-label]')].filter(el=>!el.closest?.('[data-aura-editor]')).map(el=>el.getAttribute('alt') || el.getAttribute('aria-label') || el.textContent).join(" ")).slice(0,16000) : "";
-  const hash = fingerprint(JSON.stringify({question,fields:fields.map(({context,...field})=>field),drops}));
+  const figures=root ? [...root.querySelectorAll('img,svg')].map(el=>el.tagName.toLowerCase()==='img'?{src:el.currentSrc || el.getAttribute('src'),alt:el.getAttribute('alt')}:{svg:el.outerHTML?.slice(0,24000)}) : [];
+  const hash = fingerprint(JSON.stringify({question,figures,fields:fields.map(({context,...field})=>field),drops}));
   const prompt = root?.cloneNode?.(true);
   prompt?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   prompt?.querySelectorAll('input, textarea, select, [contenteditable], [data-aura-editor], [role="textbox"], [role="alert"], [data-aura-feedback], .feedback, .answer-feedback').forEach(el=>el.remove());
-  const promptHash = fingerprint(clean(prompt?.textContent || question));
+  const promptHash = fingerprint(JSON.stringify({text:clean(prompt?.textContent || question),figures}));
   const visual = Boolean(root?.querySelector('img, svg, canvas, figure, object, embed') || fields.some(f=>f.kind==='radio' || f.kind==='checkbox') || (root && [...root.querySelectorAll('*')].some(el=>visible(el) && getComputedStyle(el).backgroundImage.includes('url('))) || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));
   const box = root?.getBoundingClientRect?.();
   const selectedElement = elementFor(selected);
@@ -139,21 +142,24 @@ export function snapshot() {
   const scalar=fields.filter(f=>['text','select','point','drag'].includes(f.kind));
   const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
   const autoSelected=(empty || scalar[0])?.id || null;
-  return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{submit:findButtons('submit').length,next:findButtons('next').length,similar:findButtons('similar').length},
+  return {player:readPlayer(document,visible),url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{continue:findButtons('continue').length,submit:findButtons('submit').length,next:findButtons('next').length,similar:findButtons('similar').length},
     fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
 export function feedback() {
-  const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"], .feedbackDialog, .correctDialog, .responses, .xlFeedback, [role="dialog"], .dijitDialog')].filter(visible);
-  const text = clean(nodes.map(el=>el.innerText).join(" "));
-  if (/\b(incorrect|wrong|try again|not correct)\b/i.test(text)) return {state:"incorrect",text};
-  if (/\b(correct|well done|great job|excellent|fantastic|nice work)\b/i.test(text)) return {state:"correct",text};
-  return {state:"unknown",text};
+  const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"], .feedbackDialog, .correctDialog, .responses, .xlFeedback, [role="dialog"], [role="alertdialog"], .dijitDialog')].filter(visible);
+  const dialogs=nodes.filter(el=>el.matches?.('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.correctDialog') || el.querySelector?.('button,[role="button"]'));
+  const text = clean((dialogs.length?dialogs:nodes).map(el=>el.innerText).join(" "));
+  const modal=dialogs.length>0;
+  if (/\b(incorrect|wrong|try again|not correct)\b/i.test(text)) return {state:"incorrect",text,modal};
+  if (/\b(correct|well done|great job|excellent|fantastic|nice work)\b/i.test(text)) return {state:"correct",text,modal};
+  return {state:"unknown",text,modal};
 }
 export function findButtons(kind) {
-  const patterns = kind === "submit" ? /^(check answer|check my answer|final check|submit answer|submit|check)$/i : kind==='similar' ? /^(similar question|similar exercise|try again)$/i : /^(next|next question|next problem|continue)$/i;
-  const command = kind === 'submit' ? 'checkanswer' : kind==='similar'?'similarquestion':'next';
-  return [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && (el.getAttribute('command')?.toLowerCase() === command || [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].some(text=>patterns.test(clean(text)))));
+  return [...document.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"]')].filter(el=>
+    visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' &&
+    controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '')===kind);
+
 }
 export function findButton(kind) {
   const buttons = findButtons(kind);

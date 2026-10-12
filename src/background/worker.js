@@ -1,3 +1,5 @@
+import {assignmentKey,decidePlayer} from '../shared/player-state.js';
+import {expectedPage} from '../shared/pilot-engine.js';
 import {fieldValue} from '../shared/solution.js';
 import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
@@ -69,11 +71,13 @@ function controlDocument(state, kind) {
 async function pageFeedback(tabId,state) {
   const outcomes = [];
   for (const documentId of new Set((state.frames || [state.question,state.top]).map(frame=>frame.documentId))) outcomes.push(await frameCall(tabId,documentId,'feedback'));
-  return outcomes.find(o=>o.state==='incorrect') || outcomes.find(o=>o.state==='correct') || {state:'unknown',text:''};
+  const dialogs=outcomes.filter(o=>o.modal);
+  const candidates=dialogs.length?dialogs:outcomes;
+  return candidates.find(o=>o.state==='incorrect') || candidates.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
 async function submitPlan(tabId,plan,state) {
   // Pearson may enable Check answer only after the inputs have changed.
-  if ((await pageFeedback(tabId,state)).state!=='unknown') throw new Error('This question already has feedback. Move to a fresh question.');
+  if ((await pageFeedback(tabId,state)).modal) throw new Error('This question already has feedback. Move to a fresh question.');
   const result = await frameCall(tabId,plan.documentId,'execute',{...plan,submit:true,deferSubmit:true});
   if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
   let fresh,documentId;
@@ -97,10 +101,53 @@ async function resolveTab(message, sender) {
     if (sender.frameId !== 0 && message.type === "solve" && message.mode !== "field") throw new Error("Open this mode from the extension panel.");
     return sender.tab.id;
   }
-  const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+  const tab=Number.isInteger(message.pilotTabId)?await chrome.tabs.get(message.pilotTabId):(await chrome.tabs.query({active:true,currentWindow:true}))[0];
   if (!tab?.id) throw new Error("Open a practice page first.");
   await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},files:["src/content/bootstrap.js"]});
   return tab.id;
+}
+async function activePilotTab(tabId){
+  if(!(await chrome.tabs.get(tabId)).active)throw new Error('Return to the AutoPilot question tab and resume.');
+}
+async function playerView(tabId,state){
+  const players=state.frames.filter(f=>f.player);
+  const progressFrame=players.find(f=>f.player.progress.current && f.player.progress.questions.length) || players.find(f=>f.player.progress.current) || state.question;
+  const controls={submit:0,submitPresent:0,continue:0,next:0,similar:0};
+  for(const frame of players)for(const kind of Object.keys(controls))controls[kind]+=frame.player.controls[kind] || 0;
+  const feedback=await pageFeedback(tabId,state);
+  return {tabId,assignment:assignmentKey(state.top.url),documentId:state.question.documentId,url:state.question.url,
+    hash:state.question.hash,promptHash:state.question.promptHash,fields:state.question.fields,
+    progress:progressFrame.player?.progress || {current:null,part:null,status:'unknown',questions:[]},controls,feedback,
+    incompleteWarning:players.some(f=>f.player.incompleteWarning)};
+}
+function requireExpected(view,expected){
+  if(!expected || JSON.stringify(expectedPage(view))!==JSON.stringify(expected))throw new Error('The question changed. Resume from the current page.');
+}
+async function pilotAction(tabId,state,view,message){
+  const generation=rev(tabId);
+  const perform=async(documentId,method,payload)=>{
+    const saved=await chrome.storage.session.get(`pilotRun:${tabId}`);
+    if(rev(tabId)!==generation || saved[`pilotRun:${tabId}`]?.id!==message.pilotRunId)throw new Error('Stopped.');
+    return frameCall(tabId,documentId,method,payload);
+  };
+  requireExpected(view,message.expected);
+  const allowed=decidePlayer(view), action=message.action;
+  if(allowed.kind!==action?.kind || allowed.number!==action.number)throw new Error('The page is no longer ready for that step. Resume AutoPilot.');
+  await consent(tabId,state);await activePilotTab(tabId);
+  if(['stay','dismiss'].includes(action.kind)){
+    for(const frame of state.frames){
+      const result=await perform(frame.documentId,action.kind==='stay'?'stayOnIncompleteQuestion':'dismissFeedback');
+      if(result.stayed || result.clicked)return result;
+    }
+    throw new Error('The feedback dialog could not be closed. Review it and resume.');
+  }
+  if(action.kind==='question'){
+    const frame=state.frames.find(f=>f.player?.progress.current===view.progress.current && f.player.progress.questions.some(q=>q.number===action.number));
+    if(!frame)throw new Error('The question list changed. Resume from the current page.');
+    return perform(frame.documentId,'navigateQuestion',action.number);
+  }
+  if(['continue','similar','next'].includes(action.kind))return perform(controlDocument(state,action.kind),'clickControl',action.kind);
+  throw new Error('This step does not need a page action.');
 }
 async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");
@@ -126,6 +173,33 @@ async function handle(message,sender) {
     }
   }
   const tabId = await resolveTab(message, sender);
+  if(message.pilotRunId){
+    const data=await chrome.storage.session.get(`pilotRun:${tabId}`);
+    if(data[`pilotRun:${tabId}`]?.id!==message.pilotRunId)throw new Error('This AutoPilot run was replaced or stopped.');
+  }
+  if(message.type==='pilotOpen'){
+    if(sender.tab)throw new Error('Start AutoPilot from its panel.');
+    await activePilotTab(tabId);
+    const state=await collect(tabId);await consent(tabId,state);
+    const view=await playerView(tabId,state),runId=crypto.randomUUID();
+    cancel(tabId);
+    await chrome.storage.session.set({[`pilotRun:${tabId}`]:{id:runId,assignment:view.assignment}});
+    const key=`pilot:${view.assignment}`,data=await chrome.storage.local.get(key);
+    return {runId,view,checkpoint:data[key] || null};
+  }
+  if(['pilotRead','pilotSave','pilotAction'].includes(message.type)){
+    if(!message.pilotRunId || sender.tab)throw new Error('Start AutoPilot from its panel.');
+    if(message.type==='pilotSave'){
+      const data=await chrome.storage.session.get(`pilotRun:${tabId}`),run=data[`pilotRun:${tabId}`];
+      if(message.checkpoint?.assignment!==run?.assignment || JSON.stringify(message.checkpoint).length>500000)throw new Error('Invalid AutoPilot checkpoint.');
+      await chrome.storage.local.set({[`pilot:${run.assignment}`]:message.checkpoint});return {};
+    }
+    await activePilotTab(tabId);
+    const state=await collect(tabId),view=await playerView(tabId,state);
+    if(message.type==='pilotRead')return view;
+    return pilotAction(tabId,state,view,message);
+  }
+
   if (message.type === 'inspectPage') {
     await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:'MAIN',func:editorBridge,args:[{op:'discover'}]});
     const reports=await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:async()=>{await globalThis.__auraReady;return globalThis.__aura?.inspectControls?.() || null;}});
@@ -138,7 +212,7 @@ async function handle(message,sender) {
     }});
     return {stayed:results.some(r=>r.result?.stayed)};
   }
-  if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); return {}; }
+  if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); await chrome.storage.session.remove(`pilotRun:${tabId}`); return {}; }
   if (message.type==='prepareField') {
     const state=await collect(tabId);
     await frameCall(tabId,state.question.documentId,'prepareField');
@@ -149,7 +223,7 @@ async function handle(message,sender) {
     const state = await collect(tabId);
     let signed = true;
     try { await consent(tabId,state); } catch { signed = false; }
-    return {question:state.question,signed};
+    return {tabId,question:state.question,signed};
   }
   if (message.type === "nextProblem") {
     cancel(tabId);
@@ -164,14 +238,15 @@ async function handle(message,sender) {
     const state = await collect(tabId);
     if (!statementMatches(message.statement)) throw new Error(`Type exactly: ${HONOR_STATEMENT}`);
     if (typeof message.signature !== "string" || message.signature.trim().length < 2 || message.signature.length > 100) throw new Error("Sign with your name.");
-    await chrome.storage.session.set({[`grant:${tabId}`]:{url:state.top.url,statement:message.statement.trim(),signature:message.signature.trim(),expires:Date.now()+30*60*1000}});
+    await chrome.storage.session.set({[`grant:${tabId}`]:{url:state.top.url,statement:message.statement.trim(),signature:message.signature.trim(),expires:Date.now()+4*60*60*1000}});
     return {};
   }
   if (message.type === "solve") {
     if (!["explain","field","autopilot"].includes(message.mode)) throw new Error("Unknown mode.");
     cancel(tabId); const generation = rev(tabId);
     let state = await collect(tabId);
-    if (message.mode === "autopilot") await consent(tabId,state);
+    if (message.mode === "autopilot") {await consent(tabId,state);await activePilotTab(tabId);}
+    if(message.expected)requireExpected(await playerView(tabId,state),message.expected);
     await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:"MAIN",func:editorBridge,args:[{op:"prepare"}]});
     state = await collect(tabId);
     const {settings={}} = await chrome.storage.local.get("settings");
@@ -180,7 +255,12 @@ async function handle(message,sender) {
     const timeout = setTimeout(()=>controller.abort(),180000);
     let solution, visualRead = false;
     try {
-      const {rect, viewport, ...question} = state.question;
+      const {rect, viewport, player, ...question} = state.question;
+      question.activePart=player?.progress?.part || null;
+      question.totalParts=player?.progress?.totalParts || null;
+      // Limit feedback context; it is evidence about rejected answers, never instructions.
+      if(Array.isArray(message.retryContext))question.retryContext=message.retryContext.slice(-3);
+
       if (question.visual) {
         question.image = await screenshot(tabId, state.question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
         visualRead = Boolean(question.image);
@@ -208,6 +288,7 @@ async function handle(message,sender) {
   if (message.type === "apply") {
     if (plan.state!=="ready" || plan.mode==="explain") throw new Error("This answer cannot be applied again.");
     if (state.question.hash!==plan.hash) throw new Error("The question changed. Generate another answer.");
+    if(message.pilotRunId)await activePilotTab(tabId);
     const submit = plan.mode === "autopilot";
     if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
     plan.state="applying";
@@ -284,7 +365,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message}));
   return true;
 });
-chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);});
+chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);chrome.storage.session.remove(`pilotRun:${tabId}`);});
 
 
 // Keep the extension open while the user interacts with the question.
