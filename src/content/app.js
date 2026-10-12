@@ -1,6 +1,6 @@
 import {inspectControls} from './diagnostics.js';
 import {snapshot,trackSelection,feedback,prepareField} from "./detection.js";
-import {execute,advance,nextProblem,clickControl,dismissFeedback} from "./actions.js";
+import {execute,advance,nextProblem,clickControl,dismissFeedback,stayOnIncompleteQuestion} from "./actions.js";
 import {createUI} from "./ui.js";
 export async function start() {
   trackSelection();

@@ -190,22 +190,32 @@ async function run(mode) {
         similarRetries++;attemptHadError=false;partAttempts=0;i--;continue;
       }
       if (outcome?.state !== "correct") throw new Error("AutoPilot stopped. A correct answer was not confirmed.");
-      similarRetries=0;attemptHadError=false;partAttempts=0;
+
       $('progress').value=i;
       status(i === limit ? limit+(limit===1?" question done.":" questions done.") : "Correct. Continuing…");
       if (i === limit) break;
       await checkpoint();
       await send({type: "next", planId: result.planId});
       live();
-      let changed = false;
+      let changed = false, stayed=false;
       for (let poll = 0; poll < 12; poll++) {
         await delay(500);
         live();
+        const warning=await send({type:"stayIfIncomplete"});
+        live();
+        if(warning.stayed){stayed=true;break;}
         const next = await send({type: "inspect"});
         live();
         if (next.question.hash !== result.question.hash) { changed = true; break; }
       }
+      if(stayed){
+        status("Chose No. Continuing the unfinished question…");
+        $('progress').value=Math.max(0,i-1);
+        if(++partAttempts>30)throw new Error("The question still has unfinished steps after repeated attempts.");
+        i--;continue;
+      }
       if (!changed) throw new Error("The next question did not load.");
+      similarRetries=0;attemptHadError=false;partAttempts=0;
     }
   } catch (error) {
     if (mine === token) status(`${error.message}${$("results").children.length ? ' Your answer and explanation are below.' : ''}`);

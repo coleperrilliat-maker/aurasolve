@@ -117,3 +117,17 @@ export function dismissFeedback(){
   if(!buttons.length)return {clicked:false};
   buttons[0].click();return {clicked:true};
 }
+
+// Match only Pearson's incomplete-question warning, never a generic confirmation.
+export function stayOnIncompleteQuestion(){
+  guard();
+  const dialogs=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"],.dijitDialog,.modal')].filter(visible)
+    .filter(el=>/you have not completed this question/i.test(el.innerText) && /are you sure you want to leave this question/i.test(el.innerText));
+  if(!dialogs.length)return {stayed:false};
+  const buttons=[...new Set(dialogs.flatMap(el=>[...el.querySelectorAll('button,[role="button"],input[type="button"]')]))]
+    .filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' &&
+      [el.innerText,el.value,el.getAttribute('aria-label')].some(text=>/^no$/i.test((text || '').trim())));
+  if(buttons.length!==1)throw new Error('The incomplete-question warning is open. Click No to stay on this question.');
+  buttons[0].click();
+  return {stayed:true};
+}

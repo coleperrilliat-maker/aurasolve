@@ -131,6 +131,13 @@ async function handle(message,sender) {
     const reports=await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:async()=>{await globalThis.__auraReady;return globalThis.__aura?.inspectControls?.() || null;}});
     return {version:chrome.runtime.getManifest().version,frames:reports.filter(r=>r.result).map(r=>({frameId:r.frameId,...r.result}))};
   }
+  if(message.type==="stayIfIncomplete"){
+    const results=await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:async()=>{
+      await globalThis.__auraReady;
+      return globalThis.__aura?.stayOnIncompleteQuestion?.() || {stayed:false};
+    }});
+    return {stayed:results.some(r=>r.result?.stayed)};
+  }
   if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); return {}; }
   if (message.type==='prepareField') {
     const state=await collect(tabId);
