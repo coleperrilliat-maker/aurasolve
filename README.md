@@ -80,7 +80,7 @@ AutoPilot requires typing **This is not a graded homework assignment** and signi
 | Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment; ARIA drop targets are recognized |
 | Pearson detection | Common question-container selectors, text, accessible math labels, and accessible matching frames |
 | Math editors | Capability-checked MathQuill API and Pearson-style Dojo widgets with a real value setter; unsupported proprietary editors remain manual. DOM detection inspected on a live MyLab player; automated writes verified on local fixtures. |
-| Fill-in menus | Native selects, Dojo widgets, and uniquely linked ARIA listboxes; exact options and the retained selection are verified |
+| Fill-in menus | Native selects, Dojo widgets, ARIA comboboxes/listboxes, and older Pearson popups discovered after opening; exact options and the retained selection are verified |
 | Pearson graph widgets | Proprietary graph/drag controls still need dedicated adapters |
 | Images | Text/alt labels plus a question screenshot for visual problems when capture succeeds |
 | AutoPilot | Pearson multipart progress, per-question correctness, all-frame feedback, Continue, Similar question, and remaining-question navigation; ambiguous states pause |

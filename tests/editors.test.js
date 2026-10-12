@@ -52,3 +52,24 @@ test('an ARIA-linked answer menu is discovered and confirms its selected label',
   assert.deepEqual(JSON.parse(el.dataset.auraOptions),[{value:'Square root',label:'Square root',disabled:false}]);
   assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'Square root'}),{filled:true});
 });
+test('a lazy Pearson dropdown binds to its sole opened popup and retains the choice',async()=>{
+  let open=false;
+  const item={textContent:'Vertical angles',parentElement:{closest:()=>null},classList:{contains:()=>false},
+    getAttribute:()=>null,getClientRects:()=>open?[{}]:[],querySelector:()=>null,click(){el.value='Vertical angles';open=false;}};
+  const menu={dataset:{},getClientRects:()=>open?[{}]:[],querySelectorAll:()=>[item],contains:()=>false};
+  const el={dataset:{},value:'',isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('[role="combobox"]'),getClientRects:()=>[{}],
+    closest:selector=>selector.includes('[data-aura-question]')?{}:null,
+    getAttribute:()=>null,removeAttribute(){},querySelector:()=>null,click(){open=true;},dispatchEvent(){}};
+  globalThis.KeyboardEvent=class {constructor(type,init){this.type=type;Object.assign(this,init);}};
+  globalThis.document={hidden:false,activeElement:null,getElementById:()=>null,createElement:()=>({set innerHTML(value){this.textContent=value;},textContent:''}),
+    querySelectorAll:selector=>selector==='[data-aura-menu-key]'?(menu.dataset.auraMenuKey?[menu]:[]):selector.startsWith('[role="listbox"]')?[menu]:[el]};
+  globalThis.getComputedStyle=()=>({visibility:'visible'});
+  globalThis.window={};
+  await editorBridge({op:'prepare'});
+  editorBridge();
+  assert.equal(el.dataset.auraEditor,'dojo-select');
+  assert.deepEqual(JSON.parse(el.dataset.auraOptions),[{value:'Vertical angles',label:'Vertical angles',disabled:false}]);
+  assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'Vertical angles'}),{filled:true});
+  assert.equal(el.value,'Vertical angles');
+});

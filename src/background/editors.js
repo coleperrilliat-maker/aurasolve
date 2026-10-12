@@ -1,7 +1,8 @@
 // Runs in the page's MAIN world. Only known, live editor APIs are supported;
 // never evaluate model text or infer an editor from its appearance alone.
 export function editorBridge(request = {op: "discover"}) {
-  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], .acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid], [role="combobox"][aria-controls], [aria-haspopup="listbox"][aria-controls]';
+  const dropdownSelector='.acctable .inputcell[role="listbox"], .dijitSelect, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"]';
+  const selector = `.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], ${dropdownSelector}`;
   function adapterFor(el) {
     if (el.matches('.mq-editable-field, .mathquill-editable')) {
       try {
@@ -32,19 +33,47 @@ export function editorBridge(request = {op: "discover"}) {
         return {name:'dojo',read:()=>String(widget.get('value')),write:value=>{widget.focus?.();widget.set('value',value);}};
     } catch {}
     // Pearson also exposes answer dropdowns without a global Dojo registry.
-    // Only use a menu explicitly linked to this control, never a page-wide menu.
-    if (el.matches('.acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid], [role="combobox"][aria-controls], [aria-haspopup="listbox"][aria-controls]')) {
-      const menuItems=()=>{
+    // Prefer an explicit ARIA/Dojo link. For old widgets without one, bind the
+    // control to the sole visible popup created by clicking that control.
+    if (el.matches(dropdownSelector)) {
+      const itemSelector='[role="option"],[role="menuitem"],.dijitMenuItem';
+      const rawItems=menu=>[...menu.querySelectorAll(itemSelector)]
+        .filter(item=>!item.parentElement?.closest(itemSelector));
+      const linkedMenus=()=>{
         const ids=[el.getAttribute('aria-controls'),el.getAttribute('aria-owns'),
-          (el.getAttribute('widgetid') || el.id) && (el.getAttribute('widgetid') || el.id)+'_dropdown']
+          ...[(el.getAttribute('widgetid') || el.id)].filter(Boolean).flatMap(id=>[id+'_dropdown',id+'_menu'])]
           .filter(Boolean).flatMap(id=>id.split(/\s+/));
-        const menus=[...new Set(ids.map(id=>document.getElementById(id)).filter(Boolean))];
+        let menus=[...new Set(ids.map(id=>document.getElementById(id)).filter(menu=>menu && rawItems(menu).length))];
+        if(menus.length)return menus;
+        if(el.dataset.auraMenuKey) {
+          menus=[...document.querySelectorAll('[data-aura-menu-key]')].filter(menu=>menu.dataset.auraMenuKey===el.dataset.auraMenuKey && rawItems(menu).length);
+          if(menus.length)return menus;
+        }
+        const visibleMenus=[...document.querySelectorAll('[role="listbox"],[role="menu"],.dijitMenu,.dijitComboBoxMenuPopup,.dijitPopup')]
+          .filter(menu=>menu!==el && menu.getClientRects().length && getComputedStyle(menu).visibility!=='hidden' && rawItems(menu).length);
+        const innermost=visibleMenus.filter(menu=>!visibleMenus.some(child=>child!==menu && menu.contains(child)));
+        if(innermost.length===1) {
+          const key=el.dataset.auraMenuKey || crypto.randomUUID();
+          el.dataset.auraMenuKey=key;innermost[0].dataset.auraMenuKey=key;
+          return innermost;
+        }
+        return [];
+      };
+      const menuItems=()=>{
+        const menus=linkedMenus();
         if(menus.length!==1)return [];
-        return [...menus[0].querySelectorAll('[role="option"],[role="menuitem"],.dijitMenuItem')]
-          .filter(item=>!item.parentElement?.closest('[role="option"],[role="menuitem"],.dijitMenuItem'));
+        return rawItems(menus[0]);
       };
       const label=item=>(item.querySelector('.dijitMenuItemLabel') || item).textContent.trim();
       const disabled=item=>item.getAttribute('aria-disabled')==='true' || item.classList.contains('dijitDisabled');
+      const read=()=>{
+        const labelNode=el.querySelector('.dijitSelectLabel,[data-dojo-attach-point*="containerNode"],.textbasecell span');
+        return String(el.value ?? el.getAttribute('aria-valuetext') ?? labelNode?.textContent ?? el.textContent).trim();
+      };
+      const open=()=>{
+        const trigger=el.querySelector('.dijitArrowButtonInner,.dijitArrowButton,[data-dojo-attach-point*="titleNode"]') || el;
+        trigger.click();
+      };
       const items=menuItems(),labels=items.map(label);
       let options=[];
       if(items.length && labels.every(Boolean) && new Set(labels).size===labels.length) {
@@ -55,10 +84,10 @@ export function editorBridge(request = {op: "discover"}) {
       }
       if(options.length)return {
         name:'dojo-select',options,
-        read:()=>(el.querySelector('.dijitSelectLabel,.textbasecell span') || el).textContent.trim(),
+        read,
         write:async value=>{
           if(!options.some(o=>o.value===value && !o.disabled))throw new Error('The dropdown option is unavailable.');
-          el.click();
+          open();
           let item;
           for(let attempt=0;attempt<20;attempt++){
             item=menuItems().find(item=>label(item)===value && !disabled(item) && item.getClientRects().length);
@@ -68,7 +97,7 @@ export function editorBridge(request = {op: "discover"}) {
           if(!item)throw new Error('Could not open this answer dropdown. Inspect this page to report its control.');
           item.click();
           for(let attempt=0;attempt<20;attempt++){
-            if((el.querySelector('.dijitSelectLabel,.textbasecell span') || el).textContent.trim()===value)return;
+            if(read()===value)return;
             await new Promise(resolve=>setTimeout(resolve,50));
           }
         }
@@ -81,9 +110,9 @@ export function editorBridge(request = {op: "discover"}) {
     if(document.hidden)throw new Error('The question tab is hidden.');
     const prior=document.activeElement;
     const roots='[data-aura-question],[data-testid="question"],div[id*="xl_player_layout"],.question-content,#questionContent,#question-content,.questionContainer,.question-container,#problem,.problem-content';
-    for(const el of document.querySelectorAll('.acctable .inputcell[role="listbox"],.dijitSelect,[role="combobox"][widgetid],[role="combobox"][aria-controls],[aria-haspopup="listbox"][aria-controls]')){
+    for(const el of document.querySelectorAll(dropdownSelector)){
       if(!el.closest(roots) || !el.getClientRects().length || el.closest('[hidden],[aria-disabled="true"],.disabled,.dijitDisabled') || adapterFor(el))continue;
-      el.click();
+      (el.querySelector('.dijitArrowButtonInner,.dijitArrowButton,[data-dojo-attach-point*="titleNode"]') || el).click();
       for(let attempt=0;attempt<20;attempt++){
         if(adapterFor(el))break;
         await new Promise(resolve=>setTimeout(resolve,50));
