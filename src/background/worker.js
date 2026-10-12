@@ -1,9 +1,18 @@
+import {fieldValue} from '../shared/solution.js';
 import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
+import {editorBridge} from './editors.js';
+import {frameCall} from './frame-call.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map();
-const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"});
+const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
+  const {settings={}}=await chrome.storage.local.get("settings");
+  if(!settings.modelUpgrade128){
+    await chrome.storage.local.set({settings:{...settings,model:!settings.model || settings.model==="gpt-4.1-mini"?"gpt-4.1":settings.model,modelUpgrade128:true}});
+  }
+});
 const rev = id => revisions.get(id) || 0;
 async function collect(tabId) {
+  await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:'MAIN',func:editorBridge,args:[{op:'discover'}]}).catch(()=>{});
   const results = await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:async()=>{
     try { await globalThis.__auraReady; return globalThis.__aura?.snapshot() || null; } catch { return null; }
   }});
@@ -13,26 +22,17 @@ async function collect(tabId) {
   const found = frames.filter(f=>f.question);
   const known = found.filter(f=>!f.fallback);
   const candidates = known.length ? known : found;
-  const focused = candidates.filter(f=>f.selected);
+  const focused = candidates.filter(f=>f.selected && f.selectionSource!=='automatic');
   let options = focused.length === 1 ? focused : candidates;
   // Several guessed containers (e.g. a sidebar form and the question frame): use the one with the most answer controls.
   if (options.length > 1 && !known.length) options = [options.reduce((a,b)=>(b.fields.length-a.fields.length || b.question.length-a.question.length)>0?b:a)];
   if (options.length !== 1) throw new Error(options.length ? "Several questions were found. Click an answer field in the question you want." : "No supported question container was found. This page needs a site adapter; try the included practice lab.");
   return {top,question:options[0],contexts:frames.map(f=>f.context)};
 }
-async function frameCall(tabId, documentId, method, payload) {
-  const result = await chrome.scripting.executeScript({target:{tabId,documentIds:[documentId]},func:async(method,payload)=>{
-    await globalThis.__auraReady;
-    if (!globalThis.__aura) throw new Error("AuraSolve is no longer attached to this page.");
-    return globalThis.__aura[method](payload);
-  },args:[method,payload ?? null]});
-  if (!result[0] || result[0].result == null) throw new Error("The page action failed. Check the page before continuing.");
-  return result[0].result;
-}
-const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,frameIds:[0]},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
+const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,allFrames:true},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
 async function screenshot(tabId, question) {
-  const {windowId, active} = await chrome.tabs.get(tabId);
-  if (!active) throw new Error("Keep the question tab active so AuraSolve can read its diagram.");
+  const {windowId,active} = await chrome.tabs.get(tabId);
+  if(!active)throw new Error("Keep the question tab active so AuraSolve can read its image.");
   await veil(tabId,true);
   let shot;
   try { await new Promise(resolve=>setTimeout(resolve,80)); shot = await chrome.tabs.captureVisibleTab(windowId,{format:"png"}); }
@@ -41,18 +41,12 @@ async function screenshot(tabId, question) {
   if (activeTab?.id !== tabId) throw new Error("The active tab changed during capture. Return to the question and retry.");
   const bitmap = await createImageBitmap(await (await fetch(shot)).blob());
   let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
-  const r = question.rect;
-  // Rects from child frames are relative to the iframe, so only crop for top-frame questions.
-  if (question.frameId === 0 && r && question.viewport) {
-    const scale = bitmap.width / question.viewport, pad = 16 * scale;
-    sx = Math.max(0, r.x * scale - pad); sy = Math.max(0, r.y * scale - pad);
-    sw = Math.min(bitmap.width, (r.x + r.width) * scale + pad) - sx; sh = Math.min(bitmap.height, (r.y + r.height) * scale + pad) - sy;
-    if (sw < 40 || sh < 40) { sx = 0; sy = 0; sw = bitmap.width; sh = bitmap.height; }
-  }
-  const fit = Math.min(1, 2400 / sw, 2400 / sh);
+  // Keep sibling diagram panels and the active answer area together.
+  // A detected input container is not a reliable boundary for the problem.
+  const fit = Math.min(1, 2048 / sw, 2048 / sh);
   const canvas = new OffscreenCanvas(Math.round(sw * fit), Math.round(sh * fit));
   canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-  const bytes = new Uint8Array(await (await canvas.convertToBlob({type:"image/jpeg",quality:.95})).arrayBuffer());
+  const bytes = new Uint8Array(await (await canvas.convertToBlob({type:"image/jpeg",quality:.92})).arrayBuffer());
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return `data:image/jpeg;base64,${btoa(binary)}`;
@@ -66,9 +60,41 @@ function cancel(tabId) {
   jobs.get(tabId)?.abort(); jobs.delete(tabId);
   for (const [id,p] of plans) if (p.tabId===tabId) plans.delete(id);
 }
+function controlDocument(state, kind) {
+  const frames = [state.question, ...(state.top.documentId !== state.question.documentId ? [state.top] : [])];
+  const available = frames.filter(frame=>(frame.controls?.[kind] || 0)>0);
+  if (available.length!==1 || available[0].controls[kind]!==1) throw new Error(`Could not identify exactly one ${kind} button. Your answer and explanation are still available.`);
+  return available[0].documentId;
+}
+async function pageFeedback(tabId,state) {
+  const outcomes = [];
+  for (const documentId of new Set([state.question.documentId,state.top.documentId])) outcomes.push(await frameCall(tabId,documentId,'feedback'));
+  return outcomes.find(o=>o.state==='incorrect') || outcomes.find(o=>o.state==='correct') || {state:'unknown',text:''};
+}
+async function submitPlan(tabId,plan,state) {
+  // Pearson may enable Check answer only after the inputs have changed.
+  if ((await pageFeedback(tabId,state)).state!=='unknown') throw new Error('This question already has feedback. Move to a fresh question.');
+  const result = await frameCall(tabId,plan.documentId,'execute',{...plan,submit:true,deferSubmit:true});
+  if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
+  let fresh,documentId;
+  for(let attempt=0;attempt<20;attempt++){
+    if(plan.generation!==rev(tabId))throw new Error('Stopped.');
+    fresh=await collect(tabId);
+    if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash)throw new Error('The question changed. Review the filled answer manually.');
+    const count=[fresh.question,...(fresh.top.documentId!==fresh.question.documentId?[fresh.top]:[])].reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
+    if(count>0){documentId=controlDocument(fresh,'submit');break;}
+    await new Promise(resolve=>setTimeout(resolve,150));
+  }
+  if(!documentId)throw new Error('Answers were filled, but Check answer did not become available. Inspect this page to report its submit control.');
+  await consent(tabId,fresh);
+  if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
+  await frameCall(tabId,documentId,'clickControl','submit');
+  return {...result,submitted:true};
+}
 async function resolveTab(message, sender) {
   if (sender.tab?.id != null) {
-    if (sender.frameId !== 0) throw new Error("Open AuraSolve on a web page first.");
+    if (sender.frameId !== 0 && !["prepareField","solve","apply"].includes(message.type)) throw new Error("Open AuraSolve on a web page first.");
+    if (sender.frameId !== 0 && message.type === "solve" && message.mode !== "field") throw new Error("Open this mode from the extension panel.");
     return sender.tab.id;
   }
   const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
@@ -78,17 +104,40 @@ async function resolveTab(message, sender) {
 }
 async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");
+  if (message.type==='writeEditor') {
+    const tabId=sender.tab?.id, plan=plans.get(message.planId);
+    if (!plan || plan.tabId!==tabId || plan.documentId!==sender.documentId || !['applying','submitting'].includes(plan.state) || plan.generation!==rev(tabId) || Date.now()-plan.created>10*60*1000) throw new Error('The editor request is no longer active.');
+    const state=await collect(tabId);if(plan.mode!=="field")await consent(tabId,state);
+    if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.hash!==plan.hash) throw new Error('The question changed.');
+    const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
+    if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
+    if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
+    const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:fieldValue(action.value,field)}]});
+    if (!result[0]?.result?.filled) throw new Error('The editor did not confirm the answer.');
+    return result[0].result;
+  }
   if (message.type === "settingsStatus") {
     const {settings={}} = await chrome.storage.local.get("settings");
     try {
       const health = await checkBackend(AbortSignal.timeout(8000));
-      return {configured:health.keyConfigured !== false,model:settings.model || health.model || "gpt-4.1-mini",service:"AuraSolve Cloud"};
+      return {configured:health.keyConfigured !== false,model:settings.model || health.model || "gpt-4.1",service:"AuraSolve Cloud"};
     } catch {
-      return {configured:false,model:settings.model || "gpt-4.1-mini",service:"AuraSolve Cloud"};
+      return {configured:false,model:settings.model || "gpt-4.1",service:"AuraSolve Cloud"};
     }
   }
   const tabId = await resolveTab(message, sender);
+  if (message.type === 'inspectPage') {
+    await chrome.scripting.executeScript({target:{tabId,allFrames:true},world:'MAIN',func:editorBridge,args:[{op:'discover'}]});
+    const reports=await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:async()=>{await globalThis.__auraReady;return globalThis.__aura?.inspectControls?.() || null;}});
+    return {version:chrome.runtime.getManifest().version,frames:reports.filter(r=>r.result).map(r=>({frameId:r.frameId,...r.result}))};
+  }
   if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); return {}; }
+  if (message.type==='prepareField') {
+    const state=await collect(tabId);
+    await frameCall(tabId,state.question.documentId,'prepareField');
+    await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
+    return {};
+  }
   if (message.type === "inspect") {
     const state = await collect(tabId);
     let signed = true;
@@ -114,56 +163,57 @@ async function handle(message,sender) {
   if (message.type === "solve") {
     if (!["explain","field","autopilot"].includes(message.mode)) throw new Error("Unknown mode.");
     cancel(tabId); const generation = rev(tabId);
-    const state = await collect(tabId);
-    if (message.mode !== "explain") await consent(tabId,state);
-    if (message.mode === "field" && !state.question.selected) throw new Error("Click the answer field on the page, then choose Fill this field.");
+    let state = await collect(tabId);
+    if (message.mode === "autopilot") await consent(tabId,state);
+    await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:"MAIN",func:editorBridge,args:[{op:"prepare"}]});
+    state = await collect(tabId);
     const {settings={}} = await chrome.storage.local.get("settings");
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);
     const timeout = setTimeout(()=>controller.abort(),180000);
-    let solution, visualRead=false;
+    let solution, visualRead = false;
     try {
       const {rect, viewport, ...question} = state.question;
       if (question.visual) {
-        try { question.image = await screenshot(tabId, state.question); }
-        catch (error) { throw new Error("Could not read the diagram. " + error.message); }
-        visualRead=Boolean(question.image);
+        question.image = await screenshot(tabId, state.question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
+        visualRead = Boolean(question.image);
         if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
-      const fresh = await collect(tabId);
-      if (fresh.question.hash !== state.question.hash || fresh.question.documentId !== state.question.documentId) throw new Error("The question changed while reading it. Retry on the current question.");
-      solution = await solve(question,message.mode,settings,controller.signal);
+      const fresh=await collect(tabId);
+      if(fresh.question.hash!==state.question.hash || fresh.question.documentId!==state.question.documentId)throw new Error("The question changed while reading it. Please retry.");
+      const missingField=message.mode==='field' && !question.fields.length;
+      solution = await solve(question,missingField?'explain':message.mode==='field'?'autopilot':message.mode,settings,controller.signal);
+      if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const id = crypto.randomUUID();
-    plans.set(id,{tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,visualRead,solution,mode:message.mode,generation,created:Date.now(),state:"ready"});
+    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,visualRead,mode:message.mode,generation,created:Date.now(),state:"ready"});
     return {planId:id,solution,question:state.question};
   }
   const plan = plans.get(message.planId);
   if (!plan || plan.tabId!==tabId || plan.generation!==rev(tabId) || Date.now()-plan.created>10*60*1000) throw new Error("The answer expired or was stopped. Generate a new answer.");
-  const state = await collect(tabId); await consent(tabId,state);
+  const state = await collect(tabId);
+  if (plan.mode!=="field" || message.type!=="apply") await consent(tabId,state);
   if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.url!==plan.url) throw new Error("The practice page changed. Start again.");
   if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
   if (message.type === "apply") {
     if (plan.state!=="ready" || plan.mode==="explain") throw new Error("This answer cannot be applied again.");
     if (state.question.hash!==plan.hash) throw new Error("The question changed. Generate another answer.");
     const submit = plan.mode === "autopilot";
-    if (submit && (await frameCall(tabId,plan.documentId,"feedback")).state!=="unknown") throw new Error("This question already has feedback. Move to a fresh practice question.");
     if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
     plan.state="applying";
-    const result = await frameCall(tabId,plan.documentId,"execute",{...plan,submit});
+    const result = submit ? await submitPlan(tabId,plan,state) : await frameCall(tabId,plan.documentId,"execute",{...plan,submit:false});
     plan.state=submit?"submitted":"filled";
     return result;
   }
   if (message.type === "submitField") {
     if (plan.mode!=="field" || plan.state!=="filled") throw new Error("Fill and review a field before submitting it.");
     if (state.question.hash!==plan.hash) throw new Error("The question changed. Generate another answer.");
-    if ((await frameCall(tabId,plan.documentId,"feedback")).state!=="unknown") throw new Error("This question already has feedback. Move to a fresh practice question.");
     plan.state="submitting";
     try {
-      const result = await frameCall(tabId,plan.documentId,"execute",{...plan,submit:true});
+      const result = await submitPlan(tabId,plan,state);
       plan.state="submitted";
       return result;
     } catch (error) {
@@ -173,12 +223,37 @@ async function handle(message,sender) {
   }
   if (message.type === "feedback") {
     if (plan.state!=="submitted") throw new Error("No submitted question to check.");
-    return frameCall(tabId,plan.documentId,"feedback");
+    const outcome=await pageFeedback(tabId,state);
+    if(outcome.state!=='unknown')plan.verdict=outcome.state;
+    return outcome;
+  }
+  if(message.type==='acknowledge'){
+    if(plan.state!=='submitted')throw new Error('No submitted question to acknowledge.');
+    const outcome=await pageFeedback(tabId,state);
+    if(outcome.state!=='unknown')plan.verdict=outcome.state;
+    if(!['correct','incorrect'].includes(plan.verdict))throw new Error('No answer feedback detected.');
+    for(const documentId of new Set([state.question.documentId,state.top.documentId])){
+      const dismissed=await frameCall(tabId,documentId,'dismissFeedback');
+      if(dismissed.clicked)break;
+    }
+    return {acknowledged:true};
+  }
+  if(message.type==='similar'){
+    if(plan.state!=='submitted' || plan.verdict!=='incorrect')throw new Error('A confirmed incorrect result is required before trying a similar question.');
+    const documentId=controlDocument(state,'similar');
+    if(plan.generation!==rev(tabId))throw new Error('Stopped.');
+    plan.state='advancing';
+    await frameCall(tabId,documentId,'clickControl','similar');
+    return {advanced:true};
   }
   if (message.type === "next") {
     if (plan.state!=="submitted") throw new Error("This question has not been submitted.");
+    if (plan.verdict!=='correct' && (await pageFeedback(tabId,state)).state!=='correct') throw new Error('No correct-answer feedback was detected. Continue manually.');
+    const documentId=controlDocument(state,'next');
+    if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     plan.state="advancing";
-    return frameCall(tabId,plan.documentId,"advance");
+    await frameCall(tabId,documentId,'clickControl','next');
+    return {advanced:true};
   }
   throw new Error("Unknown request.");
 }
@@ -187,3 +262,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   return true;
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);});
+
+
+// Keep the extension open while the user interacts with the question.
+chrome.sidePanel?.setPanelBehavior({openPanelOnActionClick:true}).catch(console.error);

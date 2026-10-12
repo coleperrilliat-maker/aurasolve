@@ -22,3 +22,35 @@ Inspected the user's Chrome Pearson player without changing any answer. The prom
 - Live signed-in Pearson/MyLab pages, their proprietary graph widgets, and custom drag controls.
 
 Before relying on a real practice page, test Explain, then a single field, and then a short AutoPilot run on known ungraded material. Review actual page feedback. The local lab provides repeatable controls for each implemented action family.
+
+
+## 1.13.5 verification
+
+`npm test`: 30 passing Node regression tests, including native inputs, editor API read-back, missing Dojo setters, parent-frame submission/feedback, changed-question rejection, and preservation of LaTeX instructions.
+
+`npm run check`: syntax and manifest entry-point validation.
+
+An optional `node tests/browser-fixtures.mjs` suite covers actual contenteditable input and keeping tutor cards visible on a failed AutoPilot fill. It requires Playwright and its Chromium browser. It could not be executed in the build environment: Chromium was absent and its download returned invalid ZIP data. These browser cases are therefore **unverified**, not passing.
+
+No live signed-in Pearson/MyMathLab or other lab integration was tested. MathQuill/Dojo tests use API doubles; actual sites must expose the supported API.
+
+## 1.13.6 follow-up: Fill field
+
+- `npm test`: 34 tests pass, including tests that execute the real injected page-call function rather than mocking away its exception handling.
+- The three browser fixtures now pass in Chromium 153: real contenteditable writes and stable snapshots; tutor visibility after an AutoPilot failure; and clicking Fill field to write a selected native input, display the explanation, and leave Submit untouched. The AI response and Chrome messaging are stubbed; these are not live Pearson tests.
+- The browser was obtained through a separately installed Chromium package after the Playwright browser download failed. Run `CHROMIUM_PATH=/path/to/chromium node tests/browser-fixtures.mjs` with an installed Chromium, or omit the variable with Playwright's bundled browser installed.
+- Added recognition of Pearson `span.eqEditor[widgetid]` and lookup through the exposed Dojo registry using the widget ID. It still requires a real supported value API; this is not a promise that all Pearson editors work.
+- Removed the generic “The page action failed” wrapper: synchronous and asynchronous page exceptions now retain their original error message, and stale page scripts give a refresh instruction.
+- No signed-in Pearson session was available to reproduce the reported field failure.
+
+## 1.13.7: automatic selection
+
+The Fill-button browser fixture now explicitly avoids focusing or clicking the answer input. It still fills the native input and preserves the explanation without submitting. A fourth Chromium fixture verifies activation of a lazy Pearson-style widget that creates an input on click. These are simulated page fixtures, not a live Pearson verification.
+
+## 1.13.8
+
+37 Node tests pass; four Chromium fixtures pass; syntax/manifest validation passes. Release tests ensure the visible build, manifest and package versions agree and the removed click-first gate is absent from both Fill entry points. The browser suite verifies the visible panel build number. Live signed-in MyMathLab remains unverified.
+
+## 1.13.9: disconnected extension runtime
+
+41 Node tests and five Chromium fixtures pass; syntax/manifest checks pass. A browser fixture removes chrome.runtime after creating the panel, then clicks Fill and verifies a refresh recovery button, a clear reconnect message, and disabled action buttons instead of a sendMessage TypeError. The messaging helper also tests context invalidation, absent replies, successful replies and real application errors. Writes are not retried automatically. This verifies recovery behavior, not live Pearson compatibility.

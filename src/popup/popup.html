@@ -11,13 +11,25 @@
 <body>
   <header>
     <span class="brand"><img src="../../icons/icon-48.png" alt="" width="22" height="22"><strong>AuraSolve</strong></span>
-    <small id="cloud">Checking cloud…</small>
+    <button id="close" type="button">Close</button>
   </header>
+  <small id="cloud">Checking cloud…</small>
   <div class="modes">
-    <button data-mode="autopilot" type="button"><span>✈️</span>AutoPilot</button>
-    <button data-mode="field" type="button"><span>✍️</span>Fill field</button>
-    <button data-mode="explain" type="button"><span>💡</span>Explain</button>
+    <button data-mode="autopilot" type="button">AutoPilot</button>
+    <button data-mode="explain" type="button">Explain now</button>
   </div>
+  <section id="autopilot-settings" class="pilot-panel" hidden>
+    <div class="pilot-heading"><div><h2>AutoPilot</h2><p>Your practice, at your pace.</p></div><span class="pilot-badge">Practice</span></div>
+    <label class="setting-row" for="speed-run"><span><strong>Speed run</strong><small>No extra wait between questions</small></span><input id="speed-run" type="checkbox" role="switch"></label>
+    <div id="timing-settings">
+      <label class="setting-row" for="random-timing"><span>Randomize timing</span><input id="random-timing" type="checkbox" checked></label>
+      <div class="timing-grid"><label>Minimum<select id="time-min"></select></label><label id="max-label">Maximum<select id="time-max"></select></label></div>
+      <p class="setting-hint">Time per question in 10-second steps. Solving may take longer.</p>
+    </div>
+    <label class="setting-row" for="question-limit"><span>Questions per run</span><select id="question-limit"><option>1</option><option selected>5</option><option>10</option><option>20</option></select></label>
+    <button id="start-pilot" class="primary" type="button">Start AutoPilot</button>
+    <div id="pilot-progress" hidden><div class="progress-heading"><span id="progress-label">Ready</span><button id="pause" type="button" aria-label="Pause AutoPilot" title="Pause AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button></div><progress id="progress" max="5" value="0"></progress><p id="pace-status" class="setting-hint" aria-live="polite"></p></div>
+  </section>
   <p id="status" role="status">Open a practice question, then choose a mode.</p>
   <section id="consent" hidden>
     <p class="honor">Honor code: type <b id="phrase"></b></p>
@@ -28,6 +40,8 @@
   <div class="loader-wrap" id="loader" hidden aria-hidden="true"><div class="spinner"></div></div>
   <button id="stop" type="button" class="stop" hidden>Stop</button>
   <div id="results"></div>
+  <details class="inspection"><summary>Troubleshoot this page</summary><p>Inspect the question’s dropdowns, graph controls, and buttons without changing any answers.</p><button id="inspect-page" type="button">Inspect page</button><pre id="inspection-summary" hidden></pre><button id="save-inspection" type="button" hidden>Download inspection report</button></details>
   <script type="module" src="popup.js"></script>
 </body>
 </html>
+

@@ -2,7 +2,7 @@ import {verifiedSolve} from "./verification.js";
 import {solutionSchema, validateSolution} from "../src/shared/solution.js";
 import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS} from "../src/shared/instructions.js";
 
-export const DEFAULT_MODEL = "gpt-4.1-mini";
+export const DEFAULT_MODEL = "gpt-4.1";
 const EFFORTS = ["none", "minimal", "low", "medium", "high"];
 
 async function solveOnce(snapshot, mode, requestedModel, signal, requestedEffort, independent=false) {
@@ -13,7 +13,8 @@ async function solveOnce(snapshot, mode, requestedModel, signal, requestedEffort
   const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort}} : {};
 
   const image = typeof snapshot.image === "string" && snapshot.image.length < 3_500_000 && /^data:image\/(jpeg|png);base64,/.test(snapshot.image) ? snapshot.image : null;
-  if (snapshot.visual && !image) throw new Error("A readable screenshot is required for this diagram. Return to the question and retry.");
+  if(snapshot.image && !image)throw new Error("The question screenshot is invalid or too large. Reduce the browser window size and try again.");
+  if(snapshot.visual && !image)throw new Error("A readable screenshot is required for this diagram.");
   const text = JSON.stringify({
     mode,
     question: snapshot.question,
@@ -76,6 +77,7 @@ async function solveOnce(snapshot, mode, requestedModel, signal, requestedEffort
   }
 }
 
-export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, requestedEffort) {
-  return verifiedSolve((question, runMode, independent)=>solveOnce(question,runMode,requestedModel,signal,requestedEffort,independent),snapshot,mode);
+
+export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,requestedEffort){
+ return verifiedSolve((question,runMode,independent)=>solveOnce(question,runMode,requestedModel,signal,requestedEffort,independent),snapshot,mode);
 }

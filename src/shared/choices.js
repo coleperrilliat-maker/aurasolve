@@ -21,8 +21,9 @@ export function pickedChoices(solution, question) {
   if (listed.length) return listed;
   if (String(solution.answer || "").includes("\n")) return [];
   const byId = new Map(fields.map(f => [f.id, f]));
-  return solution.actions
+  return (solution.actions || [])
     .filter(a => a.kind === "radio" || (a.kind === "checkbox" && a.value === "true"))
     .map(a => byId.get(a.target)?.label?.trim())
     .filter(Boolean);
 }
+

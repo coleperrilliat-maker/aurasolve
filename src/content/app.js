@@ -1,10 +1,12 @@
-import {snapshot,trackSelection,feedback} from "./detection.js";
-import {execute,advance,nextProblem} from "./actions.js";
+import {inspectControls} from './diagnostics.js';
+import {snapshot,trackSelection,feedback,prepareField} from "./detection.js";
+import {execute,advance,nextProblem,clickControl,dismissFeedback} from "./actions.js";
 import {createUI} from "./ui.js";
 export async function start() {
   trackSelection();
-  const ui = window === window.top ? createUI() : null;
-  globalThis.__aura = {snapshot,feedback,execute,advance,nextProblem,open:()=>ui?.open()};
+  const ui = createUI();
+  globalThis.__aura = {inspectControls,snapshot,feedback,execute,advance,nextProblem,clickControl,dismissFeedback,prepareField,open:()=>ui?.open()};
   globalThis.__auraVeil = hidden => ui?.veil(hidden);
   return true;
 }
+

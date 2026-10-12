@@ -1,3 +1,16 @@
+// Plain answer boxes need slash fractions; math-editor APIs retain LaTeX.
+export function fieldValue(value, field) {
+  if (field.kind !== 'text' || field.format === 'latex') return value;
+  let text=value.trim().replace(/^\\[([]|\\[)\]]$/g,'');
+  const atom=s=>/^[+-]?(?:\d+(?:\.\d+)?|[a-zA-Z])$/.test(s.trim())?s.trim():`(${s.trim()})`;
+  for(let i=0;i<12;i++) {
+    const next=text.replace(/\\(?:dfrac|tfrac|frac)\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g,(_,a,b)=>`${atom(a)}/${atom(b)}`);
+    if(next===text)break;
+    text=next;
+  }
+  return text;
+}
+
 export const solutionSchema = {
   type: "object", additionalProperties: false,
   // explanation comes first so the model works the problem before committing to an answer.
@@ -30,9 +43,9 @@ export function validateSolution(solution, snapshot, mode) {
   for (const a of solution.actions) {
     const f = ids.get(a.target);
     if (!f || a.kind !== f.kind || typeof a.value !== "string" || a.value.length > 4000) throw new Error("The solution references an unsupported field.");
+    a.value = fieldValue(a.value, f);
     if (seen.has(a.target)) throw new Error("Duplicate field actions are not supported.");
     seen.add(a.target);
-    if (mode === "field" && a.target !== snapshot.selected) throw new Error("The solution tried to change a different field.");
     if (a.kind === "select" && !f.options.some(o => o.value === a.value && !o.disabled)) throw new Error("The selected option is unavailable.");
     if (a.kind === "checkbox" && !["true","false"].includes(a.value)) throw new Error("Invalid checkbox state.");
     if (a.kind === "point" && (!Number.isFinite(a.x) || !Number.isFinite(a.y) || a.x < f.bounds.xMin || a.x > f.bounds.xMax || a.y < f.bounds.yMin || a.y > f.bounds.yMax)) throw new Error("The graph point is outside the supported grid.");
@@ -40,3 +53,4 @@ export function validateSolution(solution, snapshot, mode) {
   }
   return solution;
 }
+
