@@ -95,3 +95,9 @@ Reviewed Pearson's “MyLab math questions” help page. It describes text/math 
 Added capability-checked support for horizontal ARIA number-line sliders, answer menus with a unique ARIA-linked listbox, native draggable items with explicit drop targets, and richer read-only control diagnostics. Number-line bounds, steps, and retained values are validated. Dropdown options and retained selections are validated. Existing graph and drag writes still require explicit targets and successful read-back; arbitrary graph lines, curves, regions, proprietary canvases, calculator, data, and Show work are not automated.
 
 Validation: `npm test` passed 96 tests; `npm run check` passed; `git diff --check main...HEAD` passed. New regressions cover number-line tick validation, a confirmed number-line write, and an ARIA-linked menu write. These use local DOM doubles, not a live signed-in Pearson assignment.
+
+## 1.16.1 — never click assignment Submit
+
+AutoPilot now requires a visible, explicit per-question label such as `Check answer` before clicking the answer-check control. An unlabeled `command="checkanswer"` is insufficient because Pearson may reuse command metadata. Assignment-level labels including Submit, Finish, Turn in, and Save best score take precedence over conflicting metadata and are rejected.
+
+Validation: `npm test` passed 97 tests; `npm run check` and `git diff --check main...HEAD` passed. The regression covers an unlabeled `checkanswer` command, conflicting `Submit`/`Check answer` labels, assignment Finish/Turn in variants, and the permitted explicit `Check answer` label.
