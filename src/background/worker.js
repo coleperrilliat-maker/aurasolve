@@ -75,25 +75,41 @@ async function pageFeedback(tabId,state) {
   const candidates=dialogs.length?dialogs:outcomes;
   return candidates.find(o=>o.state==='incorrect') || candidates.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
+const fillPlan = (tabId,plan,requireComplete=false) => frameCall(tabId,plan.documentId,'execute',{...plan,submit:false,requireComplete});
+async function prepareAnswers(tabId,state,activate=true) {
+  if(activate)await frameCall(tabId,state.question.documentId,'prepareField');
+  await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
+  return collect(tabId);
+}
 async function submitPlan(tabId,plan,state) {
-  // Pearson may enable Check answer only after the inputs have changed.
-  if ((await pageFeedback(tabId,state)).modal) throw new Error('This question already has feedback. Move to a fresh question.');
-  const result = await frameCall(tabId,plan.documentId,'execute',{...plan,submit:true,deferSubmit:true});
-  if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-  let fresh,documentId;
-  for(let attempt=0;attempt<20;attempt++){
-    if(plan.generation!==rev(tabId))throw new Error('Stopped.');
-    fresh=await collect(tabId);
-    if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash)throw new Error('The question changed. Review the filled answer manually.');
-    const count=(fresh.frames || [fresh.question,fresh.top]).reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
-    if(count>0){documentId=controlDocument(fresh,'submit');break;}
-    await new Promise(resolve=>setTimeout(resolve,150));
+  let submission='not_sent';
+  try {
+    // Fill first, exactly as the Fill button does. Pearson enables Check answer
+    // in response to input/change events, so resolve that button afterwards.
+    if ((await pageFeedback(tabId,state)).modal) throw new Error('This question already has feedback. Move to a fresh question.');
+    const result = await fillPlan(tabId,plan,true);
+    if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
+    let fresh,documentId;
+    for(let attempt=0;attempt<20;attempt++){
+      if(plan.generation!==rev(tabId))throw new Error('Stopped.');
+      fresh=await collect(tabId);
+      if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash)throw new Error('The question changed. Review the filled answer manually.');
+      const count=(fresh.frames || [fresh.question,fresh.top]).reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
+      if(count>0){documentId=controlDocument(fresh,'submit');break;}
+      await new Promise(resolve=>setTimeout(resolve,150));
+    }
+    if(!documentId)throw new Error('Answers were filled, but Check answer did not become available. Inspect this page to report its submit control.');
+    await consent(tabId,fresh);
+    if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
+    // Once dispatched, a lost reply cannot prove that the click did not happen.
+    submission='unknown';
+    const clicked=await frameCall(tabId,documentId,'clickControl','submit');
+    if(!clicked?.clicked)throw new Error('Check answer did not confirm its click. Resume to check page feedback.');
+    return {...result,submitted:true};
+  } catch(error) {
+    error.submission=submission;
+    throw error;
   }
-  if(!documentId)throw new Error('Answers were filled, but Check answer did not become available. Inspect this page to report its submit control.');
-  await consent(tabId,fresh);
-  if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-  await frameCall(tabId,documentId,'clickControl','submit');
-  return {...result,submitted:true};
 }
 async function resolveTab(message, sender) {
   if (sender.tab?.id != null) {
@@ -196,7 +212,13 @@ async function handle(message,sender) {
     }
     await activePilotTab(tabId);
     const state=await collect(tabId),view=await playerView(tabId,state);
-    if(message.type==='pilotRead')return view;
+    if(message.type==='pilotRead'){
+      if(!view.fields.length && view.controls.submitPresent && !view.controls.continue && !view.controls.similar && !view.feedback.modal && !view.incompleteWarning){
+        await consent(tabId,state);
+        return playerView(tabId,await prepareAnswers(tabId,state));
+      }
+      return view;
+    }
     return pilotAction(tabId,state,view,message);
   }
 
@@ -215,8 +237,7 @@ async function handle(message,sender) {
   if (message.type === "stop") { cancel(tabId); await chrome.storage.session.remove(`grant:${tabId}`); await chrome.storage.session.remove(`pilotRun:${tabId}`); return {}; }
   if (message.type==='prepareField') {
     const state=await collect(tabId);
-    await frameCall(tabId,state.question.documentId,'prepareField');
-    await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
+    await prepareAnswers(tabId,state);
     return {};
   }
   if (message.type === "inspect") {
@@ -247,8 +268,7 @@ async function handle(message,sender) {
     let state = await collect(tabId);
     if (message.mode === "autopilot") {await consent(tabId,state);await activePilotTab(tabId);}
     if(message.expected)requireExpected(await playerView(tabId,state),message.expected);
-    await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:"MAIN",func:editorBridge,args:[{op:"prepare"}]});
-    state = await collect(tabId);
+    state=await prepareAnswers(tabId,state,message.mode!=='explain');
     const {settings={}} = await chrome.storage.local.get("settings");
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);
@@ -292,7 +312,7 @@ async function handle(message,sender) {
     const submit = plan.mode === "autopilot";
     if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
     plan.state="applying";
-    const result = submit ? await submitPlan(tabId,plan,state) : await frameCall(tabId,plan.documentId,"execute",{...plan,submit:false});
+    const result = submit ? await submitPlan(tabId,plan,state) : await fillPlan(tabId,plan);
     plan.state=submit?"submitted":"filled";
     return result;
   }
@@ -305,7 +325,7 @@ async function handle(message,sender) {
       plan.state="submitted";
       return result;
     } catch (error) {
-      plan.state="filled";
+      plan.state=error.submission==='not_sent'?"filled":"submission_unknown";
       throw error;
     }
   }
@@ -362,7 +382,8 @@ async function handle(message,sender) {
   throw new Error("Unknown request.");
 }
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
-  storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message}));
+  storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message,
+    ...(['not_sent','unknown'].includes(error.submission)?{submission:error.submission}:{})}));
   return true;
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);chrome.storage.session.remove(`pilotRun:${tabId}`);});

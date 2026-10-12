@@ -206,7 +206,7 @@ try{
       const view={tabId:1,assignment:'fixture',url:location.href,documentId:'doc',hash:'fixture',promptHash:'fixture',fields:window.fixtureDone?[]:[{id:'a1',kind:'text'}],progress:{current:1,part:1,totalParts:1,status:window.fixtureDone?'correct':'unanswered',questions:[{number:1,status:window.fixtureDone?'correct':'unanswered'},{number:2,status:'unanswered'}]},controls:window.fixtureDone?{similar:1}:{submitPresent:1},feedback:{state:window.fixtureDone?'correct':'unknown',modal:false}};
       if(message.type==='pilotOpen')return {ok:true,data:{view,runId:'fixture',checkpoint:null}};
       if(message.type==='pilotRead')return {ok:true,data:view};
-      if(message.type==='apply')window.fixtureDone=true;
+      if(message.type==='apply'){window.fixtureDone=true;return {ok:true,data:{submitted:true}};}
       if(message.type==='solve'){
         await new Promise(resolve=>window.releaseSolve=resolve);
         return {ok:true,data:{planId:'pilot',question:{hash:'fixture',fields:[]},solution:{answer:'5',explanation:'Solve the equation.',supported:true,confidence:.99,actions:[{kind:'text'}]}}};

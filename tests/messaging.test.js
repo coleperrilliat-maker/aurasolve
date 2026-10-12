@@ -25,3 +25,9 @@ test('missing replies never automatically retry a potentially completed write',a
   await assert.rejects(()=>sendExtension({type:'apply'}),error=>error.code==='AURA_DISCONNECTED');
   assert.equal(calls,1);
 });
+test('submission failure metadata survives the worker message boundary',async()=>{
+ for(const submission of ['not_sent','unknown']){
+  globalThis.chrome={runtime:{sendMessage:async()=>({ok:false,error:'Could not apply answer',submission})}};
+  await assert.rejects(()=>sendExtension({type:'apply'}),error=>error.submission===submission);
+ }
+});

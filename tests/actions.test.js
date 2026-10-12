@@ -25,4 +25,17 @@ test('changed question is rejected before mutation',async()=>{const p=plan(true)
 test('all required fields must be covered before submission',async()=>{extra=true;const p=plan(true);await assert.rejects(()=>execute(p),/all answer fields/);extra=false;assert.equal(clicked,0);});
 test('hidden page stops before clicking submit',async()=>{const p=plan(true);document.hidden=true;await assert.rejects(()=>execute(p),/hidden/);document.hidden=false;assert.equal(clicked,0);});
 test('complete practice plan submits once',async()=>{await execute(plan(true));assert.equal(clicked,1);});
+test('shared fill path still requires every active answer before a later submit',async()=>{
+ extra=true;const p=plan();p.mode='autopilot';p.requireComplete=true;
+ try{await assert.rejects(()=>execute(p),/all answer fields/);assert.equal(clicked,1);}
+ finally{extra=false;}
+});
+test('diagnostic image warnings do not veto validated answers that Fill can enter',async()=>{
+ const original=root.querySelector;root.querySelector=selector=>selector.startsWith('img:not')?{}:null;
+ try{
+  assert.match(snapshot().limitations.join(' '),/image has no description/);
+  const p=plan(true);p.deferSubmit=true;
+  const result=await execute(p);assert.equal(result.filled,1);assert.equal(result.submitted,false);assert.equal(clicked,1);
+ }finally{root.querySelector=original;}
+});
 

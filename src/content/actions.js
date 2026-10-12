@@ -1,6 +1,6 @@
 import {goToQuestion} from "./player.js";
 import {clickSaraChoice} from './sara.js';
-import {snapshot,elementFor,visible,findButton,feedback} from "./detection.js";
+import {snapshot,elementFor,visible,writable,findButton,feedback} from "./detection.js";
 import {validateSolution} from "../shared/solution.js";
 import {sendExtension} from '../shared/messaging.js';
 function guard() {
@@ -33,8 +33,9 @@ export async function execute(plan) {
   if (current.hash !== plan.hash || current.url !== plan.url) throw new Error("The question changed. Generate a new answer first.");
   validateSolution(plan.solution,current,plan.mode);
   if (!plan.solution.supported || plan.solution.confidence < 0.85 || !plan.solution.actions.length) throw new Error("This answer needs manual review; automatic filling is unavailable.");
-  if (plan.submit && current.limitations.some(l=>!plan.visualRead || !/Canvas\/SVG|image has no description/.test(l))) throw new Error("This question contains unsupported controls. AutoPilot stopped.");
-  if (plan.submit) {
+  // Fill and AutoPilot use the same adapters and readback checks. Diagnostic text
+  // (including diagrams and completed editors) is not a second filling policy.
+  if (plan.submit || plan.requireComplete) {
     const targets = new Set(plan.solution.actions.map(a=>a.target));
     for (const f of current.fields) {
       const covered = f.kind === "radio" ? current.fields.some(other=>other.kind === "radio" && other.group === f.group && targets.has(other.id)) : targets.has(f.id);
@@ -44,7 +45,7 @@ export async function execute(plan) {
   // Validate every target and submit control before making any changes.
   for (const a of plan.solution.actions) {
     const el = elementFor(a.target);
-    if (!visible(el) || el.disabled || el.readOnly) throw new Error("An answer field is no longer available.");
+    if (!visible(el) || !writable(el)) throw new Error("An answer field is no longer available.");
   }
   if (plan.submit && !plan.deferSubmit) findButton("submit");
   for (const a of plan.solution.actions) {

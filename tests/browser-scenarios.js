@@ -1,4 +1,4 @@
-import {snapshot,feedback,visible,findButtons} from '../src/content/detection.js';
+import {snapshot,feedback,visible,findButtons,prepareField} from '../src/content/detection.js';
 import {execute,clickControl,dismissFeedback,stayOnIncompleteQuestion,navigateQuestion} from '../src/content/actions.js';
 import {runPilot} from '../src/shared/pilot-engine.js';
 const fixture=document.querySelector('#fixture'),results=document.querySelector('#results');
@@ -8,19 +8,37 @@ const solution=fields=>({answer:'5',explanation:'Fixture answer.',supported:true
 document.querySelector('#run-tests').onclick=async()=>{
  results.replaceChildren();
  try{
-  fixture.innerHTML='<div role="heading" aria-level="3">Question 21, 2.3.25</div><span class="progressText">Part 3 of 3</span><nav id="xl_dijit_HigherEdAssignmentReviewNav_test"><a class="questionLabel" aria-label="Question 21, Partially correct">Question 21</a></nav><section data-aura-question><p>Solve 2x = 10.</p><input disabled value="previous correct answer"><input aria-label="x"></section><button id="check" command="checkanswer" disabled>Check answer</button>';
-  let s=snapshot();assert(s.player.progress.current===21 && s.player.progress.part===3,'Wrong current question or part');assert(s.fields.length===1,'Locked field was included');assert(s.player.controls.submitPresent===1 && s.player.controls.submit===0,'Disabled submit not detected');
+  // Reproduce the live Pearson markup: five visible eqEditor wrappers contain
+  // disabled focusNode inputs. Only the sixth input belongs to the active part.
+  const history=Array.from({length:5},(_,i)=>`<span class="equation eqEditor assessments-components-0-1-2 inputField fNormal ${i===4?'correct':'incorrectInput incorrect'} disabled"><input class="focusNode" disabled value="${i+1}"></span>`).join('');
+  fixture.innerHTML=`<div role="heading" aria-level="3">Question 15, fixture</div><span class="progressText">Part 5 of 5</span><nav id="xl_dijit_HigherEdAssignmentReviewNav_test"><a class="questionLabel" aria-label="Question 15, Incorrect">Question 15</a></nav><section data-aura-question><p>Solve 2x = 10.</p>${history}<span class="equation eqEditor assessments-components-0-1-2 inputField fNormal"><input class="focusNode" aria-label="x"></span></section><button id="check" command="checkanswer" disabled>Check answer</button>`;
+  let s=snapshot();assert(s.player.progress.current===15 && s.player.progress.part===5,'Wrong current question or part');assert(s.fields.length===1,'Locked field was included');assert(!s.limitations.length,'Completed Pearson editors flagged as unsupported');assert(s.player.controls.submitPresent===1 && s.player.controls.submit===0,'Disabled submit not detected');
   document.querySelector('input[aria-label=x]').oninput=()=>document.querySelector('#check').disabled=false;
-  await execute({id:'test',url:s.url,hash:s.hash,mode:'autopilot',submit:true,deferSubmit:true,solution:solution(s.fields)});
+  let clicks=0;document.querySelector('#check').onclick=()=>clicks++;
+  await execute({id:'test',url:s.url,hash:s.hash,mode:'autopilot',submit:false,requireComplete:true,solution:solution(s.fields)});
   assert(document.querySelector('input[aria-label=x]').value==='5' && !document.querySelector('#check').disabled,'Field did not retain answer/enable submit');
+  assert(clicks===0,'Fill submitted unexpectedly');clickControl('submit');assert(clicks===1,'Check answer was not clicked once');
+  assert([...document.querySelectorAll('input:disabled')].every((el,i)=>el.value===String(i+1)),'Completed answers were changed');
+  const widget=document.createElement('span');widget.className='eqEditor inputField';widget.innerHTML='<input readonly value="read-only history">';fixture.querySelector('section').append(widget);
+  assert(!snapshot().limitations.length,'Read-only editor flagged as unsupported');
+  widget.innerHTML='<input disabled value="disabled history">';assert(!snapshot().limitations.length,'Disabled inner input flagged as unsupported');
+  widget.innerHTML='Active unsupported editor';assert(snapshot().limitations.some(l=>/Pearson math/.test(l)),'Active unsupported editor was not diagnosed');widget.remove();
   document.querySelector('#check').textContent='Continue';
   assert(findButtons('continue').length===1 && findButtons('submit').length===0,'Continue was mistaken for submit');
-  report('PASS: actual DOM parser reads Question 21 / Part 3, ignores locked fields, fills input, and distinguishes Continue.');
+  report('PASS: Question 15 / Part 5: five completed Pearson editors ignored, active answer filled, Check answer clicked once, Continue identified.');
+  report('PASS: disabled/read-only editor history is ignored; an active unsupported editor remains diagnosed.');
+
+  fixture.innerHTML=`<section data-aura-question><p>Solve the next active part: 2x=10.</p>${history}<span class="eqEditor inputField" id="lazy">Click to answer</span></section>`;
+  const lazy=document.querySelector('#lazy');lazy.onclick=()=>{lazy.innerHTML='<input aria-label="x">';};
+  assert(!snapshot().fields.length,'Lazy field should not already exist');
+  await prepareField();assert(snapshot().fields.length===1 && !snapshot().limitations.length,'Shared preparation did not activate the current editor');
+  assert([...document.querySelectorAll('input:disabled')].every((el,i)=>el.value===String(i+1)),'Preparation changed completed answers');
+  report('PASS: shared preparation activates a lazy current editor while leaving completed parts untouched.');
 
   let question=21,part=2,retry=0,submits=0,solves=0,persisted=null,plan=null,lastVerdict='unknown';
   const statuses={20:'correct',21:'partial',22:'unanswered'},steps=[];
   function render(){
-   fixture.innerHTML=`<div role="heading" aria-level="3">Question ${question}, fixture</div><span class="progressText">Part ${part} of 2</span><nav id="xl_dijit_HigherEdAssignmentReviewNav_test">${[20,21,22].map(n=>`<a href="#" class="questionLabel" aria-label="Question ${n}, ${statuses[n]==='partial'?'Partially correct':statuses[n]}">Question ${n}</a>`).join('')}</nav><section data-aura-question><p>Solve fixture ${question} part ${part} variation ${retry}: 2x=10.</p><input disabled value="locked"><input aria-label="x"></section><button command="checkanswer" id="check" disabled>Check answer</button><button id="next">Next question</button>`;
+   fixture.innerHTML=`<div role="heading" aria-level="3">Question ${question}, fixture</div><span class="progressText">Part ${part} of 2</span><nav id="xl_dijit_HigherEdAssignmentReviewNav_test">${[20,21,22].map(n=>`<a href="#" class="questionLabel" aria-label="Question ${n}, ${statuses[n]==='partial'?'Partially correct':statuses[n]}">Question ${n}</a>`).join('')}</nav><section data-aura-question><p>Solve fixture ${question} part ${part} variation ${retry}: 2x=10.</p>${history}<span class="eqEditor inputField"><input aria-label="x"></span></section><button command="checkanswer" id="check" disabled>Check answer</button><button id="next">Next question</button>`;
    document.querySelector('input[aria-label=x]').oninput=()=>document.querySelector('#check').disabled=false;
    for(const link of fixture.querySelectorAll('a'))link.onclick=e=>{e.preventDefault();question=Number(link.textContent.match(/\d+/)[0]);part=1;retry=0;render();};
    document.querySelector('#next').onclick=()=>{throw new Error('Should navigate the unfinished question list, not blindly click Next');};
@@ -45,8 +63,8 @@ document.querySelector('#run-tests').onclick=async()=>{
    if(m.type==='pilotOpen')return {runId:'fixture',view:read(),checkpoint:persisted};
    if(m.type==='pilotRead')return read();
    if(m.type==='pilotSave'){persisted=structuredClone(m.checkpoint);return {};}
-   if(m.type==='solve'){solves++;const q=snapshot();plan={id:'test',url:q.url,hash:q.hash,mode:'autopilot',submit:true,deferSubmit:true,solution:solution(q.fields)};return {planId:'test',solution:plan.solution,question:q};}
-   if(m.type==='apply'){await execute(plan);return clickControl('submit');}
+   if(m.type==='solve'){solves++;const q=snapshot();assert(!q.limitations.length,'Completed widgets blocked the next part');plan={id:'test',url:q.url,hash:q.hash,mode:'autopilot',submit:false,requireComplete:true,solution:solution(q.fields)};return {planId:'test',solution:plan.solution,question:q};}
+   if(m.type==='apply'){await execute(plan);clickControl('submit');return {submitted:true};}
    if(m.type==='pilotAction'){
     steps.push(m.action.kind);
     if(m.action.kind==='stay')return stayOnIncompleteQuestion();

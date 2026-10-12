@@ -13,6 +13,14 @@ export const elementFor = id => elements.get(id);
 const clean = value => String(value || "").replace(/\s+/g," ").trim();
 const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid]';
 const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable]';
+// Pearson leaves earlier parts' editor wrappers visible after disabling their inputs.
+// Those are answer history, not unsupported controls for the current part.
+export function writable(el) {
+  if (el.disabled || el.readOnly || el.getAttribute('disabled') !== null || el.getAttribute('readonly') !== null ||
+      el.closest('[aria-disabled="true"], [aria-readonly="true"], fieldset[disabled], .eqEditor.disabled, .inputcell.disabled, .dijitDisabled')) return false;
+  const inputs = [...(el.querySelectorAll?.('input:not([type="hidden"]), textarea, select') || [])];
+  return !inputs.length || inputs.some(input => !input.disabled && !input.readOnly && !input.closest('[aria-disabled="true"], [aria-readonly="true"], fieldset[disabled]'));
+}
 export function fieldContext(el) {
   let parent=el.parentElement;
   for(let depth=0;parent && depth<3;depth++,parent=parent.parentElement){
@@ -74,7 +82,7 @@ export async function prepareField() {
   // Some Pearson editors create the native input only after activation.
   // Activate only an answer widget inside the detected question.
   const root=questionRoot();
-  const widgets=root ? [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && !el.classList.contains('disabled')) : [];
+  const widgets=root ? [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"]')].filter(el=>visible(el) && writable(el)) : [];
   if (widgets.length) {
     widgets[0].focus?.();widgets[0].click();
     await new Promise(resolve=>setTimeout(resolve,120));
@@ -92,7 +100,7 @@ export function snapshot() {
   const root = questionRoot();
   const fields = [], limitations = [];
   if (root) for (const el of root.querySelectorAll(fieldSelector)) {
-    if (!visible(el) || el.disabled || el.readOnly || el.getAttribute('aria-disabled') === 'true') continue;
+    if (!visible(el) || !writable(el)) continue;
     const editor = el.closest?.('[data-aura-editor]') || el.closest?.(editorSelector);
     if (editor && editor !== el) {
       if (editor.matches('[data-aura-editor]')) continue;
@@ -117,7 +125,7 @@ export function snapshot() {
     else if (el.isContentEditable) fields.push({...base,kind:'text',adapter:'contenteditable',format:'plain'});
   }
   if (root) for (const el of root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .mq-editable-field, .mathquill-editable, .acctable .inputcell[role="textbox"]')) {
-    if (visible(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>el===elementFor(f.id) || el.contains(elementFor(f.id)))) limitations.push('A Pearson math or table field needs a supported editor API.');
+    if (visible(el) && writable(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>el===elementFor(f.id) || el.contains(elementFor(f.id)))) limitations.push('A Pearson math or table field needs a supported editor API.');
   }
   if (!fields.length) for (const el of saraChoices(document,location.hostname,visible)) {
     fields.push({id:idFor(el),label:(el.innerText || el.textContent).trim(),kind:'radio',group:'sara-answer',adapter:'sara-choice'});

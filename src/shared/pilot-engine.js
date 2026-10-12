@@ -93,7 +93,19 @@ export async function runPilot({request,checkpoint=async()=>{},delay,onEvent=()=
       state.pending={key,questionNumber:view.progress.current,actions:result.solution.actions,before:feedbackKey(view)};
       await save();
       await onEvent({kind:'submit',view});
-      await send({type:'apply',planId:result.planId});
+      try {
+        const applied=await send({type:'apply',planId:result.planId});
+        if(!applied?.submitted)error('Submission was not confirmed. Resume to check page feedback.');
+      } catch(e) {
+        if(e.submission==='not_sent'){
+          state.pending=null;
+          state.attempts[key]=attempts;
+          await save();
+        }
+        await onEvent({kind:e.submission==='not_sent'?'notSubmitted':'submissionUnknown',view});
+        throw e;
+      }
+      await onEvent({kind:'submitted',view});
       continue;
     }
     if(action.kind==='similar'){

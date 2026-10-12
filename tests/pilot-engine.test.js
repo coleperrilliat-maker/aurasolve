@@ -57,6 +57,22 @@ test('resume after uncertain submit waits; it never submits or charges twice',as
  assert.ok(f.saved.pending);const resume=fixture({saved:f.saved});await assert.rejects(resume.run(),/did not reach/);
  assert.equal(resume.calls.filter(m=>['solve','apply'].includes(m.type)).length,0);
 });
+test('known fill failure clears pending submission and preserves the part attempt',async()=>{
+ const f=fixture({apply:()=>{throw Object.assign(new Error('Field did not retain answer'),{submission:'not_sent'});}});
+ await assert.rejects(f.run(),/retain/);
+ assert.equal(f.saved.pending,null);assert.equal(f.saved.attempts[partKey(base())],0);
+ assert.equal(f.saved.spent,1);assert.equal(f.events.at(-1).kind,'notSubmitted');
+ assert.equal(f.events.some(e=>e.kind==='submitted'),false);
+ const resumed=fixture({saved:f.saved,apply:terminal,action:(v,a)=>{if(a.kind==='dismiss')v.feedback={state:'unknown',modal:false};}});
+ await resumed.run({limit:1});assert.equal(resumed.calls.filter(m=>m.type==='apply').length,1);
+});
+test('lost apply reply retains checkpoint and reports submission unconfirmed',async()=>{
+ const f=fixture({apply:()=>{throw new Error('Lost reply');}});
+ await assert.rejects(f.run(),/Lost reply/);
+ assert.ok(f.saved.pending);assert.equal(f.events.at(-1).kind,'submissionUnknown');
+ const resumed=fixture({saved:f.saved});await assert.rejects(resumed.run(),/did not reach/);
+ assert.equal(resumed.calls.filter(m=>['solve','apply'].includes(m.type)).length,0);
+});
 test('resume after completed submit reads feedback without another solve',async()=>{
  const f=fixture();await assert.rejects(f.run());const v=base();terminal(v);
  const next=fixture({view:v,saved:f.saved,action:(v,a)=>{if(a.kind==='dismiss')v.feedback={state:'unknown',modal:false};}});

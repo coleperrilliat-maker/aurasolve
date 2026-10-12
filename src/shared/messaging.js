@@ -15,6 +15,7 @@ export async function sendExtension(message) {
   if (!response || typeof response.ok!=='boolean') throw disconnected();
   if (!response.ok) {
     const error=new Error(response.error || 'AuraSolve could not complete this action.');
+    if (['not_sent','unknown'].includes(response.submission)) error.submission=response.submission;
     if (/AuraSolve was reloaded or disconnected/.test(error.message))error.code='AURA_DISCONNECTED';
     throw error;
   }

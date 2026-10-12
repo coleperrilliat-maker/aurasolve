@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 let captureFails=false, captured=0, solveCalls=0, lastSnapshot;
 let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false, enableOnFill=false;
+let prepared=0,fillFails=false,clickFails=false;const executed=[];
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[],controls:{submit:1,next:1}};
@@ -9,10 +10,11 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   if(typeof input.args?.[0]==='boolean')return [];
   if(input.world==='MAIN')return [{result:true}];
   const wrapped=data=>[{result:{ok:true,data}}];
+  if(input.args?.[0]==='prepareField'){prepared++;return wrapped({ready:true});}
   if(input.args?.[0]==='dismissFeedback'){verdict='unknown';return wrapped({clicked:true});}
-  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];return wrapped({clicked:true});}
+  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];if(clickFails)throw new Error('Lost click reply');return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
-  if(input.args[0]==='execute'){applied++;if(enableOnFill)state.controls.submit=1;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
+  if(input.args[0]==='execute'){executed.push(input.args[1]);if(fillFails)return [{result:{ok:false,error:'The page did not retain the requested value.'}}];applied++;if(enableOnFill)state.controls.submit=1;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
   if(input.args[0]==='feedback')return wrapped({state:input.target.documentIds[0]==='doc1'?verdict:'unknown',text:''});
   if(input.args[0]==='nextProblem')return wrapped({clicked:nextButton});
   throw new Error('Unexpected frame call');
@@ -88,6 +90,7 @@ test('changed question after filling prevents submit',async()=>{
     const result=await request({type:'solve',mode:'autopilot'});
     const appliedResult=await request({type:'apply',planId:result.data.planId});
     assert.equal(appliedResult.ok,false);assert.match(appliedResult.error,/changed/);assert.equal(clickedDocument,null);
+    assert.equal(appliedResult.submission,'not_sent');
   } finally {staleAfterFill=false;state.hash='q1';}
 });
 test('an unsolicited editor mutation is rejected',async()=>{
@@ -154,7 +157,38 @@ test('AutoPilot fills before resolving a submit button disabled until input',asy
   const response=await request({type:'apply',planId:result.data.planId});
   assert.equal(response.ok,true);assert.equal(response.data.submitted,true);
   assert.equal(clickedDocument,'doc1');
+  assert.equal(executed.at(-1).submit,false);assert.equal(executed.at(-1).requireComplete,true);
  }finally{enableOnFill=false;state.controls.submit=1;}
+});
+
+test('Fill and AutoPilot prepare and fill through the same non-submitting executor',async()=>{
+ const before=prepared;
+ for(const mode of ['field','autopilot']){
+  const result=await request({type:'solve',mode});assert.equal(result.ok,true);
+  assert.equal((await request({type:'apply',planId:result.data.planId})).ok,true);
+  assert.equal(executed.at(-1).submit,false);
+  assert.equal(executed.at(-1).requireComplete,mode==='autopilot');
+ }
+ assert.equal(prepared,before+2);
+});
+test('failed fill reports no submission and never clicks Check answer',async()=>{
+ const result=await request({type:'solve',mode:'autopilot'});fillFails=true;clickedDocument=null;
+ try{
+  const response=await request({type:'apply',planId:result.data.planId});
+  assert.equal(response.ok,false);assert.equal(response.submission,'not_sent');
+  assert.match(response.error,/retain/);assert.equal(clickedDocument,null);
+ }finally{fillFails=false;}
+});
+test('lost submit reply stays unknown and prevents replaying a reviewed field',async()=>{
+ const result=await request({type:'solve',mode:'field'}),planId=result.data.planId;
+ await request({type:'apply',planId});clickFails=true;
+ try{
+  const response=await request({type:'submitField',planId});
+  assert.equal(response.ok,false);assert.equal(response.submission,'unknown');
+ }finally{clickFails=false;}
+ clickedDocument=null;
+ assert.equal((await request({type:'submitField',planId})).ok,false);
+ assert.equal(clickedDocument,null);
 });
 
 test('correct popup acknowledgement preserves permission to advance',async()=>{

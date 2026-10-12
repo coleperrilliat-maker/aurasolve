@@ -69,7 +69,9 @@ function breakdown(){
   $('results').replaceChildren();
   const heading=document.createElement('h2');heading.textContent='Run breakdown';
   const summary=document.createElement('p');summary.className='run-summary';
-  summary.textContent=runLog.filter(item=>item.outcome==='Correct').length+' of '+runLog.length+' submitted parts confirmed correct.';
+  const submitted=runLog.filter(item=>item.submitted).length;
+  summary.textContent=submitted ? runLog.filter(item=>item.outcome==='Correct').length+' of '+submitted+' submitted parts confirmed correct.' :
+    runLog.some(item=>item.outcome==='Submission unconfirmed')?'No submissions confirmed.':'No answers were submitted.';
   $('results').append(heading,summary);
   for(const item of runLog){
     const details=document.createElement('details');details.className='run-item';
@@ -110,7 +112,7 @@ async function run(mode) {
         }
         if(event.kind==='answer'){
           $('loader').hidden=true;
-          runLog.push({number:`${p.current || '?'}${p.part?' · Part '+p.part:''}`,result:event.result,outcome:'Not submitted'});
+          runLog.push({number:`${p.current || '?'}${p.part?' · Part '+p.part:''}`,result:event.result,outcome:'Not submitted',submitted:false});
         }
         if(event.kind==='pace'){
           const min=Number($('time-min').value),max=Number($('time-max').value);
@@ -119,8 +121,11 @@ async function run(mode) {
           while(left>0){$('pace-status').textContent=`Submitting in ${Math.ceil(left/1000)}s`;const step=Math.min(250,left);await delay(step);left-=step;}
         }
         if(event.kind==='submit'){
-          status('Checking the answer…');if(runLog.length)runLog.at(-1).outcome='Submitted · awaiting feedback';
+          status('Filling answers, then checking…');if(runLog.length)runLog.at(-1).outcome='Filling · submission pending';
         }
+        if(event.kind==='submitted' && runLog.length)Object.assign(runLog.at(-1),{submitted:true,outcome:'Submitted · awaiting feedback'});
+        if(event.kind==='notSubmitted' && runLog.length)runLog.at(-1).outcome='Not submitted';
+        if(event.kind==='submissionUnknown' && runLog.length)runLog.at(-1).outcome='Submission unconfirmed';
         if(event.kind==='feedback' && runLog.length)runLog.at(-1).outcome=event.outcome==='correct'?'Correct':event.outcome==='incorrect'?'Incorrect':'Step advanced · score pending';
         if(event.kind==='complete'){$('progress').value=++completed;}
         const labels={stay:'Choosing No and staying on the unfinished question…',dismiss:'Closing answer feedback…',continue:'Continuing the next part…',similar:'Starting a similar question to improve the score…',question:`Moving to question ${event.number}…`,next:'Moving to the next question…'};
