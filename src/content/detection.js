@@ -11,6 +11,16 @@ export const elementFor = id => elements.get(id);
 const clean = value => String(value || "").replace(/\s+/g," ").trim();
 const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid]';
 const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable]';
+export function fieldContext(el) {
+  let parent=el.parentElement;
+  for(let depth=0;parent && depth<3;depth++,parent=parent.parentElement){
+    const copy=parent.cloneNode(true);
+    copy.querySelectorAll('input,textarea,select,[contenteditable],[data-aura-editor],#aurasolve-root').forEach(node=>node.replaceWith(document.createTextNode(' [answer] ')));
+    const text=clean(copy.textContent);
+    if(text.length>=8)return text.slice(0,500);
+  }
+  return '';
+}
 export function labelFor(el) {
   const editable = el.isContentEditable || el.matches?.('[data-aura-editor]');
   return clean(el.getAttribute("aria-label") || [...(el.labels || [])].map(l=>l.innerText).join(" ") || el.getAttribute("placeholder") || el.getAttribute("title") || (!editable && el.innerText) || el.name || el.id || 'Answer').slice(0,350);
@@ -88,7 +98,7 @@ export function snapshot() {
       if (editor.matches('.mq-editable-field, .mathquill-editable')) {limitations.push('This math editor has no accessible value API.');continue;}
     }
     if (el.isContentEditable && el.parentElement?.closest('[contenteditable="true"], [contenteditable="plaintext-only"]')) continue;
-    const base = {id:idFor(el),label:labelFor(el)};
+    const base = {id:idFor(el),label:labelFor(el),context:fieldContext(el)};
     if (el.dataset?.auraEditor === 'dojo-select') {
       try {fields.push({...base,kind:'select',adapter:'dojo-select',editorKey:el.dataset.auraEditorKey,options:JSON.parse(el.dataset.auraOptions)});} catch {limitations.push('Dropdown options could not be read.');}
     }
@@ -117,7 +127,7 @@ export function snapshot() {
   readable?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   readable?.querySelectorAll('[contenteditable], [data-aura-editor], textarea').forEach(el=>{el.textContent='';});
   const question = root ? clean((readable ? readable.textContent : root.innerText) + " " + [...root.querySelectorAll('math, img[alt], [aria-label]')].filter(el=>!el.closest?.('[data-aura-editor]')).map(el=>el.getAttribute('alt') || el.getAttribute('aria-label') || el.textContent).join(" ")).slice(0,16000) : "";
-  const hash = fingerprint(JSON.stringify({question,fields,drops}));
+  const hash = fingerprint(JSON.stringify({question,fields:fields.map(({context,...field})=>field),drops}));
   const prompt = root?.cloneNode?.(true);
   prompt?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   prompt?.querySelectorAll('input, textarea, select, [contenteditable], [data-aura-editor], [role="textbox"], [role="alert"], [data-aura-feedback], .feedback, .answer-feedback').forEach(el=>el.remove());
