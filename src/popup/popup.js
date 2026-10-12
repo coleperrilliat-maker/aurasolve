@@ -80,6 +80,7 @@ function breakdown(){
 async function run(mode) {
   const mine = ++token;
   runLog=[];
+  let similarRetries=0;
   paused=false;pauseUI();
   const limit=mode==='autopilot'?Number($('question-limit').value):1;
   $('pilot-progress').hidden=mode!=='autopilot';
@@ -151,7 +152,32 @@ async function run(mode) {
         if (outcome.state !== "unknown") break;
       }
       runLog[runLog.length-1].outcome=outcome?.state==='correct'?'Correct':outcome?.state==='incorrect'?'Incorrect':'Submitted · result unconfirmed';
+      if(outcome?.state==='correct' || outcome?.state==='incorrect'){
+        await checkpoint();
+        await send({type:'acknowledge',planId:result.planId});
+        await delay(250);
+      }
+      if(outcome?.state==='incorrect'){
+        if(similarRetries>=2)throw new Error('Stopped after two similar-question retries. Review the breakdown.');
+        status('Incorrect. Looking for Similar question…');
+        let available=false;
+        for(let poll=0;poll<12;poll++){
+          await delay(250);
+          try{await send({type:'similar',planId:result.planId});available=true;break;}
+          catch(error){if(!/exactly one similar/.test(error.message))throw error;}
+        }
+        if(!available)throw new Error('Similar question is not available. Pearson may require another attempt or limit retries.');
+        let changed=false;
+        for(let poll=0;poll<20;poll++){
+          await delay(300);
+          const next=await send({type:'inspect'});
+          if(next.question.hash!==result.question.hash){changed=true;break;}
+        }
+        if(!changed)throw new Error('The similar question did not load. Stopped without reusing the old answer.');
+        similarRetries++;i--;continue;
+      }
       if (outcome?.state !== "correct") throw new Error("AutoPilot stopped. A correct answer was not confirmed.");
+      similarRetries=0;
       $('progress').value=i;
       status(i === limit ? limit+(limit===1?" question done.":" questions done.") : "Correct. Continuing…");
       if (i === limit) break;

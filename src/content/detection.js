@@ -139,20 +139,20 @@ export function snapshot() {
   const scalar=fields.filter(f=>['text','select','point','drag'].includes(f.kind));
   const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
   const autoSelected=(empty || scalar[0])?.id || null;
-  return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{submit:findButtons('submit').length,next:findButtons('next').length},
+  return {url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{submit:findButtons('submit').length,next:findButtons('next').length,similar:findButtons('similar').length},
     fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
 export function feedback() {
-  const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"], .feedbackDialog, .correctDialog, .responses, .xlFeedback')].filter(visible);
+  const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"], .feedbackDialog, .correctDialog, .responses, .xlFeedback, [role="dialog"], .dijitDialog')].filter(visible);
   const text = clean(nodes.map(el=>el.innerText).join(" "));
   if (/\b(incorrect|wrong|try again|not correct)\b/i.test(text)) return {state:"incorrect",text};
-  if (/\b(correct|well done|great job)\b/i.test(text)) return {state:"correct",text};
+  if (/\b(correct|well done|great job|excellent|fantastic|nice work)\b/i.test(text)) return {state:"correct",text};
   return {state:"unknown",text};
 }
 export function findButtons(kind) {
-  const patterns = kind === "submit" ? /^(check answer|check my answer|submit answer|submit|check)$/i : /^(next|next question|next problem|continue)$/i;
-  const command = kind === 'submit' ? 'checkanswer' : 'next';
+  const patterns = kind === "submit" ? /^(check answer|check my answer|final check|submit answer|submit|check)$/i : kind==='similar' ? /^(similar question|similar exercise|try again)$/i : /^(next|next question|next problem|continue)$/i;
+  const command = kind === 'submit' ? 'checkanswer' : kind==='similar'?'similarquestion':'next';
   return [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && (el.getAttribute('command')?.toLowerCase() === command || [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].some(text=>patterns.test(clean(text)))));
 }
 export function findButton(kind) {

@@ -219,11 +219,32 @@ async function handle(message,sender) {
   }
   if (message.type === "feedback") {
     if (plan.state!=="submitted") throw new Error("No submitted question to check.");
-    return pageFeedback(tabId,state);
+    const outcome=await pageFeedback(tabId,state);
+    if(outcome.state!=='unknown')plan.verdict=outcome.state;
+    return outcome;
+  }
+  if(message.type==='acknowledge'){
+    if(plan.state!=='submitted')throw new Error('No submitted question to acknowledge.');
+    const outcome=await pageFeedback(tabId,state);
+    if(outcome.state!=='unknown')plan.verdict=outcome.state;
+    if(!['correct','incorrect'].includes(plan.verdict))throw new Error('No answer feedback detected.');
+    for(const documentId of new Set([state.question.documentId,state.top.documentId])){
+      const dismissed=await frameCall(tabId,documentId,'dismissFeedback');
+      if(dismissed.clicked)break;
+    }
+    return {acknowledged:true};
+  }
+  if(message.type==='similar'){
+    if(plan.state!=='submitted' || plan.verdict!=='incorrect')throw new Error('A confirmed incorrect result is required before trying a similar question.');
+    const documentId=controlDocument(state,'similar');
+    if(plan.generation!==rev(tabId))throw new Error('Stopped.');
+    plan.state='advancing';
+    await frameCall(tabId,documentId,'clickControl','similar');
+    return {advanced:true};
   }
   if (message.type === "next") {
     if (plan.state!=="submitted") throw new Error("This question has not been submitted.");
-    if ((await pageFeedback(tabId,state)).state!=='correct') throw new Error('No correct-answer feedback was detected. Continue manually.');
+    if (plan.verdict!=='correct' && (await pageFeedback(tabId,state)).state!=='correct') throw new Error('No correct-answer feedback was detected. Continue manually.');
     const documentId=controlDocument(state,'next');
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     plan.state="advancing";

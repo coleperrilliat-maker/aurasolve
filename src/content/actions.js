@@ -85,7 +85,7 @@ export async function execute(plan) {
 }
 export function clickControl(kind) {
   guard();
-  if (!['submit','next'].includes(kind)) throw new Error('Unknown control.');
+  if (!['submit','next','similar'].includes(kind)) throw new Error('Unknown control.');
   findButton(kind).click();
   return {clicked:true};
 }
@@ -103,3 +103,14 @@ export function advance() {
   return {advanced:true};
 }
 
+
+export function dismissFeedback(){
+  guard();
+  const dialogs=[...document.querySelectorAll('[role="dialog"],.dijitDialog,.feedbackDialog,.correctDialog,[role="alert"]')].filter(visible)
+    .filter(el=>/incorrect|correct|excellent|well done|great job|fantastic|nice work|try again/i.test(el.innerText));
+  const buttons=[...new Set(dialogs.flatMap(dialog=>[...dialog.querySelectorAll('button,[role="button"],input[type="button"]')]))]
+    .filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && /^ok$/i.test((el.innerText || el.value || el.getAttribute('aria-label') || '').trim()));
+  if(buttons.length>1)throw new Error('Several feedback OK buttons are visible. Close the feedback manually.');
+  if(!buttons.length)return {clicked:false};
+  buttons[0].click();return {clicked:true};
+}

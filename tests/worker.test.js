@@ -9,6 +9,7 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   if(typeof input.args?.[0]==='boolean')return [];
   if(input.world==='MAIN')return [{result:true}];
   const wrapped=data=>[{result:{ok:true,data}}];
+  if(input.args?.[0]==='dismissFeedback'){verdict='unknown';return wrapped({clicked:true});}
   if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
   if(input.args[0]==='execute'){applied++;if(enableOnFill)state.controls.submit=1;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
@@ -154,4 +155,22 @@ test('AutoPilot fills before resolving a submit button disabled until input',asy
   assert.equal(response.ok,true);assert.equal(response.data.submitted,true);
   assert.equal(clickedDocument,'doc1');
  }finally{enableOnFill=false;state.controls.submit=1;}
+});
+
+test('correct popup acknowledgement preserves permission to advance',async()=>{
+ await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+ const result=await request({type:'solve',mode:'autopilot'}),planId=result.data.planId;
+ await request({type:'apply',planId});verdict='correct';
+ assert.equal((await request({type:'acknowledge',planId})).ok,true);
+ assert.equal(verdict,'unknown');
+ assert.equal((await request({type:'next',planId})).ok,true);
+});
+test('incorrect feedback permits similar question but not Next',async()=>{
+ const result=await request({type:'solve',mode:'autopilot'}),planId=result.data.planId;
+ await request({type:'apply',planId});verdict='incorrect';
+ assert.equal((await request({type:'acknowledge',planId})).ok,true);
+ assert.equal((await request({type:'next',planId})).ok,false);
+ state.controls.similar=1;
+ try{assert.equal((await request({type:'similar',planId})).ok,true);}
+ finally{delete state.controls.similar;verdict='unknown';}
 });
