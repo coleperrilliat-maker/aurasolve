@@ -27,6 +27,29 @@ function setValue(el,value) {
   el.blur?.();
   if (el.value !== value) throw new Error("The page did not retain the requested value.");
 }
+async function setNumberLinePoint(el,field,value) {
+  const expected=value.x,tolerance=Math.max(Number.EPSILON,field.step/100);
+  const read=()=>Number(el.getAttribute('aria-valuenow'));
+  const retained=()=>Number.isFinite(read()) && Math.abs(read()-expected)<=tolerance;
+  el.focus?.();
+  const r=el.getBoundingClientRect();
+  const x=r.left+(expected-field.bounds.xMin)/(field.bounds.xMax-field.bounds.xMin)*r.width;
+  const y=r.top+r.height/2;
+  for(const type of ['pointerdown','pointerup'])el.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',buttons:type==='pointerdown'?1:0}));
+  el.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:x,clientY:y}));
+  await new Promise(resolve=>setTimeout(resolve,50));
+  if(retained())return;
+  const current=read(),steps=Math.round(Math.abs(expected-current)/field.step);
+  if(!Number.isFinite(current) || steps>500 || Math.abs(current+(expected>current?1:-1)*steps*field.step-expected)>tolerance)
+    throw new Error('The number line did not expose a safe route to that value. Complete it manually.');
+  const key=expected>current?'ArrowRight':'ArrowLeft';
+  for(let i=0;i<steps;i++){
+    el.dispatchEvent(new KeyboardEvent('keydown',{key,code:key,bubbles:true,cancelable:true}));
+    el.dispatchEvent(new KeyboardEvent('keyup',{key,code:key,bubbles:true}));
+  }
+  await new Promise(resolve=>setTimeout(resolve,50));
+  if(!retained())throw new Error('The number line did not confirm the plotted value. Complete it manually.');
+}
 export async function execute(plan) {
   guard();
   const current = snapshot();
@@ -62,6 +85,9 @@ export async function execute(plan) {
     else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
     else if (a.kind === "radio") { el.click(); if (!el.checked) throw new Error("The radio answer was not accepted by the page."); }
     else if (a.kind === "checkbox") { if (el.checked !== (a.value === "true")) el.click(); if (el.checked !== (a.value === "true")) throw new Error("Checkbox state was not retained."); }
+    else if (a.kind === "point" && field.adapter === 'aria-number-line') {
+      await setNumberLinePoint(el,field,a);
+    }
     else if (a.kind === "point") {
       const f = current.fields.find(f=>f.id === a.target), r = el.getBoundingClientRect(), b = f.bounds;
       const x = r.left + (a.x-b.xMin)/(b.xMax-b.xMin)*r.width;

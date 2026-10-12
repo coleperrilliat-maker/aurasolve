@@ -87,3 +87,23 @@ Detection now excludes disabled/read-only editor history, including wrappers who
 Known errors before the submit click carry `not_sent` through messaging, clear the pending checkpoint, and do not consume a question attempt. They still count toward the AI budget because the solve was performed. A lost click reply remains unknown and cannot be replayed automatically. The run breakdown distinguishes filling, not submitted, submission unconfirmed, and a confirmed submit click.
 
 Validation: 93 Node tests pass. Chrome ran the actual DOM detector, field executor, and AutoPilot engine against a fixture matching the live disabled-editor markup. The active field was filled, completed values remained untouched, and Check answer clicked exactly once. Disabled/read-only history was ignored while an active unsupported widget remained diagnosed. The full No → OK → Continue → Similar → next unfinished question fixture completed with five mock solves and five submissions. The actual panel showed `No answers were submitted` / `Not submitted` for a pre-click failure, then `1 of 1 submitted parts confirmed correct` for a successful run. No API credits or real assignment submissions were used in these checks. Live end-to-end installed-extension compatibility and answer accuracy are not established by these fixtures.
+
+## 1.16.0 — Pearson question-type adapters
+
+Reviewed Pearson's “MyLab math questions” help page. It describes text/math entry, number lines, graphs, fill-in menus, drag/drop, calculator/data helpers, and Show work, but does not publish the proprietary widget APIs needed for universal automation.
+
+Added capability-checked support for horizontal ARIA number-line sliders, answer menus with a unique ARIA-linked listbox, native draggable items with explicit drop targets, and richer read-only control diagnostics. Number-line bounds, steps, and retained values are validated. Dropdown options and retained selections are validated. Existing graph and drag writes still require explicit targets and successful read-back; arbitrary graph lines, curves, regions, proprietary canvases, calculator, data, and Show work are not automated.
+
+Validation: `npm test` passed 96 tests; `npm run check` passed; `git diff --check main...HEAD` passed. New regressions cover number-line tick validation, a confirmed number-line write, and an ARIA-linked menu write. These use local DOM doubles, not a live signed-in Pearson assignment.
+
+## 1.16.1 — never click assignment Submit
+
+AutoPilot now requires a visible, explicit per-question label such as `Check answer` before clicking the answer-check control. An unlabeled `command="checkanswer"` is insufficient because Pearson may reuse command metadata. Assignment-level labels including Submit, Finish, Turn in, and Save best score take precedence over conflicting metadata and are rejected.
+
+Validation: `npm test` passed 97 tests; `npm run check` and `git diff --check main...HEAD` passed. The regression covers an unlabeled `checkanswer` command, conflicting `Submit`/`Check answer` labels, assignment Finish/Turn in variants, and the permitted explicit `Check answer` label.
+
+## 1.16.2 — lazy Pearson dropdown popups
+
+Dropdown discovery now covers native selects, Dojo registry widgets, ARIA combobox/listbox controls, and older Pearson controls whose popup is created only after opening the arrow. For an unlinked legacy control, AuraSolve proceeds only when opening it reveals exactly one visible option popup; it binds that popup to the control, records unique options, clicks an exact enabled option, and verifies the retained display value.
+
+Validation: `npm test` passed 98 tests; `npm run check` and `git diff --check main...HEAD` passed. The new regression opens a lazy unlinked popup, discovers its option, writes the selected value, and confirms read-back. It is a DOM fixture rather than a live signed-in Pearson assignment.

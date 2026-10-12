@@ -49,6 +49,9 @@ export function validateSolution(solution, snapshot, mode) {
     if (a.kind === "select" && !f.options.some(o => o.value === a.value && !o.disabled)) throw new Error("The selected option is unavailable.");
     if (a.kind === "checkbox" && !["true","false"].includes(a.value)) throw new Error("Invalid checkbox state.");
     if (a.kind === "point" && (!Number.isFinite(a.x) || !Number.isFinite(a.y) || a.x < f.bounds.xMin || a.x > f.bounds.xMax || a.y < f.bounds.yMin || a.y > f.bounds.yMax)) throw new Error("The graph point is outside the supported grid.");
+    if (a.kind === "point" && f.adapter === "aria-number-line" &&
+      (a.y !== 0 || Math.abs((a.x-f.bounds.xMin)/f.step-Math.round((a.x-f.bounds.xMin)/f.step)) > 1e-8))
+      throw new Error("The number-line point does not match an available tick.");
     if (a.kind === "drag" && !snapshot.dropTargets.some(d => d.id === a.destination)) throw new Error("Unknown drop target.");
   }
   return solution;

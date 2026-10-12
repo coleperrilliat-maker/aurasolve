@@ -8,15 +8,22 @@ export function questionStatus(label){
 }
 export function controlKind(labels,command=''){
   const texts=labels.map(clean).filter(Boolean);
+  // Assignment-level controls are never a per-question answer check. Treat a
+  // dangerous visible label as authoritative even when Pearson reuses command
+  // metadata or another accessible label says "Check answer".
+  if(texts.some(t=>/^(submit|save|finish|turn in)$/i.test(t) ||
+    /\b(?:submit|finish|turn in) (?:assignment|homework|test|quiz|exam)\b/i.test(t) ||
+    /^save best score$/i.test(t)))return null;
   // Visible labels take precedence: Pearson reuses command=checkanswer for Continue.
   if(texts.some(t=>/^(continue|next part|continue to next part)$/i.test(t)))return 'continue';
   if(texts.some(t=>/^(similar question|similar exercise|try again)$/i.test(t)))return 'similar';
   if(texts.some(t=>/^(check (my )?answer|final check|submit answer|check)$/i.test(t)))return 'submit';
   if(texts.some(t=>/^(next|next question|next problem)$/i.test(t)))return 'next';
   if(texts.some(t=>/^(ok|okay)$/i.test(t)))return 'dismiss';
-  // Never treat assignment Submit, Save or Save best score as a per-part submission.
+  // Never infer a write from command metadata alone. A visible, explicit
+  // per-question label is required before AutoPilot may click Check answer.
   if(texts.length)return null;
-  return {checkanswer:'submit',similarquestion:'similar',next:'next',continue:'continue'}[command.toLowerCase()] || null;
+  return {similarquestion:'similar',next:'next',continue:'continue'}[command.toLowerCase()] || null;
 }
 export function assignmentKey(url){
   try{const u=new URL(url);const id=u.searchParams.get('homeworkId') || u.searchParams.get('testId');

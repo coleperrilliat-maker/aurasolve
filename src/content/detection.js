@@ -12,7 +12,8 @@ export function idFor(el) {
 export const elementFor = id => elements.get(id);
 const clean = value => String(value || "").replace(/\s+/g," ").trim();
 const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid]';
-const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable]';
+const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable], [draggable="true"], [role="slider"]';
+const dropSelector = '[data-aura-drop], [aria-dropeffect]:not([aria-dropeffect="none"])';
 // Pearson leaves earlier parts' editor wrappers visible after disabling their inputs.
 // Those are answer history, not unsupported controls for the current part.
 export function writable(el) {
@@ -99,6 +100,7 @@ export function snapshot() {
   for (const [id,el] of elements) if (!el.isConnected) elements.delete(id);
   const root = questionRoot();
   const fields = [], limitations = [];
+  const drops = root ? [...root.querySelectorAll(dropSelector)].filter(el=>visible(el) && writable(el)).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
   if (root) for (const el of root.querySelectorAll(fieldSelector)) {
     if (!visible(el) || !writable(el)) continue;
     const editor = el.closest?.('[data-aura-editor]') || el.closest?.(editorSelector);
@@ -113,11 +115,22 @@ export function snapshot() {
       try {fields.push({...base,kind:'select',adapter:'dojo-select',editorKey:el.dataset.auraEditorKey,options:JSON.parse(el.dataset.auraOptions)});} catch {limitations.push('Dropdown options could not be read.');}
     }
     else if (el.matches('[data-aura-editor]')) fields.push({...base,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:el.dataset.auraEditor === 'mathquill' ? 'latex' : 'plain'});
+    else if (el.matches('[role="slider"]')) {
+      const min=Number(el.getAttribute('aria-valuemin')),max=Number(el.getAttribute('aria-valuemax'));
+      const now=Number(el.getAttribute('aria-valuenow')),step=Number(el.getAttribute('aria-valuestep') || el.dataset?.step || 1);
+      const orientation=el.getAttribute('aria-orientation') || 'horizontal';
+      if(Number.isFinite(min) && Number.isFinite(max) && min<max && Number.isFinite(now) && Number.isFinite(step) && step>0 && orientation==='horizontal')
+        fields.push({...base,kind:'point',adapter:'aria-number-line',bounds:{xMin:min,xMax:max,yMin:0,yMax:0},step});
+      else limitations.push('This number-line slider does not expose usable bounds and a current value.');
+    }
     else if (el.matches('[data-aura-graph]')) {
       const bounds = Object.fromEntries(["xMin","xMax","yMin","yMax"].map(key=>[key,Number(el.dataset[key])]));
       if (el.dataset.auraGraph === "point" && Object.values(bounds).every(Number.isFinite) && bounds.xMin < bounds.xMax && bounds.yMin < bounds.yMax) fields.push({...base,kind:"point",bounds});
       else limitations.push("Graph control has no supported coordinate adapter.");
-    } else if (el.matches('[data-aura-draggable]')) fields.push({...base,kind:"drag"});
+    } else if (el.matches('[data-aura-draggable], [draggable="true"]')) {
+      if(drops.length)fields.push({...base,kind:"drag"});
+      else limitations.push('This drag item has no explicitly identified drop targets.');
+    }
     else if (el.tagName === "SELECT" && !el.multiple) fields.push({...base,kind:"select",options:[...el.options].map(o=>({value:o.value,label:o.text,disabled:o.disabled}))});
     else if (el.type === "radio") fields.push({...base,kind:"radio",group:el.name || base.id});
     else if (el.type === "checkbox") fields.push({...base,kind:"checkbox"});
@@ -130,7 +143,6 @@ export function snapshot() {
   if (!fields.length) for (const el of saraChoices(document,location.hostname,visible)) {
     fields.push({id:idFor(el),label:(el.innerText || el.textContent).trim(),kind:'radio',group:'sara-answer',adapter:'sara-choice'});
   }
-  const drops = root ? [...root.querySelectorAll('[data-aura-drop]')].filter(visible).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
   if (root?.querySelector('canvas, svg:not([data-aura-graph])') && !fields.some(f=>f.kind === 'point')) limitations.push("Canvas/SVG content is not read visually; complex graph actions are unsupported.");
   if (root?.querySelector('img:not([alt]), img[alt=""]')) limitations.push("An image has no description; the model may not have enough information.");
   const readable = root?.cloneNode?.(true);

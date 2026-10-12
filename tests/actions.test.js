@@ -10,9 +10,18 @@ class Input {
 globalThis.HTMLInputElement=Input;
 globalThis.getComputedStyle=()=>({visibility:'visible'});
 globalThis.location={href:'https://example.com/practice',pathname:'/practice'};
+globalThis.PointerEvent=globalThis.MouseEvent=globalThis.KeyboardEvent=class {
+  constructor(type,init={}){this.type=type;Object.assign(this,init);}
+};
 const field=new Input();let extra=false,clicked=0;
 const second=new Input();second.id='y';second.name='y';
-const root={isConnected:true,innerText:'Solve 3x + 7 = 22',getClientRects:()=>[{}],closest:()=>null,querySelector:()=>null,querySelectorAll:selector=>selector.startsWith('input')?(extra?[field,second]:[field]):[]};
+let sliderMode=false;
+const slider={isConnected:true,disabled:false,readOnly:false,dataset:{step:'1'},parentElement:null,
+  getClientRects:()=>[{}],getBoundingClientRect:()=>({left:0,top:0,width:100,height:20}),
+  closest:()=>null,querySelectorAll:()=>[],matches:selector=>selector.includes('[role="slider"]'),
+  getAttribute:key=>({role:'slider','aria-label':'Number line','aria-valuemin':'-5','aria-valuemax':'5','aria-valuenow':'0'}[key] ?? null),
+  focus(){},dispatchEvent(event){if(event.type==='click')this.getAttribute=key=>({...{'aria-valuenow':String(Math.round(event.clientX/10-5))},role:'slider','aria-label':'Number line','aria-valuemin':'-5','aria-valuemax':'5'}[key] ?? null);return true;}};
+const root={isConnected:true,innerText:'Solve 3x + 7 = 22',getClientRects:()=>[{}],closest:()=>null,querySelector:()=>null,querySelectorAll:selector=>selector.startsWith('input')?(sliderMode?[slider]:(extra?[field,second]:[field])):[]};
 const button={isConnected:true,innerText:'Check answer',disabled:false,getClientRects:()=>[{}],closest:()=>null,getAttribute:()=>null,click:()=>clicked++};
 globalThis.document={title:'Ungraded practice',hidden:false,querySelector:()=>null,querySelectorAll:selector=>selector.startsWith('[data-aura-question]')?[root]:selector.startsWith('button')?[button]:[]};
 const {snapshot}=await import('../src/content/detection.js');
@@ -37,5 +46,14 @@ test('diagnostic image warnings do not veto validated answers that Fill can ente
   const p=plan(true);p.deferSubmit=true;
   const result=await execute(p);assert.equal(result.filled,1);assert.equal(result.submitted,false);assert.equal(clicked,1);
  }finally{root.querySelector=original;}
+});
+test('an ARIA number line is plotted only after its value confirms the point',async()=>{
+ sliderMode=true;
+ try{
+  const s=snapshot();assert.equal(s.fields[0].adapter,'aria-number-line');
+  const p={url:s.url,hash:s.hash,mode:'autopilot',submit:false,solution:{answer:'3',explanation:'Plot 3.',confidence:.99,supported:true,limitation:'',actions:[{kind:'point',target:s.fields[0].id,value:'',destination:'',x:3,y:0}]}};
+  assert.deepEqual(await execute(p),{filled:1,submitted:false});
+  assert.equal(slider.getAttribute('aria-valuenow'),'3');
+ }finally{sliderMode=false;}
 });
 

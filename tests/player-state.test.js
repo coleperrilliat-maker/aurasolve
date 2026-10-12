@@ -8,6 +8,13 @@ test('Continue never aliases Check answer or Next question despite reused comman
  assert.equal(controlKind(['Final Check'],'checkanswer'),'submit');
  for(const text of ['Submit','Submit assignment','Save','Save best score','Leave question'])assert.equal(controlKind([text],'checkanswer'),null);
 });
+test('assignment Submit and unlabeled command metadata can never check an answer',()=>{
+ assert.equal(controlKind([],'checkanswer'),null);
+ assert.equal(controlKind(['Submit','Check answer'],'checkanswer'),null);
+ for(const text of ['Finish homework','Turn in test','Submit quiz','Finish assignment'])
+   assert.equal(controlKind([text],'checkanswer'),null);
+ assert.equal(controlKind(['Check answer'],'checkanswer'),'submit');
+});
 test('question status distinguishes correct, partially correct, incorrect and unanswered',()=>{
  for(const [text,status] of [['Correct','correct'],['Partially correct','partial'],['Incorrect','incorrect'],['Not attempted','unanswered'],['In progress','incomplete']])assert.equal(questionStatus('Question 21, '+text),status);
 });
