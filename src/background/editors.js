@@ -1,7 +1,7 @@
 // Runs in the page's MAIN world. Only known, live editor APIs are supported;
 // never evaluate model text or infer an editor from its appearance alone.
 export function editorBridge(request = {op: "discover"}) {
-  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], .acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid]';
+  const selector = '.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], .acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid], [role="combobox"][aria-controls], [aria-haspopup="listbox"][aria-controls]';
   function adapterFor(el) {
     if (el.matches('.mq-editable-field, .mathquill-editable')) {
       try {
@@ -33,7 +33,7 @@ export function editorBridge(request = {op: "discover"}) {
     } catch {}
     // Pearson also exposes answer dropdowns without a global Dojo registry.
     // Only use a menu explicitly linked to this control, never a page-wide menu.
-    if (el.matches('.acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid]')) {
+    if (el.matches('.acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid], [role="combobox"][aria-controls], [aria-haspopup="listbox"][aria-controls]')) {
       const menuItems=()=>{
         const ids=[el.getAttribute('aria-controls'),el.getAttribute('aria-owns'),
           (el.getAttribute('widgetid') || el.id) && (el.getAttribute('widgetid') || el.id)+'_dropdown']
@@ -81,7 +81,7 @@ export function editorBridge(request = {op: "discover"}) {
     if(document.hidden)throw new Error('The question tab is hidden.');
     const prior=document.activeElement;
     const roots='[data-aura-question],[data-testid="question"],div[id*="xl_player_layout"],.question-content,#questionContent,#question-content,.questionContainer,.question-container,#problem,.problem-content';
-    for(const el of document.querySelectorAll('.acctable .inputcell[role="listbox"],.dijitSelect,[role="combobox"][widgetid]')){
+    for(const el of document.querySelectorAll('.acctable .inputcell[role="listbox"],.dijitSelect,[role="combobox"][widgetid],[role="combobox"][aria-controls],[aria-haspopup="listbox"][aria-controls]')){
       if(!el.closest(roots) || !el.getClientRects().length || el.closest('[hidden],[aria-disabled="true"],.disabled,.dijitDisabled') || adapterFor(el))continue;
       el.click();
       for(let attempt=0;attempt<20;attempt++){

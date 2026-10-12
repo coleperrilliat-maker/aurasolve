@@ -37,3 +37,18 @@ test('tutor instructions preserve LaTeX backslashes',()=>{
   assert.ok(TUTOR_INSTRUCTIONS.includes('\\('));
   assert.ok(!TUTOR_INSTRUCTIONS.includes('\f'));
 });
+test('an ARIA-linked answer menu is discovered and confirms its selected label',async()=>{
+  const menu={querySelectorAll:()=>[item]};
+  const el={dataset:{},textContent:'Choose',isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('[role="combobox"][aria-controls]'),getClientRects:()=>[{}],closest:()=>null,
+    getAttribute:key=>key==='aria-controls'?'answer-menu':null,removeAttribute(){},querySelector:()=>null,click(){},dispatchEvent(){}};
+  const item={textContent:'Square root',parentElement:{closest:()=>null},classList:{contains:()=>false},
+    getAttribute:()=>null,getClientRects:()=>[{}],querySelector:()=>null,click(){el.textContent='Square root';}};
+  globalThis.document={hidden:false,querySelectorAll:()=>[el],getElementById:id=>id==='answer-menu'?menu:null,createElement:()=>({set innerHTML(value){this.textContent=value;},textContent:''})};
+  globalThis.getComputedStyle=()=>({visibility:'visible'});
+  globalThis.window={};
+  editorBridge();
+  assert.equal(el.dataset.auraEditor,'dojo-select');
+  assert.deepEqual(JSON.parse(el.dataset.auraOptions),[{value:'Square root',label:'Square root',disabled:false}]);
+  assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'Square root'}),{filled:true});
+});

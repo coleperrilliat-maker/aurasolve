@@ -75,15 +75,17 @@ AutoPilot requires typing **This is not a graded homework assignment** and signi
 | --- | --- |
 | Text answers | Native text/number inputs, textareas, and plain contenteditable controls; focus, input/change, blur, and read-back checks |
 | Choices | Native radio buttons, checkboxes, single-select dropdowns |
+| Number lines | Horizontal ARIA sliders with numeric min/max/current values and an exposed step; every write is read back |
 | Graphs | One point on an explicit coordinate-grid adapter; not arbitrary graph canvases, lines, curves, or regions |
-| Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment |
+| Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment; ARIA drop targets are recognized |
 | Pearson detection | Common question-container selectors, text, accessible math labels, and accessible matching frames |
 | Math editors | Capability-checked MathQuill API and Pearson-style Dojo widgets with a real value setter; unsupported proprietary editors remain manual. DOM detection inspected on a live MyLab player; automated writes verified on local fixtures. |
+| Fill-in menus | Native selects, Dojo widgets, and uniquely linked ARIA listboxes; exact options and the retained selection are verified |
 | Pearson graph widgets | Proprietary graph/drag controls still need dedicated adapters |
 | Images | Text/alt labels plus a question screenshot for visual problems when capture succeeds |
 | AutoPilot | Pearson multipart progress, per-question correctness, all-frame feedback, Continue, Similar question, and remaining-question navigation; ambiguous states pause |
 
-This is a working implementation with a local practice lab, not universal automation for every Pearson question. The live Pearson DOM was inspected read-only; the new submission flow was exercised on browser fixtures, not a complete live assignment. Detection prefers recognized question containers and falls back to a container around visible answer controls. If several questions are visible, click a field in the intended question to disambiguate.
+This is a working implementation with a local practice lab, not universal automation for every Pearson question. Pearson's help page describes user interactions, not the proprietary DOM/API contracts required to automate them. AuraSolve solves and explains visual questions from a screenshot, but only fills a graph, number line, menu, or drag control when the page exposes bounds/options/targets and the result can be read back. Calculator, data, and Show work are student helpers rather than answer types and are not automated. The live Pearson DOM was inspected read-only; the submission flow was exercised on browser fixtures, not a complete live assignment. Detection prefers recognized question containers and falls back to a container around visible answer controls. If several questions are visible, click a field in the intended question to disambiguate.
 
 ## Try the included practice lab
 
