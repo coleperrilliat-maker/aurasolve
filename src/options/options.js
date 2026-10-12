@@ -4,7 +4,7 @@ import {checkBackend} from "../background/api.js";
 const $ = id => document.getElementById(id);
 await chrome.storage.local.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"});
 const {settings = {}} = await chrome.storage.local.get("settings");
-$("model").value = settings.model || "gpt-4.1-mini";
+$("model").value = settings.model || "";
 
 async function refreshStatus() {
   $("server").textContent = "Checking…";
@@ -24,7 +24,6 @@ $("settings").onsubmit = async event => {
   event.preventDefault();
   try {
     const model = $("model").value.trim();
-    if (!model) throw new Error("Enter a model name.");
     await chrome.storage.local.set({settings: {model}});
     $("status").textContent = "Saved. Return to your practice page and choose a mode.";
   } catch (error) {

@@ -18,7 +18,7 @@ export function execute(plan) {
   if (current.hash !== plan.hash || current.url !== plan.url) throw new Error("The question changed. Generate a new answer first.");
   validateSolution(plan.solution,current,plan.mode);
   if (!plan.solution.supported || plan.solution.confidence < 0.85 || !plan.solution.actions.length) throw new Error("This answer needs manual review; automatic filling is unavailable.");
-  if (plan.submit && current.limitations.length) throw new Error("This question contains unsupported controls. AutoPilot stopped.");
+  if (plan.submit && current.limitations.some(l=>!(plan.visualRead && /Canvas\/SVG|image has no description/.test(l)))) throw new Error("This question contains unsupported controls. AutoPilot stopped.");
   if (plan.submit) {
     const targets = new Set(plan.solution.actions.map(a=>a.target));
     for (const f of current.fields) {
@@ -68,9 +68,12 @@ export function nextProblem() {
   button.click();
   return {clicked:true};
 }
-export function advance() {
+export async function advance() {
   guard();
   if (feedback().state !== "correct") throw new Error("No correct-answer feedback was detected. Continue manually.");
+  let ok;
+  try { ok=findButton("dismiss"); } catch {}
+  if(ok){ok.click();await new Promise(resolve=>setTimeout(resolve,250));guard();}
   findButton("next").click();
   return {advanced:true};
 }

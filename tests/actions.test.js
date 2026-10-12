@@ -25,3 +25,13 @@ test('changed question is rejected before mutation',()=>{const p=plan(true);root
 test('all required fields must be covered before submission',()=>{extra=true;const p=plan(true);assert.throws(()=>execute(p),/all answer fields/);extra=false;assert.equal(clicked,0);});
 test('hidden page stops before clicking submit',()=>{const p=plan(true);document.hidden=true;assert.throws(()=>execute(p),/hidden/);document.hidden=false;assert.equal(clicked,0);});
 test('complete practice plan submits once',()=>{execute(plan(true));assert.equal(clicked,1);});
+test('a captured diagram does not block submission, but an uncaptured diagram does',()=>{
+  const original=root.querySelector;
+  root.querySelector=selector=>selector.startsWith('canvas')?{}:null;
+  try {
+    const blocked=plan(true);
+    assert.throws(()=>execute(blocked),/unsupported controls/);
+    const captured=plan(true);captured.visualRead=true;
+    const before=clicked;execute(captured);assert.equal(clicked,before+1);
+  }finally{root.querySelector=original;}
+});

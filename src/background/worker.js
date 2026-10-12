@@ -31,11 +31,14 @@ async function frameCall(tabId, documentId, method, payload) {
 }
 const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,frameIds:[0]},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
 async function screenshot(tabId, question) {
-  const {windowId} = await chrome.tabs.get(tabId);
+  const {windowId, active} = await chrome.tabs.get(tabId);
+  if (!active) throw new Error("Keep the question tab active so AuraSolve can read its diagram.");
   await veil(tabId,true);
   let shot;
   try { await new Promise(resolve=>setTimeout(resolve,80)); shot = await chrome.tabs.captureVisibleTab(windowId,{format:"png"}); }
   finally { await veil(tabId,false); }
+  const [activeTab] = await chrome.tabs.query({active:true,windowId});
+  if (activeTab?.id !== tabId) throw new Error("The active tab changed during capture. Return to the question and retry.");
   const bitmap = await createImageBitmap(await (await fetch(shot)).blob());
   let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
   const r = question.rect;
@@ -46,10 +49,10 @@ async function screenshot(tabId, question) {
     sw = Math.min(bitmap.width, (r.x + r.width) * scale + pad) - sx; sh = Math.min(bitmap.height, (r.y + r.height) * scale + pad) - sy;
     if (sw < 40 || sh < 40) { sx = 0; sy = 0; sw = bitmap.width; sh = bitmap.height; }
   }
-  const fit = Math.min(1, 1400 / sw, 1400 / sh);
+  const fit = Math.min(1, 2400 / sw, 2400 / sh);
   const canvas = new OffscreenCanvas(Math.round(sw * fit), Math.round(sh * fit));
   canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-  const bytes = new Uint8Array(await (await canvas.convertToBlob({type:"image/jpeg",quality:.82})).arrayBuffer());
+  const bytes = new Uint8Array(await (await canvas.convertToBlob({type:"image/jpeg",quality:.95})).arrayBuffer());
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return `data:image/jpeg;base64,${btoa(binary)}`;
@@ -117,21 +120,25 @@ async function handle(message,sender) {
     const {settings={}} = await chrome.storage.local.get("settings");
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);
-    const timeout = setTimeout(()=>controller.abort(),90000);
-    let solution;
+    const timeout = setTimeout(()=>controller.abort(),180000);
+    let solution, visualRead=false;
     try {
       const {rect, viewport, ...question} = state.question;
       if (question.visual) {
-        question.image = await screenshot(tabId, state.question).catch(error => { console.warn("AuraSolve screenshot failed:", error); return null; });
+        try { question.image = await screenshot(tabId, state.question); }
+        catch (error) { throw new Error("Could not read the diagram. " + error.message); }
+        visualRead=Boolean(question.image);
         if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
+      const fresh = await collect(tabId);
+      if (fresh.question.hash !== state.question.hash || fresh.question.documentId !== state.question.documentId) throw new Error("The question changed while reading it. Retry on the current question.");
       solution = await solve(question,message.mode,settings,controller.signal);
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const id = crypto.randomUUID();
-    plans.set(id,{tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,mode:message.mode,generation,created:Date.now(),state:"ready"});
+    plans.set(id,{tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,visualRead,solution,mode:message.mode,generation,created:Date.now(),state:"ready"});
     return {planId:id,solution,question:state.question};
   }
   const plan = plans.get(message.planId);

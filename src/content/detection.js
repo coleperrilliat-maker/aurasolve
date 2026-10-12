@@ -82,15 +82,19 @@ export function snapshot() {
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
 export function feedback() {
-  const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"]')].filter(visible);
+  const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"], [role="dialog"], .dijitDialog')].filter(visible);
   const text = clean(nodes.map(el=>el.innerText).join(" "));
   if (/\b(incorrect|wrong|try again|not correct)\b/i.test(text)) return {state:"incorrect",text};
   if (/\b(correct|well done|great job)\b/i.test(text)) return {state:"correct",text};
   return {state:"unknown",text};
 }
 export function findButton(kind) {
-  const patterns = kind === "submit" ? /^(check answer|check my answer|submit answer|submit|check)$/i : /^(next|next question|next problem|continue)$/i;
-  const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && patterns.test(clean(el.innerText || el.value || el.getAttribute('aria-label'))));
+  const patterns = kind === "dismiss" ? /^(ok|okay)$/i : kind === "submit" ? /^(check answer|check my answer|submit answer|submit|check)$/i : /^(next|next question|next problem|continue)$/i;
+  const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')].filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && [el.innerText,el.value,el.getAttribute("aria-label"),el.getAttribute("title")].some(value=>patterns.test(clean(value))));
+  if(kind==="submit"){
+    const check=buttons.filter(el=>[el.innerText,el.value,el.getAttribute("aria-label")].some(v=>/^check (my )?answer$/i.test(clean(v))));
+    if(check.length===1)return check[0];
+  }
   if (buttons.length !== 1) throw new Error(`Could not identify exactly one ${kind} button. Continue manually.`);
   return buttons[0];
 }

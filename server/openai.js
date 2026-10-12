@@ -1,17 +1,19 @@
+import {verifiedSolve} from "./verification.js";
 import {solutionSchema, validateSolution} from "../src/shared/solution.js";
-import {TUTOR_INSTRUCTIONS} from "../src/shared/instructions.js";
+import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS} from "../src/shared/instructions.js";
 
 export const DEFAULT_MODEL = "gpt-4.1-mini";
 const EFFORTS = ["none", "minimal", "low", "medium", "high"];
 
-export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, requestedEffort) {
+async function solveOnce(snapshot, mode, requestedModel, signal, requestedEffort, independent=false) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("Server is missing OPENAI_API_KEY.");
-  const model = requestedModel || process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
+  const model = process.env.OPENAI_MODEL?.trim() || requestedModel || DEFAULT_MODEL;
   const effort = EFFORTS.includes(requestedEffort) ? requestedEffort : process.env.OPENAI_REASONING_EFFORT?.trim() || "low";
   const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort}} : {};
 
   const image = typeof snapshot.image === "string" && snapshot.image.length < 3_500_000 && /^data:image\/(jpeg|png);base64,/.test(snapshot.image) ? snapshot.image : null;
+  if (snapshot.visual && !image) throw new Error("A readable screenshot is required for this diagram. Return to the question and retry.");
   const text = JSON.stringify({
     mode,
     question: snapshot.question,
@@ -33,7 +35,7 @@ export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, re
       model,
       ...reasoning,
       store: false,
-      instructions: TUTOR_INSTRUCTIONS,
+      instructions: TUTOR_INSTRUCTIONS + "\n" + GEOMETRY_CHECKS + (independent ? "\nIndependently solve this problem from the original evidence. Recheck each label, equation and field mapping before returning actions." : ""),
       input: image
         ? [{role: "user", content: [{type: "input_text", text}, {type: "input_image", image_url: image, detail: "high"}]}]
         : text,
@@ -72,4 +74,8 @@ export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, re
   } catch (error) {
     throw new Error(`Could not use the answer: ${error.message}`);
   }
+}
+
+export async function solveWithOpenAI(snapshot, mode, requestedModel, signal, requestedEffort) {
+  return verifiedSolve((question, runMode, independent)=>solveOnce(question,runMode,requestedModel,signal,requestedEffort,independent),snapshot,mode);
 }

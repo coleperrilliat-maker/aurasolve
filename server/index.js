@@ -93,8 +93,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90_000);
-    req.on("close", () => controller.abort());
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+    res.on("close", () => { if (!res.writableEnded) controller.abort(); });
 
     try {
       const solution = await solveWithOpenAI(snapshot, mode, typeof model === "string" ? model : undefined, controller.signal, effort);

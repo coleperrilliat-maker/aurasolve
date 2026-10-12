@@ -12,6 +12,7 @@ export async function solve(snapshot, mode, settings, signal) {
       mode,
       snapshot,
       model: settings.model || undefined,
+      effort: settings.effort || undefined,
     }),
   });
 

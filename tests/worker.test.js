@@ -60,3 +60,17 @@ test('a reviewed field answer can be explicitly submitted once',async()=>{
   assert.equal(applied,before+2);
   assert.equal((await request({type:'submitField',planId:result.data.planId})).ok,false);
 });
+
+test('diagram capture failure stops solving instead of guessing from text',async()=>{
+  state.visual=true;
+  chrome.tabs.get=async()=>({windowId:1,active:false});
+  const previousFetch=globalThis.fetch;
+  let calls=0;
+  globalThis.fetch=async(...args)=>{calls++;return previousFetch(...args);};
+  try {
+    const result=await request({type:'solve',mode:'explain'});
+    assert.equal(result.ok,false);
+    assert.match(result.error,/Could not read the diagram/);
+    assert.equal(calls,0);
+  } finally {delete state.visual;globalThis.fetch=previousFetch;}
+});

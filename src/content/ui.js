@@ -1,3 +1,4 @@
+import {runAutoPilot} from "../shared/autopilot.js";
 import {renderSolution, loadMathFonts} from "../shared/render.js";
 import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
@@ -108,7 +109,12 @@ export function createUI() {
     try {
       const settings=await request({type:"settingsStatus"});live();
       if(!settings.configured)throw new Error("AuraSolve Cloud is offline or not configured. Open Settings to check the server, then reload the extension.");
-      for(let i=1;i<=(mode==="autopilot"?5:1);i++) {
+      if(mode==="autopilot"){
+        await runAutoPilot({request,status,live,sleep,result:(answer,index)=>card(answer,mode,index)});
+        status("Five practice questions completed.");
+        return;
+      }
+      for(let i=1;i<=1;i++) {
         live();status(mode==="autopilot"?`Working on practice question ${i} of 5…`:"Reading the question and thinking it through…","THINKING");
         $("#loader").hidden=false;
         let result;
@@ -129,22 +135,7 @@ export function createUI() {
           else status("Automatic filling is unavailable for this answer. Use the explanation to complete it manually.","MANUAL STEP");
           break;
         }
-        if(!result.solution.supported || result.solution.confidence<.85 || !result.solution.actions.length) {card(result,mode,i);throw new Error("AutoPilot paused: this answer needs a manual step or more certainty.");}
-        status("Filling the practice answer and checking it…","CHECKING");
-        await request({type:"apply",planId:result.planId});live();
-        const article=card(result,mode,i);
-        const feedbackLabel=document.createElement("div");feedbackLabel.className="feedback";feedbackLabel.textContent="Submitted · waiting for page feedback";article.append(feedbackLabel);
-        let outcome;
-        for(let poll=0;poll<12;poll++){await sleep(500);live();outcome=await request({type:"feedback",planId:result.planId});live();if(outcome.state!=="unknown")break;}
-        if(outcome?.state!=="correct") {feedbackLabel.textContent=outcome?.state==="incorrect"?"The page marked this incorrect. Review the explanation.":"Submission not verified. Check the page manually.";throw new Error("AutoPilot stopped because a correct answer was not confirmed.");}
-        feedbackLabel.textContent="✓ The page confirmed this answer";
-        status(i===5?"Five practice questions completed. Your tutor notes are below.":"Answer checked. Read your tutor notes; continuing shortly…",i===5?"SESSION COMPLETE":"NICE WORK");
-        if(i===5)break;
-        await sleep(3500);live();
-        await request({type:"next",planId:result.planId});live();
-        let changed=false;
-        for(let poll=0;poll<12;poll++){await sleep(500);live();const next=await request({type:"inspect"});live();if(next.question.hash!==result.question.hash){changed=true;break;}}
-        if(!changed)throw new Error("The next question did not load. AutoPilot stopped.");
+
       }
     } catch(error) {if(mine===token)status(error.message,"NEEDS ATTENTION");}
     finally {if(mine===token)busy(false);}
