@@ -80,7 +80,7 @@ function breakdown(){
 async function run(mode) {
   const mine = ++token;
   runLog=[];
-  let similarRetries=0;
+  let similarRetries=0, attemptHadError=false, partAttempts=0;
   paused=false;pauseUI();
   const limit=mode==='autopilot'?Number($('question-limit').value):1;
   $('pilot-progress').hidden=mode!=='autopilot';
@@ -144,7 +144,7 @@ async function run(mode) {
       live();
       runLog[runLog.length-1].outcome='Submitted · result unconfirmed';
       let outcome;
-      for (let poll = 0; poll < 12; poll++) {
+      for (let poll = 0; poll < 30; poll++) {
         await delay(500);
         live();
         outcome = await send({type: "feedback", planId: result.planId});
@@ -157,8 +157,21 @@ async function run(mode) {
         await send({type:'acknowledge',planId:result.planId});
         await delay(250);
       }
-      if(outcome?.state==='incorrect'){
-        if(similarRetries>=2)throw new Error('Stopped after two similar-question retries. Review the breakdown.');
+      if(!['correct','incorrect'].includes(outcome?.state))throw new Error('No feedback was detected. AutoPilot stopped without guessing the result.');
+      attemptHadError ||= outcome?.state==='incorrect';
+      let continuation;
+      for(let poll=0;poll<12;poll++){
+        await delay(250);
+        continuation=await send({type:'continuation',planId:result.planId});
+        if(continuation.controls.submit || continuation.controls.similar || continuation.controls.next)break;
+      }
+      if(continuation?.controls.submit && !continuation.controls.similar){
+        if(++partAttempts>30)throw new Error('Stopped after 30 part attempts without completing this question.');
+        status('Continuing the remaining parts of this question…');
+        i--;continue;
+      }
+      if(attemptHadError){
+        if(similarRetries>=5)throw new Error('Stopped after five similar-question retries. Review the breakdown before continuing.');
         status('Incorrect. Looking for Similar question…');
         let available=false;
         for(let poll=0;poll<12;poll++){
@@ -174,10 +187,10 @@ async function run(mode) {
           if(next.question.hash!==result.question.hash){changed=true;break;}
         }
         if(!changed)throw new Error('The similar question did not load. Stopped without reusing the old answer.');
-        similarRetries++;i--;continue;
+        similarRetries++;attemptHadError=false;partAttempts=0;i--;continue;
       }
       if (outcome?.state !== "correct") throw new Error("AutoPilot stopped. A correct answer was not confirmed.");
-      similarRetries=0;
+      similarRetries=0;attemptHadError=false;partAttempts=0;
       $('progress').value=i;
       status(i === limit ? limit+(limit===1?" question done.":" questions done.") : "Correct. Continuing…");
       if (i === limit) break;

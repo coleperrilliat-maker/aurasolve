@@ -112,7 +112,7 @@ export function dismissFeedback(){
   const dialogs=[...document.querySelectorAll('[role="dialog"],.dijitDialog,.feedbackDialog,.correctDialog,[role="alert"]')].filter(visible)
     .filter(el=>/incorrect|correct|excellent|well done|great job|fantastic|nice work|try again/i.test(el.innerText));
   const buttons=[...new Set(dialogs.flatMap(dialog=>[...dialog.querySelectorAll('button,[role="button"],input[type="button"]')]))]
-    .filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && /^ok$/i.test((el.innerText || el.value || el.getAttribute('aria-label') || '').trim()));
+    .filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].some(value=>/^(ok|okay)$/i.test((value || '').trim())));
   if(buttons.length>1)throw new Error('Several feedback OK buttons are visible. Close the feedback manually.');
   if(!buttons.length)return {clicked:false};
   buttons[0].click();return {clicked:true};

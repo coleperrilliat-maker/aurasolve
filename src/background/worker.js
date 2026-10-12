@@ -27,7 +27,7 @@ async function collect(tabId) {
   // Several guessed containers (e.g. a sidebar form and the question frame): use the one with the most answer controls.
   if (options.length > 1 && !known.length) options = [options.reduce((a,b)=>(b.fields.length-a.fields.length || b.question.length-a.question.length)>0?b:a)];
   if (options.length !== 1) throw new Error(options.length ? "Several questions were found. Click an answer field in the question you want." : "No supported question container was found. This page needs a site adapter; try the included practice lab.");
-  return {top,question:options[0],contexts:frames.map(f=>f.context)};
+  return {top,question:options[0],frames,contexts:frames.map(f=>f.context)};
 }
 const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,allFrames:true},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
 async function screenshot(tabId, question) {
@@ -61,14 +61,14 @@ function cancel(tabId) {
   for (const [id,p] of plans) if (p.tabId===tabId) plans.delete(id);
 }
 function controlDocument(state, kind) {
-  const frames = [state.question, ...(state.top.documentId !== state.question.documentId ? [state.top] : [])];
+  const frames = state.frames || [state.question,state.top];
   const available = frames.filter(frame=>(frame.controls?.[kind] || 0)>0);
   if (available.length!==1 || available[0].controls[kind]!==1) throw new Error(`Could not identify exactly one ${kind} button. Your answer and explanation are still available.`);
   return available[0].documentId;
 }
 async function pageFeedback(tabId,state) {
   const outcomes = [];
-  for (const documentId of new Set([state.question.documentId,state.top.documentId])) outcomes.push(await frameCall(tabId,documentId,'feedback'));
+  for (const documentId of new Set((state.frames || [state.question,state.top]).map(frame=>frame.documentId))) outcomes.push(await frameCall(tabId,documentId,'feedback'));
   return outcomes.find(o=>o.state==='incorrect') || outcomes.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
 async function submitPlan(tabId,plan,state) {
@@ -81,7 +81,7 @@ async function submitPlan(tabId,plan,state) {
     if(plan.generation!==rev(tabId))throw new Error('Stopped.');
     fresh=await collect(tabId);
     if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash)throw new Error('The question changed. Review the filled answer manually.');
-    const count=[fresh.question,...(fresh.top.documentId!==fresh.question.documentId?[fresh.top]:[])].reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
+    const count=(fresh.frames || [fresh.question,fresh.top]).reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
     if(count>0){documentId=controlDocument(fresh,'submit');break;}
     await new Promise(resolve=>setTimeout(resolve,150));
   }
@@ -232,14 +232,30 @@ async function handle(message,sender) {
     const outcome=await pageFeedback(tabId,state);
     if(outcome.state!=='unknown')plan.verdict=outcome.state;
     if(!['correct','incorrect'].includes(plan.verdict))throw new Error('No answer feedback detected.');
-    for(const documentId of new Set([state.question.documentId,state.top.documentId])){
-      const dismissed=await frameCall(tabId,documentId,'dismissFeedback');
-      if(dismissed.clicked)break;
+    let clicked=false;
+    for(let attempt=0;attempt<12;attempt++){
+      if(plan.generation!==rev(tabId))throw new Error('Stopped.');
+      for(const documentId of new Set((state.frames || [state.question,state.top]).map(frame=>frame.documentId))){
+        const dismissed=await frameCall(tabId,documentId,'dismissFeedback');
+        if(dismissed.clicked){clicked=true;break;}
+      }
+      if(clicked || (await pageFeedback(tabId,state)).state==='unknown')break;
+      await new Promise(resolve=>setTimeout(resolve,250));
     }
-    return {acknowledged:true};
+    if(!clicked && (await pageFeedback(tabId,state)).state!=='unknown')throw new Error('Feedback is still open, but its OK button was not found.');
+    return {acknowledged:true,clicked};
   }
+  if(message.type==='continuation'){
+    if(plan.state!=='submitted')throw new Error('No submitted part to continue.');
+    const controls=(state.frames || [state.question,state.top]).reduce((all,f)=>{
+      for(const key of ['submit','similar','next'])all[key]+=(f.controls?.[key] || 0);
+      return all;
+    },{submit:0,similar:0,next:0});
+    return {controls,question:state.question};
+  }
+
   if(message.type==='similar'){
-    if(plan.state!=='submitted' || plan.verdict!=='incorrect')throw new Error('A confirmed incorrect result is required before trying a similar question.');
+    if(plan.state!=='submitted' || !['incorrect','correct'].includes(plan.verdict))throw new Error('A confirmed result is required before trying a similar question.');
     const documentId=controlDocument(state,'similar');
     if(plan.generation!==rev(tabId))throw new Error('Stopped.');
     plan.state='advancing';

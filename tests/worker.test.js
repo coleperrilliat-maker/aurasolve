@@ -174,3 +174,30 @@ test('incorrect feedback permits similar question but not Next',async()=>{
  try{assert.equal((await request({type:'similar',planId})).ok,true);}
  finally{delete state.controls.similar;verdict='unknown';}
 });
+test('feedback in an intermediate frame is found and its OK is clicked',async()=>{
+ const original=chrome.scripting.executeScript;
+ let middleVerdict='unknown',dismissed=false;
+ chrome.scripting.executeScript=async input=>{
+  if(!input.args){
+   const frames=await original(input);
+   return [...frames,{frameId:1,documentId:'middle',result:{...state,question:'',fields:[],selected:null,controls:{}}}];
+  }
+  if(input.args[0]==='feedback' && input.target.documentIds[0]==='middle')
+   return [{result:{ok:true,data:{state:middleVerdict,text:'Fantastic!'}}}];
+  if(input.args[0]==='dismissFeedback'){
+   if(input.target.documentIds[0]==='middle'){dismissed=true;middleVerdict='unknown';return [{result:{ok:true,data:{clicked:true}}}];}
+   return [{result:{ok:true,data:{clicked:false}}}];
+  }
+  return original(input);
+ };
+ try {
+  await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+  const answer=await request({type:'solve',mode:'autopilot'}),planId=answer.data.planId;
+  assert.equal((await request({type:'apply',planId})).ok,true);
+  middleVerdict='correct';
+  assert.equal((await request({type:'feedback',planId})).data.state,'correct');
+  assert.equal((await request({type:'acknowledge',planId})).ok,true);
+  assert.equal(dismissed,true);
+  assert.equal((await request({type:'continuation',planId})).data.controls.submit,1);
+ }finally{chrome.scripting.executeScript=original;}
+});
