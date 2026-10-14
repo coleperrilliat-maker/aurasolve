@@ -1,0 +1,53 @@
+name: Publish AuraSolve
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publish-aurasolve
+  cancel-in-progress: true
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read extension version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Package extension only
+        run: npm run package:extension
+      - name: Publish extension download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: AuraSolve ${{ steps.version.outputs.version }}
+          body: Download AuraSolve-extension.zip, extract it, then load the extracted folder from chrome://extensions.
+          files: dist/AuraSolve-extension.zip
+          make_latest: true
+
+  website:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Deploy landing page
+        id: deployment
+        uses: actions/deploy-pages@v4
