@@ -4,73 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="AuraSolve is a focused Chrome study companion for worked explanations and supported practice fields.">
-  <title>AuraSolve — Practice with clarity</title>
+  <title>AuraSolve</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="site-header">
+  <header class="resource-bar">
     <a class="brand" href="#" aria-label="AuraSolve home">
-      <img src="/icon.png" alt="" width="38" height="38">
+      <img src="../icons/icon-128.png" alt="" width="38" height="38">
       <span>AuraSolve</span>
     </a>
-    <nav aria-label="Main navigation">
-      <a href="#install">How to install</a>
-      <a class="header-download" href="https://github.com/coleperrilliat-maker/aurasolve/releases/latest/download/AuraSolve-extension.zip">Download</a>
+    <nav aria-label="AuraSolve resources">
+      <a class="resource-link" href="https://github.com/coleperrilliat-maker/aurasolve#install-the-extension-no-zip">Install guide</a>
+      <a class="download" href="https://github.com/coleperrilliat-maker/aurasolve/releases/latest/download/AuraSolve-extension.zip">
+        Download extension
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14"/></svg>
+      </a>
     </nav>
   </header>
-
-  <main>
-    <section class="hero">
-      <p class="eyebrow">Chrome study companion</p>
-      <h1>Practice with clarity.</h1>
-      <p class="intro">Get concise answers, worked explanations, and help filling supported practice questions—all in one focused extension.</p>
-      <div class="hero-actions">
-        <a class="download" href="https://github.com/coleperrilliat-maker/aurasolve/releases/latest/download/AuraSolve-extension.zip">
-          Download AuraSolve
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14"/></svg>
-        </a>
-        <span id="version">Version 1.15.3 · Chrome</span>
-      </div>
-    </section>
-
-    <section class="features" aria-label="AuraSolve features">
-      <article>
-        <span>01</span>
-        <h2>Clear explanations</h2>
-        <p>See the answer first, followed by short steps that make the method easy to review.</p>
-      </article>
-      <article>
-        <span>02</span>
-        <h2>Built for math</h2>
-        <p>Fractions, equations, symbols, and structured answers render cleanly inside the extension.</p>
-      </article>
-      <article>
-        <span>03</span>
-        <h2>Focused workflow</h2>
-        <p>Use Explain or Fill while keeping the problem and your study notes in view.</p>
-      </article>
-    </section>
-
-    <section class="install" id="install">
-      <div>
-        <p class="eyebrow">Quick setup</p>
-        <h2>Install in under a minute.</h2>
-      </div>
-      <ol>
-        <li><span>1</span><p><strong>Download and unzip</strong> AuraSolve to a folder you will keep.</p></li>
-        <li><span>2</span><p>Open <strong>chrome://extensions</strong> and enable Developer mode.</p></li>
-        <li><span>3</span><p>Choose <strong>Load unpacked</strong> and select the extracted AuraSolve folder.</p></li>
-      </ol>
-    </section>
-  </main>
-
-  <footer>
-    <span>AuraSolve</span>
-    <p>Made for focused practice.</p>
-  </footer>
+  <main aria-hidden="true"></main>
   <script src="script.js"></script>
 </body>
 </html>

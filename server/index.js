@@ -13,6 +13,7 @@ const publicFiles = new Map([
   ["/style.css", {url: new URL("../docs/style.css", import.meta.url), type: "text/css; charset=utf-8"}],
   ["/script.js", {url: new URL("../docs/script.js", import.meta.url), type: "text/javascript; charset=utf-8"}],
   ["/icon.png", {url: new URL("../icons/icon-128.png", import.meta.url), type: "image/png"}],
+  ["/icons/icon-128.png", {url: new URL("../icons/icon-128.png", import.meta.url), type: "image/png"}],
 ]);
 
 function clientIp(req) {

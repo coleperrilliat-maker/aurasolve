@@ -14,6 +14,7 @@ fetch(releaseApi, {headers: {Accept: "application/vnd.github+json"}})
       });
     }
     const version = String(release.tag_name || "").replace(/^v/i, "");
-    if (version) document.getElementById("version").textContent = `Version ${version} · Chrome`;
+    const label = document.getElementById("version");
+    if (version && label) label.textContent = `Version ${version} · Chrome`;
   })
   .catch(() => {});
