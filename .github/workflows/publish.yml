@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: publish-aurasolve
@@ -34,20 +32,3 @@ jobs:
           body: Download AuraSolve-extension.zip, extract it, then load the extracted folder from chrome://extensions.
           files: dist/AuraSolve-extension.zip
           make_latest: true
-
-  website:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
-      - name: Deploy landing page
-        id: deployment
-        uses: actions/deploy-pages@v4

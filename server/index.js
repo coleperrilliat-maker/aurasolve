@@ -1,5 +1,6 @@
 import {BUILD_VERSION} from '../src/shared/version.js';
 import http from "node:http";
+import {readFile} from "node:fs/promises";
 import {solveWithOpenAI, DEFAULT_MODEL} from "./openai.js";
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -7,6 +8,12 @@ const MAX_BODY = 4_000_000;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 40;
 const hits = new Map();
+const publicFiles = new Map([
+  ["/", {url: new URL("../docs/index.html", import.meta.url), type: "text/html; charset=utf-8"}],
+  ["/style.css", {url: new URL("../docs/style.css", import.meta.url), type: "text/css; charset=utf-8"}],
+  ["/script.js", {url: new URL("../docs/script.js", import.meta.url), type: "text/javascript; charset=utf-8"}],
+  ["/icon.png", {url: new URL("../icons/icon-128.png", import.meta.url), type: "image/png"}],
+]);
 
 function clientIp(req) {
   const forwarded = req.headers["x-forwarded-for"];
@@ -29,6 +36,15 @@ function rateLimit(ip) {
 function sendJson(res, status, payload) {
   res.writeHead(status, {"Content-Type": "application/json"});
   res.end(JSON.stringify(payload));
+}
+
+async function sendPublicFile(res, file) {
+  const body = await readFile(file.url);
+  res.writeHead(200, {
+    "Content-Type": file.type,
+    "Cache-Control": file.type === "image/png" ? "public, max-age=86400" : "public, max-age=300",
+  });
+  res.end(body);
 }
 
 function readBody(req) {
@@ -61,6 +77,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   const path = req.url?.split("?")[0];
+
+  if (req.method === "GET" && publicFiles.has(path)) {
+    try {
+      await sendPublicFile(res, publicFiles.get(path));
+    } catch {
+      sendJson(res, 500, {error: "Landing page unavailable"});
+    }
+    return;
+  }
 
   if (path === "/api/v1/health" && req.method === "GET") {
     sendJson(res, 200, {
