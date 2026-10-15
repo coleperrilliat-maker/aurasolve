@@ -34,3 +34,15 @@ test('the extension model preference overrides a legacy Railway mini default',as
   if(previousModel===undefined)delete process.env.OPENAI_MODEL;else process.env.OPENAI_MODEL=previousModel;
  }
 });
+
+test('bounded labeled figure close-ups accompany the overview and do not create extra solves',async()=>{
+ const original=globalThis.fetch,previous=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='fixture-only';let calls=0;
+ const overview='data:image/jpeg;base64,overview',figure='data:image/jpeg;base64,graph';
+ globalThis.fetch=async(_url,options)=>{
+  calls++;const body=JSON.parse(options.body),content=body.input[0].content;
+  assert.equal(content.length,4);assert.equal(content[1].image_url,overview);assert.equal(content[2].text,'Close-up of question figure: Graph B');assert.equal(content[3].image_url,figure);
+  return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({answer:'B',choices:['B'],explanation:'Read axes.',confidence:.9,supported:false,limitation:'Review.',actions:[]})}]}]})};
+ };
+ try{await solveWithOpenAI({question:'Which graph?',fields:[],dropTargets:[],image:overview,figureImages:[{label:'Graph B',image:figure},{label:'Rejected URL',image:'https://example.com/secret'}]},'explain');assert.equal(calls,1);}
+ finally{globalThis.fetch=original;if(previous===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous;}
+});

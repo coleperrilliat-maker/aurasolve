@@ -46,3 +46,23 @@ test('plain fields use slash fractions while LaTeX editors retain commands',asyn
   assert.equal(fieldValue(String.raw`\frac{1}{3}`,{kind:'text',format:'latex'}),String.raw`\frac{1}{3}`);
   assert.equal(fieldValue('option/1',{kind:'select'}),'option/1');
 });
+
+test('dropdown labels canonicalize to exact unique values; duplicates and disabled choices are rejected',()=>{
+ const snap={...snapshot,fields:[{id:'a1',kind:'select',options:[{value:'0',label:'Given'},{value:'1',label:'Vertical Angles Theorem'},{value:'2',label:'Unavailable',disabled:true}]}]};
+ const make=value=>({...solution,actions:[{...action,kind:'select',value}]});
+ assert.equal(validateSolution(make('Vertical Angles Theorem'),snap,'field').actions[0].value,'1');
+ assert.equal(validateSolution(make('0'),snap,'field').actions[0].value,'0');
+ assert.throws(()=>validateSolution(make('Unavailable'),snap,'field'),/unavailable/);
+ snap.fields[0].options.push({value:'3',label:'Given'});assert.throws(()=>validateSolution(make('Given'),snap,'field'),/ambiguous/);
+});
+test('multi-select canonicalizes choices without depending on model order',()=>{
+ const snap={...snapshot,fields:[{id:'a1',kind:'multiselect',options:[{value:'0',label:'Given'},{value:'1',label:'Vertical'}]}]};
+ const make=value=>({...solution,actions:[{...action,kind:'multiselect',value}]});
+ assert.equal(validateSolution(make('["Vertical","Given","0"]'),snap,'field').actions[0].value,'["0","1"]');
+ assert.throws(()=>validateSolution(make('Given'),snap,'field'),/JSON/);
+ assert.throws(()=>validateSolution(make('["Missing"]'),snap,'field'),/unavailable/);
+});
+test('two radio actions in one group fail before clicking either',()=>{
+ const snap={...snapshot,fields:[{id:'a1',kind:'radio',group:'g'},{id:'a2',kind:'radio',group:'g'}]};
+ assert.throws(()=>validateSolution({...solution,actions:snap.fields.map(f=>({...action,kind:'radio',target:f.id}))},snap,'field'),/more than one/);
+});

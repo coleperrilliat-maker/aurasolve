@@ -75,7 +75,7 @@ async function pageFeedback(tabId,state) {
   const candidates=dialogs.length?dialogs:outcomes;
   return candidates.find(o=>o.state==='incorrect') || candidates.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
-const fillPlan = (tabId,plan,requireComplete=false) => frameCall(tabId,plan.documentId,'execute',{...plan,submit:false,requireComplete});
+const fillPlan = (tabId,plan,requireComplete=true) => frameCall(tabId,plan.documentId,'execute',{...plan,submit:false,requireComplete});
 async function prepareAnswers(tabId,state,activate=true) {
   if(activate)await frameCall(tabId,state.question.documentId,'prepareField');
   await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
@@ -173,7 +173,7 @@ async function handle(message,sender) {
     const state=await collect(tabId);if(plan.mode!=="field")await consent(tabId,state);
     if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.hash!==plan.hash) throw new Error('The question changed.');
     const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
-    if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
+    if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select','dom-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:fieldValue(action.value,field)}]});
     if (!result[0]?.result?.filled) throw new Error('The editor did not confirm the answer.');
@@ -283,14 +283,17 @@ async function handle(message,sender) {
 
       if (question.visual) {
         question.image = await screenshot(tabId, state.question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
+        const figures=await frameCall(tabId,state.question.documentId,'captureFigures').catch(()=>[]);
+        let imageBytes=question.image.length;
+        question.figureImages=Array.isArray(figures)?figures.filter(f=>{imageBytes+=f.image?.length || 0;return imageBytes<3400000;}):[];
         visualRead = Boolean(question.image);
-        if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
+        if (question.image) question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
       const fresh=await collect(tabId);
       if(fresh.question.hash!==state.question.hash || fresh.question.documentId!==state.question.documentId)throw new Error("The question changed while reading it. Please retry.");
       const missingField=message.mode==='field' && !question.fields.length;
-      solution = await solve(question,missingField?'explain':message.mode==='field'?'autopilot':message.mode,settings,controller.signal);
+      solution = await solve(question,missingField?'explain':message.mode,settings,controller.signal);
       if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}

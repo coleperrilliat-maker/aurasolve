@@ -1,7 +1,13 @@
+import {missingAnswers} from '../src/shared/solution.js';
 // Agreement is an additional error screen, not an accuracy guarantee.
 export function sameActions(first, second) {
+  // Compare only what the executor actually does. A radio's unused value can
+  // be "B", the option text, or empty without changing the selected answer.
   const normalize = actions => JSON.stringify(actions.map(a=>({
-    target:a.target,kind:a.kind,value:a.value.trim(),x:a.x,y:a.y,destination:a.destination
+    target:a.target,kind:a.kind,
+    ...(['text','select','multiselect','checkbox'].includes(a.kind)?{value:a.value}:{}),
+    ...(a.kind==='point'?{x:a.x,y:a.y}:{}),
+    ...(a.kind==='drag'?{destination:a.destination}:{})
   })).sort((a,b)=>a.target.localeCompare(b.target)));
   return first.supported && second.supported && first.actions.length>0 &&
     normalize(first.actions)===normalize(second.actions);
@@ -40,6 +46,8 @@ function reject(first,message){return {...first,supported:false,actions:[],confi
 export async function verifiedSolve(solve, snapshot, mode) {
   const first=await solve(snapshot,mode,false);
   if(mode==='explain' || !first.supported || !first.actions.length)return first;
+  if(snapshot.unmappedControls?.length)return reject(first,snapshot.unmappedControls.join(' '));
+  if(snapshot.fields && missingAnswers(first,snapshot).length)return reject(first,'The answer did not cover every active blank. Nothing was filled.');
   for(const previous of snapshot.retryContext || []){
     if(sameActions(first,{supported:true,actions:previous.actions || []}))return reject(first,'This answer was already rejected by the page. Review this part manually.');
   }
@@ -47,6 +55,7 @@ export async function verifiedSolve(solve, snapshot, mode) {
   if(checked===true)return first;
   if(checked===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
   const second=await solve(snapshot,mode,true);
+  if(snapshot.fields && missingAnswers(second,snapshot).length)return reject(second,'The checked answer did not cover every active blank. Nothing was filled.');
   if(!sameActions(first,second))return reject(first,'Independent solutions disagreed. Review the question before filling.');
   return {...second,confidence:Math.min(first.confidence,second.confidence)};
 }

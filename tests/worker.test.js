@@ -167,7 +167,7 @@ test('Fill and AutoPilot prepare and fill through the same non-submitting execut
   const result=await request({type:'solve',mode});assert.equal(result.ok,true);
   assert.equal((await request({type:'apply',planId:result.data.planId})).ok,true);
   assert.equal(executed.at(-1).submit,false);
-  assert.equal(executed.at(-1).requireComplete,mode==='autopilot');
+  assert.equal(executed.at(-1).requireComplete,true);
  }
  assert.equal(prepared,before+2);
 });

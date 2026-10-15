@@ -15,22 +15,22 @@ function fixture(kind='mathquill',valid=true) {
     {dijit:{byNode:()=>({get:()=>value,set:(_key,v)=>{value=v;},...(valid?{_setValueAttr(){}}:{})})}};
   return {el,events,value:()=>value};
 }
-test('MathQuill uses its value API and checks retained LaTeX',()=>{
+test('MathQuill uses its value API and checks retained LaTeX',async()=>{
   const f=fixture();editorBridge();
   assert.equal(f.el.dataset.auraEditor,'mathquill');
-  assert.deepEqual(editorBridge({op:'write',key:f.el.dataset.auraEditorKey,adapter:'mathquill',value:'\\frac{1}{2}'}),{filled:true});
+  assert.deepEqual(await editorBridge({op:'write',key:f.el.dataset.auraEditorKey,adapter:'mathquill',value:'\\frac{1}{2}'}),{filled:true});
   assert.equal(f.value(),'\\frac{1}{2}');assert.deepEqual(f.events,['input','change']);
 });
-test('unretained values fail and hidden documents cannot write',()=>{
+test('unretained values fail and hidden documents cannot write',async()=>{
   const f=fixture('mathquill',false);editorBridge();
   const request={op:'write',key:f.el.dataset.auraEditorKey,adapter:'mathquill',value:'5'};
-  assert.throws(()=>editorBridge(request),/did not retain/);
+  await assert.rejects(()=>editorBridge(request),/did not retain/);
   document.hidden=true;assert.throws(()=>editorBridge(request),/hidden/);
 });
-test('Dojo requires an actual value setter, not generic property assignment',()=>{
+test('Dojo requires an actual value setter, not generic property assignment',async()=>{
   let f=fixture('dojo',false);editorBridge();assert.equal(f.el.dataset.auraEditor,undefined);
   f=fixture('dojo');editorBridge();assert.equal(f.el.dataset.auraEditor,'dojo');
-  editorBridge({op:'write',key:f.el.dataset.auraEditorKey,adapter:'dojo',value:'12'});assert.equal(f.value(),'12');
+  await editorBridge({op:'write',key:f.el.dataset.auraEditorKey,adapter:'dojo',value:'12'});assert.equal(f.value(),'12');
 });
 test('tutor instructions preserve LaTeX backslashes',()=>{
   assert.ok(TUTOR_INSTRUCTIONS.includes('\\frac{a}{b}'));

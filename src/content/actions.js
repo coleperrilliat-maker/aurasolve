@@ -1,7 +1,7 @@
 import {goToQuestion} from "./player.js";
 import {clickSaraChoice} from './sara.js';
 import {snapshot,elementFor,visible,writable,findButton,feedback} from "./detection.js";
-import {validateSolution} from "../shared/solution.js";
+import {validateSolution,missingAnswers} from "../shared/solution.js";
 import {sendExtension} from '../shared/messaging.js';
 function guard() {
   if (document.hidden) throw new Error("The practice page is hidden. AutoPilot stopped.");
@@ -35,12 +35,9 @@ export async function execute(plan) {
   if (!plan.solution.supported || plan.solution.confidence < 0.85 || !plan.solution.actions.length) throw new Error("This answer needs manual review; automatic filling is unavailable.");
   // Fill and AutoPilot use the same adapters and readback checks. Diagnostic text
   // (including diagrams and completed editors) is not a second filling policy.
-  if (plan.submit || plan.requireComplete) {
-    const targets = new Set(plan.solution.actions.map(a=>a.target));
-    for (const f of current.fields) {
-      const covered = f.kind === "radio" ? current.fields.some(other=>other.kind === "radio" && other.group === f.group && targets.has(other.id)) : targets.has(f.id);
-      if (!covered) throw new Error("The solution does not cover all answer fields. Nothing was submitted.");
-    }
+  if (plan.mode==='field' || plan.submit || plan.requireComplete) {
+    if(current.unmappedControls?.length)throw new Error(current.unmappedControls.join(' ')+' Nothing was filled.');
+    if(missingAnswers(plan.solution,current).length)throw new Error('The solution does not cover all answer fields. Nothing was filled.');
   }
   // Validate every target and submit control before making any changes.
   for (const a of plan.solution.actions) {
@@ -52,6 +49,7 @@ export async function execute(plan) {
     guard();
     const el = elementFor(a.target);
     const field = current.fields.find(f=>f.id === a.target);
+    if(!visible(el) || !writable(el))throw new Error('The page replaced an answer field while filling. Read the question again.');
     if (field.adapter==='sara-choice') {
       if(plan.solution.actions.length!==1)throw new Error('SARA requires exactly one answer choice.');
       await clickSaraChoice(el);
@@ -60,8 +58,17 @@ export async function execute(plan) {
       await sendExtension({type:'writeEditor',planId:plan.id,target:a.target});
     }
     else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
-    else if (a.kind === "radio") { el.click(); if (!el.checked) throw new Error("The radio answer was not accepted by the page."); }
-    else if (a.kind === "checkbox") { if (el.checked !== (a.value === "true")) el.click(); if (el.checked !== (a.value === "true")) throw new Error("Checkbox state was not retained."); }
+    else if(a.kind==='multiselect') {
+      const values=JSON.parse(a.value),setter=Object.getOwnPropertyDescriptor(HTMLOptionElement.prototype,'selected').set;
+      el.focus?.();for(const option of el.options)setter.call(option,values.includes(option.value));
+      el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));el.blur?.();
+      if(JSON.stringify([...el.selectedOptions].map(o=>o.value).sort())!==a.value)throw new Error('The dropdown did not retain all selections.');
+    }
+    else if (a.kind === "radio") { el.click(); if (!(field.adapter==='aria-choice'?el.getAttribute('aria-checked')==='true':el.checked)) throw new Error("The radio answer was not accepted by the page."); }
+    else if (a.kind === "checkbox") {
+      const checked=()=>field.adapter==='aria-choice'?el.getAttribute('aria-checked')==='true':el.checked;
+      if(checked()!==(a.value==='true'))el.click();if(checked()!==(a.value==='true'))throw new Error('Checkbox state was not retained.');
+    }
     else if (a.kind === "point") {
       const f = current.fields.find(f=>f.id === a.target), r = el.getBoundingClientRect(), b = f.bounds;
       const x = r.left + (a.x-b.xMin)/(b.xMax-b.xMin)*r.width;
@@ -80,6 +87,20 @@ export async function execute(plan) {
       el.dispatchEvent(new DragEvent("dragend",{bubbles:true,dataTransfer}));
       if (!dest.contains(el)) throw new Error("The page did not confirm the drop. Complete it manually.");
     }
+  }
+  // Controlled forms can revert a write on the next task. Confirm the whole
+  // set after change handlers settle, not only immediately after each setter.
+  await new Promise(resolve=>setTimeout(resolve,60));
+  for(const a of plan.solution.actions) {
+    const el=elementFor(a.target),field=current.fields.find(f=>f.id===a.target);
+    if(field.adapter==='sara-choice')continue;
+    if(!el?.isConnected)throw new Error('The page replaced an answer field while filling. Read the question again.');
+    if(field.editorKey)continue;
+    let retained=true;
+    if(a.kind==='text' || a.kind==='select')retained=(el.isContentEditable?el.textContent:el.value)===a.value;
+    else if(a.kind==='multiselect')retained=JSON.stringify([...el.selectedOptions].map(o=>o.value).sort())===a.value;
+    else if(a.kind==='radio' || a.kind==='checkbox')retained=(field.adapter==='aria-choice'?el.getAttribute('aria-checked')==='true':el.checked)===(a.kind==='radio' || a.value==='true');
+    if(!retained)throw new Error('The page changed an answer after filling. Review it before submitting.');
   }
   guard();
   if (plan.submit && !plan.deferSubmit) findButton("submit").click();
