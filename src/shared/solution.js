@@ -38,10 +38,22 @@ export function validateSolution(solution, snapshot, mode) {
   if (!Array.isArray(solution.choices) || solution.choices.length > 12 || solution.choices.some(c => typeof c !== "string" || c.length > 500))
     throw new Error("The model returned invalid answer choices.");
   if (solution.actions.length > 24) throw new Error("Too many actions in the response.");
+  if (mode === "explain") solution.actions = [];
   const ids = new Map(snapshot.fields.map(f => [f.id, f]));
   const seen = new Set(), radioGroups = new Set();
+  const fieldFor=a=>{
+    const direct=ids.get(a.target);
+    if(direct)return direct;
+    const letter=String(a.target || "").trim().toUpperCase().replace(/^\((.*)\)$/,"$1");
+    if(!/^[A-E]$/.test(letter))return null;
+    const matches=(snapshot.fields || []).filter(field=>field.kind==="radio" && String(field.label || "").trim().toUpperCase()===letter);
+    if(matches.length!==1)return null;
+    a.target=matches[0].id;
+    a.kind=matches[0].kind;
+    return matches[0];
+  };
   for (const a of solution.actions) {
-    const f = ids.get(a.target);
+    const f = fieldFor(a);
     if (!f || a.kind !== f.kind || typeof a.value !== "string" || a.value.length > 4000) throw new Error("The solution references an unsupported field.");
     a.value = fieldValue(a.value, f);
     if (seen.has(a.target)) throw new Error("Duplicate field actions are not supported.");

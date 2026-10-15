@@ -157,8 +157,10 @@ export function snapshot() {
   if(root)for(const el of root.querySelectorAll('.acctable .inputcell[role="listbox"],.dijitSelect,[role="combobox"],[aria-haspopup="listbox"]')) {
     if(visible(el) && !el.disabled && !el.closest('[aria-disabled="true"],.disabled,.dijitDisabled,[data-aura-editor]') && !el.matches('select') && !fields.some(f=>el.contains(elementFor(f.id))))limitations.push('An answer dropdown has no readable options yet.');
   }
-  if (!fields.length) for (const el of saraChoices(document,location.hostname,visible)) {
-    fields.push({id:idFor(el),label:(el.innerText || el.textContent).trim(),kind:'radio',group:'sara-answer',adapter:'sara-choice'});
+  const sara=saraChoices(document,location.hostname,visible);
+  if (sara.length) {
+    fields.length=0;
+    for (const el of sara) fields.push({id:idFor(el),label:((el.innerText || el.textContent).replace(/\s+/g,' ').trim()),kind:'radio',group:'sara-answer',adapter:'sara-choice'});
   }
   const drops = root ? [...root.querySelectorAll('[data-aura-drop]')].filter(visible).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
   if (root?.querySelector('canvas, svg:not([data-aura-graph])') && !fields.some(f=>f.kind === 'point')) limitations.push('A diagram needs a screenshot to read.');

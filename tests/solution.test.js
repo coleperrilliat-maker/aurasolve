@@ -66,3 +66,14 @@ test('two radio actions in one group fail before clicking either',()=>{
  const snap={...snapshot,fields:[{id:'a1',kind:'radio',group:'g'},{id:'a2',kind:'radio',group:'g'}]};
  assert.throws(()=>validateSolution({...solution,actions:snap.fields.map(f=>({...action,kind:'radio',target:f.id}))},snap,'field'),/more than one/);
 });
+test('SARA letter targets map onto the matching radio field id',()=>{
+ const snap={...snapshot,fields:[{id:'a9',kind:'radio',label:'A',group:'sara-answer',adapter:'sara-choice'},{id:'a10',kind:'radio',label:'C',group:'sara-answer',adapter:'sara-choice'}]};
+ const out=validateSolution({...solution,actions:[{kind:'radio',target:'C',value:'true',destination:'',x:null,y:null}]},snap,'field');
+ assert.equal(out.actions[0].target,'a10');
+ assert.equal(out.actions[0].kind,'radio');
+});
+test('explain mode still returns tutoring when actions name a missing field',()=>{
+ const out=validateSolution({...solution,actions:[{...action,target:'missing'}]},snapshot,'explain');
+ assert.deepEqual(out.actions,[]);
+ assert.equal(out.answer,'x = 5');
+});
