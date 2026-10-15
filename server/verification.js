@@ -46,6 +46,8 @@ export async function verifiedSolve(solve, snapshot, mode) {
   const checked=arithmeticCheck(snapshot,first);
   if(checked===true)return first;
   if(checked===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
+  // Fill Math asks for one screenshot-backed request. AutoPilot keeps the second check.
+  if(snapshot.mathFill)return first;
   const second=await solve(snapshot,mode,true);
   if(!sameActions(first,second))return reject(first,'Independent solutions disagreed. Review the question before filling.');
   return {...second,confidence:Math.min(first.confidence,second.confidence)};

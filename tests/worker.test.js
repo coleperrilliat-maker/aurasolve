@@ -258,3 +258,26 @@ test('AutoPilot pins its tab, rejects stale navigation, and rejects replaced run
   assert.match((await panelRequest({...base,type:'pilotRead'})).error,/replaced or stopped/);
  }finally{chrome.tabs.get=originalGet;delete state.player;}
 });
+test('Fill Math uses one screenshot and never submits',async()=>{
+ state.subject='math';const calls=solveCalls,shots=captured;
+ try{
+  const result=await request({type:'solve',mode:'field',mathFill:true});
+  assert.equal(result.ok,true);assert.equal(solveCalls,calls+1);assert.equal(captured,shots+1);
+  assert.equal(lastSnapshot.mathFill,true);assert.match(lastSnapshot.image,/^data:image\/jpeg;base64,/);
+  const filled=await request({type:'apply',planId:result.data.planId});
+  assert.equal(filled.ok,true);assert.equal(filled.data.submitted,false);
+  assert.equal(executed.at(-1).requireComplete,true);assert.equal(executed.at(-1).mathFill,true);assert.equal(executed.at(-1).submit,false);
+ }finally{delete state.subject;}
+});
+test('Fill Math refuses writing questions and graph-only controls before capture',async()=>{
+ const calls=solveCalls,shots=captured;state.subject='writing';
+ try{
+  const writing=await request({type:'solve',mode:'field',mathFill:true});
+  assert.equal(writing.ok,false);assert.match(writing.error,/only available on math/);
+  state.subject='math';state.fields=[];state.limitations=['Graph control has no supported coordinate adapter.'];
+  const graph=await request({type:'solve',mode:'field',mathFill:true});
+  assert.equal(graph.ok,true);assert.equal(graph.data.solution.supported,false);
+  assert.match(graph.data.solution.limitation,/Graph control has no supported coordinate adapter/);
+  assert.equal(solveCalls,calls);assert.equal(captured,shots);
+ }finally{delete state.subject;state.fields=[{id:'a1',kind:'text'}];state.limitations=[];}
+});

@@ -2,8 +2,36 @@
 // never evaluate model text or infer an editor from its appearance alone.
 export function editorBridge(request = {op: "discover"}) {
   const dropdownSelector='.acctable .inputcell[role="listbox"], .dijitSelect, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"]';
-  const selector = `.mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], ${dropdownSelector}`;
+  const selector = `math-field, [data-wiris-editor], .wrs_editor, .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="textbox"], ${dropdownSelector}`;
+  function pageNodes(selector) {
+    const found=[], seen=new Set();
+    const visit=node=>{
+      if(!node || typeof node.querySelectorAll!=='function' || seen.has(node))return;
+      seen.add(node);
+      for(const el of node.querySelectorAll(selector)) if(!found.includes(el)) found.push(el);
+      for(const el of node.querySelectorAll('*')){
+        if(el.shadowRoot && !el.matches?.('math-field, .mq-editable-field, .mathquill-editable, span.eqEditor')) visit(el.shadowRoot);
+      }
+    };
+    visit(document);
+    return found;
+  }
+  function assignControl(input, value) {
+    const proto=input.tagName==='TEXTAREA'?globalThis.HTMLTextAreaElement?.prototype:globalThis.HTMLInputElement?.prototype;
+    const setter=proto && Object.getOwnPropertyDescriptor(proto,'value')?.set;
+    if(setter)setter.call(input,value);
+    else input.value=value;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  }
   function adapterFor(el) {
+    if (el.localName==='math-field' || el.matches?.('math-field')) {
+      if (typeof el.setValue==='function' && (typeof el.getValue==='function' || 'value' in el))
+        return {name:'mathlive', read:()=>typeof el.getValue==='function'?el.getValue('latex'):String(el.value ?? ''), write:value=>{el.focus?.();el.setValue(value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}};
+    }
+    const wiris=el.wirisEditor || el.editorInstance;
+    if (el.matches?.('[data-wiris-editor], .wrs_editor') && wiris && typeof wiris.setMathML==='function' && typeof wiris.getMathML==='function')
+      return {name:'wiris', read:()=>wiris.getMathML(), write:value=>{wiris.setMathML(value);}};
     if (el.matches('.mq-editable-field, .mathquill-editable')) {
       try {
         const mq = window.MathQuill?.getInterface?.(2)?.(el);
@@ -32,6 +60,23 @@ export function editorBridge(request = {op: "discover"}) {
       if (widget && typeof widget._setValueAttr === 'function' && typeof widget.set === 'function' && typeof widget.get === 'function' && ['string','number'].includes(typeof widget.get('value')))
         return {name:'dojo',read:()=>String(widget.get('value')),write:value=>{widget.focus?.();widget.set('value',value);}};
     } catch {}
+    if (el.matches?.('span.eqEditor.inputField, span.eqEditor[widgetid]')) {
+      const input=el.querySelector?.('input.focusNode, textarea, input:not([type="hidden"])');
+      if (input && !input.disabled && !input.readOnly) return {
+        name:'pearson-input',
+        read:()=>String(input.value ?? ''),
+        write:value=>{
+          input.focus?.();
+          assignControl(input, value);
+          if (String(input.value)!==String(value) && typeof document.execCommand==='function') {
+            input.select?.();
+            document.execCommand('insertText', false, value);
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+          }
+        }
+      };
+    }
     // Pearson also exposes answer dropdowns without a global Dojo registry.
     // Prefer an explicit ARIA/Dojo link. For old widgets without one, bind the
     // control to the sole visible popup created by clicking that control.
@@ -110,7 +155,7 @@ export function editorBridge(request = {op: "discover"}) {
     if(document.hidden)throw new Error('The question tab is hidden.');
     const prior=document.activeElement;
     const roots='[data-aura-question],[data-testid="question"],div[id*="xl_player_layout"],.question-content,#questionContent,#question-content,.questionContainer,.question-container,#problem,.problem-content';
-    for(const el of document.querySelectorAll(dropdownSelector)){
+    for(const el of pageNodes(dropdownSelector)){
       if(!el.closest(roots) || !el.getClientRects().length || el.closest('[hidden],[aria-disabled="true"],.disabled,.dijitDisabled') || adapterFor(el))continue;
       (el.querySelector('.dijitArrowButtonInner,.dijitArrowButton,[data-dojo-attach-point*="titleNode"]') || el).click();
       for(let attempt=0;attempt<20;attempt++){
@@ -125,7 +170,7 @@ export function editorBridge(request = {op: "discover"}) {
     return true;
   })();
   if (request.op === 'discover') {
-    for (const el of document.querySelectorAll(selector)) {
+    for (const el of pageNodes(selector)) {
       const adapter = adapterFor(el);
       if (!adapter) {el.removeAttribute('data-aura-editor');el.removeAttribute('data-aura-editor-key');el.removeAttribute('data-aura-options');continue;}
       el.dataset.auraEditor = adapter.name;
@@ -138,7 +183,7 @@ export function editorBridge(request = {op: "discover"}) {
   if (request.op !== 'write' || typeof request.key !== 'string' || typeof request.value !== 'string' || request.value.length > 4000)
     throw new Error('Invalid editor request.');
   if (document.hidden) throw new Error('The question tab is hidden.');
-  const targets = [...document.querySelectorAll(selector)].filter(el=>el.dataset.auraEditorKey === request.key);
+  const targets = pageNodes(selector).filter(el=>el.dataset.auraEditorKey === request.key);
   if (targets.length !== 1) throw new Error('The math editor changed. Generate a new answer.');
   const el = targets[0];
   if (!el.isConnected || !el.getClientRects().length || getComputedStyle(el).visibility === 'hidden' || el.closest('[hidden], [aria-hidden="true"], [aria-disabled="true"], .disabled') || el.disabled || el.readOnly)

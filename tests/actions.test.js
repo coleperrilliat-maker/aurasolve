@@ -47,6 +47,15 @@ test('diagnostic image warnings do not veto validated answers that Fill can ente
   const result=await execute(p);assert.equal(result.filled,1);assert.equal(result.submitted,false);assert.equal(clicked,1);
  }finally{root.querySelector=original;}
 });
+test('multiple math inputs keep negative decimals and fractions without submitting',async()=>{
+ extra=true;const clicks=clicked;field.value='';second.value='';
+ try{
+  const s=snapshot();
+  const result=await execute({url:s.url,hash:s.hash,mode:'field',submit:false,requireComplete:true,mathFill:true,solution:{answer:'1/2 and -2.5',explanation:'Fill both blanks.',confidence:.99,supported:true,limitation:'',actions:[{kind:'text',target:s.fields[0].id,value:'1/2',destination:'',x:null,y:null},{kind:'text',target:s.fields[1].id,value:'-2.5',destination:'',x:null,y:null}]}});
+  assert.deepEqual(result,{filled:2,submitted:false});
+  assert.equal(field.value,'1/2');assert.equal(second.value,'-2.5');assert.equal(clicked,clicks);
+ }finally{extra=false;}
+});
 test('an ARIA number line is plotted only after its value confirms the point',async()=>{
  sliderMode=true;
  try{
