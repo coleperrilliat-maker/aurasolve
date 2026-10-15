@@ -137,6 +137,73 @@ try{
   assert.equal(activated.before,0);assert.equal(activated.after,1);assert.ok(activated.selected);
   console.log('PASS: Fill inspection activates a lazy Pearson-style answer box without a user click');
 
+  const mathInputs=await page.evaluate(async()=>{
+    const {editorBridge}=await import('/src/background/editors.js');
+    const detector=await import('/src/content/detection.js');
+    const {execute}=await import('/src/content/actions.js');
+    window.chrome={runtime:{sendMessage:async message=>{
+      if(message.type!=='writeEditor') return {ok:true,data:{}};
+      const field=detector.snapshot().fields.find(item=>item.id===message.target);
+      const action=window.mathPlan.solution.actions.find(item=>item.target===message.target);
+      return {ok:true,data:await editorBridge({op:'write',key:field.editorKey,adapter:field.adapter,value:action.value})};
+    }}};
+    const fill=async solution=>{
+      const snap=detector.snapshot();
+      window.mathPlan={url:snap.url,hash:snap.hash,mode:'field',submit:false,requireComplete:true,mathFill:true,solution};
+      return execute(window.mathPlan);
+    };
+    document.body.innerHTML='<main data-aura-question><p>Solve x + 2 = 5.</p><input id="simple" aria-label="x"></main>';
+    let snap=detector.snapshot();
+    await fill({answer:'3',explanation:'Subtract 2.',supported:true,confidence:.99,limitation:'',actions:[{kind:'text',target:snap.fields[0].id,value:'3',destination:'',x:null,y:null}]});
+    const simple=document.querySelector('#simple').value;
+    document.body.innerHTML='<main data-aura-question><p>Enter the fraction and the signed value.</p><span class="eqEditor inputField" widgetid="frac"><input class="focusNode" aria-label="fraction"></span><input id="signed" type="number" aria-label="signed value"></main>';
+    editorBridge({op:'discover'});
+    snap=detector.snapshot();
+    const fraction=snap.fields.find(field=>field.adapter==='pearson-input');
+    const signed=snap.fields.find(field=>detector.elementFor(field.id)?.id==='signed');
+    await fill({answer:'1/2 and -2.5',explanation:'Read both blanks.',supported:true,confidence:.99,limitation:'',actions:[{kind:'text',target:fraction.id,value:'1/2',destination:'',x:null,y:null},{kind:'text',target:signed.id,value:'-2.5',destination:'',x:null,y:null}]});
+    const fractionValue=document.querySelector('.focusNode').value;
+    const signedValue=document.querySelector('#signed').value;
+    document.body.innerHTML='<main data-aura-question><p>Find every value.</p><math-field id="live" style="display:inline-block;width:80px;height:24px"></math-field><math-field id="bare" style="display:inline-block;width:80px;height:24px"></math-field><div id="shadow-host"></div><input id="x" aria-label="x"><input id="y" aria-label="y"></main>';
+    const live=document.querySelector('#live');
+    live.setValue=value=>{live.dataset.value=value;};
+    live.getValue=()=>live.dataset.value || '';
+    const shadowHost=document.querySelector('#shadow-host');
+    shadowHost.attachShadow({mode:'open'}).innerHTML='<input id="shadow" aria-label="shadow value">';
+    const shadowInput=shadowHost.shadowRoot.querySelector('input');
+    editorBridge({op:'discover'});
+    snap=detector.snapshot();
+    const mathlive=snap.fields.find(field=>field.adapter==='mathlive');
+    const shadowField=snap.fields.find(field=>detector.elementFor(field.id)===shadowInput);
+    const xField=snap.fields.find(field=>detector.elementFor(field.id)?.id==='x');
+    const yField=snap.fields.find(field=>detector.elementFor(field.id)?.id==='y');
+    const bare=snap.limitations.find(item=>/MathLive field is visible/i.test(item)) || '';
+    await fill({answer:'four values',explanation:'Fill every supported blank.',supported:true,confidence:.99,limitation:'',actions:[
+      {kind:'text',target:mathlive.id,value:'\\frac{1}{2}',destination:'',x:null,y:null},
+      {kind:'text',target:shadowField.id,value:'-2.5',destination:'',x:null,y:null},
+      {kind:'text',target:xField.id,value:'1',destination:'',x:null,y:null},
+      {kind:'text',target:yField.id,value:'4',destination:'',x:null,y:null}
+    ]});
+    const filled={mathlive:live.getValue(),shadow:shadowInput.value,x:document.querySelector('#x').value,y:document.querySelector('#y').value,bare};
+    document.body.innerHTML='<main data-aura-question><p>Graph the solution set.</p><div data-aura-graph="region" style="width:120px;height:80px"></div></main>';
+    const graph=detector.snapshot();
+    document.body.innerHTML='<main data-aura-question><p>What is the main idea of the passage?</p><textarea aria-label="response"></textarea></main>';
+    const english=detector.snapshot();
+    return {simple,fractionValue,signedValue,...filled,graph:graph.limitations.find(item=>/graph control/i.test(item)) || '',graphFields:graph.fields.length,english:english.subject,submitted:false};
+  });
+  assert.equal(mathInputs.simple,'3');
+  assert.equal(mathInputs.fractionValue,'1/2');
+  assert.equal(mathInputs.signedValue,'-2.5');
+  assert.equal(mathInputs.mathlive,'\\frac{1}{2}');
+  assert.equal(mathInputs.shadow,'-2.5');
+  assert.equal(mathInputs.x,'1');
+  assert.equal(mathInputs.y,'4');
+  assert.match(mathInputs.bare,/does not expose a value API/);
+  assert.match(mathInputs.graph,/Graph control/);
+  assert.equal(mathInputs.graphFields,0);
+  assert.equal(mathInputs.english,'writing');
+  console.log('PASS: equation, fraction editor, signed value, shadow input, multiple fields, graph limitation, English subject');
+
   const fill=await browser.newPage();
   await fill.goto(origin+'/src/options/index.html');
   await fill.evaluate(async()=>{
@@ -166,13 +233,19 @@ try{
     const {createUI}=await import('/src/content/ui.js');createUI();
     testShadow.querySelector('button').click();
   });
-  await fill.waitForFunction(()=>document.querySelector('#answer').value==='5' && testShadow.querySelector('button').getAttribute('aria-busy')==='false');
+  await fill.waitForFunction(()=>document.querySelector('#answer').value==='5' && testShadow.querySelector('button').dataset.state==='complete');
   assert.equal(await fill.evaluate(()=>window.submits),0);
   assert.equal(await fill.evaluate(()=>testShadow.querySelectorAll('button').length),1);
-  assert.equal(await fill.evaluate(()=>testShadow.querySelector('button').textContent),'Fill answers');
+  assert.match(await fill.evaluate(()=>testShadow.querySelector('button').textContent),/Complete/);
   assert.equal(await fill.evaluate(()=>testShadow.querySelector('.panel')),null);
-  assert.equal(await fill.evaluate(()=>document.querySelector('[data-aura-question]').firstElementChild.id),'aurasolve-root');
-  console.log('PASS: one inline blue Fill button, no signature or popup, successful fill, no submission');
+  const placed=await fill.evaluate(()=>{
+    const input=document.querySelector('#answer').getBoundingClientRect();
+    const button=testShadow.querySelector('button').getBoundingClientRect();
+    const host=document.querySelector('#aurasolve-root');
+    return {visible:!host.hidden && button.width>0,covered:button.width>0 && !(button.right<input.left || button.left>input.right || button.bottom<input.top || button.top>input.bottom)};
+  });
+  assert.equal(placed.visible,true);assert.equal(placed.covered,false);
+  console.log('PASS: one Fill Math button, verified answer, no signature, popup, or submission');
   await fill.evaluate(()=>{document.querySelector('main').innerHTML='<h1>Course dashboard</h1><input placeholder="Search courses">';});
   await fill.waitForFunction(()=>!document.querySelector('#aurasolve-root'));
   await fill.evaluate(()=>{document.querySelector('main').innerHTML='Solve 2x = 8 <input aria-label="x">';});
@@ -185,10 +258,37 @@ try{
     document.querySelector('main').setAttribute('data-aura-question','');
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     const host=document.querySelector('#aurasolve-root'),button=testShadow.querySelector('button');
-    return {inPrompt:Boolean(host.closest('#generatedPrompt')),height:getComputedStyle(button).height,weight:getComputedStyle(button).fontWeight};
+    const rects=[...document.querySelectorAll('p,input,svg')].map(el=>el.getBoundingClientRect());
+    const box=button.getBoundingClientRect();
+    const covered=rects.some(rect=>box.width>0 && !(box.right<rect.left || box.left>rect.right || box.bottom<rect.top || box.top>rect.bottom));
+    return {inPrompt:Boolean(host.closest('#generatedPrompt')),height:getComputedStyle(button).height,weight:getComputedStyle(button).fontWeight,visible:!host.hidden,covered};
   });
-  assert.deepEqual(placement,{inPrompt:true,height:'30px',weight:'400'});
-  console.log('PASS: compact regular-weight button stays inside text prompt instead of diagram panel');
+  assert.deepEqual(placement,{inPrompt:false,height:'28px',weight:'600',visible:true,covered:false});
+  console.log('PASS: compact Fill Math button stays in open space beside the prompt, input, and diagram');
+  const states=await fill.evaluate(async()=>{
+    document.querySelector('main').innerHTML='<p>Graph the solution set.</p><div data-aura-graph="region" style="width:120px;height:80px"></div>';
+    document.querySelector('main').setAttribute('data-aura-question','');
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const button=testShadow.querySelector('button');
+    button.click();
+    const started=Date.now();
+    while(button.dataset.state!=='error'){
+      if(Date.now()-started>2000) throw new Error('Graph control did not report an error.');
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+    }
+    const error={state:button.dataset.state,message:testShadow.querySelector('p').textContent,label:button.textContent};
+    document.querySelector('main').innerHTML='<p>What is the main idea of the passage?</p><textarea aria-label="response"></textarea>';
+    const gone=Date.now();
+    while(document.querySelector('#aurasolve-root')){
+      if(Date.now()-gone>2000) throw new Error('Fill Math stayed on an English question.');
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+    }
+    return error;
+  });
+  assert.equal(states.state,'error');
+  assert.match(states.message,/Graph control/);
+  assert.match(states.label,/Error/);
+  console.log('PASS: unsupported graph reports an error and an English question removes Fill Math');
   const inventory=await fill.evaluate(async()=>{
     document.querySelector('main').innerHTML='<p>Choose a reason for this statement.</p><select aria-label="Reason"><option value="v">Vertical angles</option></select><input value="private-answer">';
     const {inspectControls}=await import('/src/content/diagnostics.js');return inspectControls();

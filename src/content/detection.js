@@ -1,5 +1,6 @@
 import {readPlayer} from "./player.js";
 import {controlKind} from "../shared/player-state.js";
+import {classifySubject} from "../shared/math-question.js";
 import {saraChoices} from './sara.js';
 import {fingerprint} from "../shared/policy.js";
 const ids = new WeakMap(), elements = new Map();
@@ -11,8 +12,25 @@ export function idFor(el) {
 }
 export const elementFor = id => elements.get(id);
 const clean = value => String(value || "").replace(/\s+/g," ").trim();
-const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid]';
+const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, math-field, span.eqEditor.inputField, span.eqEditor[widgetid]';
 const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable], [draggable="true"], [role="slider"]';
+const answerWidgetSelector = 'span.eqEditor, math-field, .mq-editable-field, .mathquill-editable, [data-wiris-editor], .wrs_editor, .acctable .inputcell, .dijitSelect, [role="listbox"], [role="combobox"], [aria-haspopup="listbox"]';
+const chromeControl = el => /search|login|user ?name|email|password/i.test([el.type, el.name, el.id, el.placeholder, el.getAttribute?.('aria-label')].join(' '));
+const editorHosts = 'math-field, .mq-editable-field, .mathquill-editable, span.eqEditor';
+export function queryDeep(root, selector) {
+  const found = [], seen = new Set();
+  const visit = node => {
+    if (!node?.querySelectorAll || seen.has(node)) return;
+    seen.add(node);
+    found.push(...node.querySelectorAll(selector));
+    for (const el of node.querySelectorAll('*')) {
+      if (el.shadowRoot && !el.matches?.(editorHosts)) visit(el.shadowRoot);
+    }
+  };
+  visit(root);
+  return found;
+}
+const editorFormat = name => name === 'mathquill' || name === 'mathlive' ? 'latex' : name === 'wiris' ? 'mathml' : 'plain';
 const dropSelector = '[data-aura-drop], [aria-dropeffect]:not([aria-dropeffect="none"])';
 // Pearson leaves earlier parts' editor wrappers visible after disabling their inputs.
 // Those are answer history, not unsupported controls for the current part.
@@ -34,7 +52,8 @@ export function fieldContext(el) {
 }
 export function labelFor(el) {
   const editable = el.isContentEditable || el.matches?.('[data-aura-editor]');
-  return clean(el.getAttribute("aria-label") || [...(el.labels || [])].map(l=>l.innerText).join(" ") || el.getAttribute("placeholder") || el.getAttribute("title") || (!editable && el.innerText) || el.name || el.id || 'Answer').slice(0,350);
+  const nested = el.matches?.('[data-aura-editor]') ? el.querySelector?.('input[aria-label], textarea[aria-label]') : null;
+  return clean(el.getAttribute("aria-label") || nested?.getAttribute('aria-label') || [...(el.labels || [])].map(l=>l.innerText).join(" ") || el.getAttribute("placeholder") || el.getAttribute("title") || (!editable && el.innerText) || el.name || el.id || 'Answer').slice(0,350);
 }
 // Pearson's split player puts the prompt in #top and the inputs in #bottom.
 // Read their common layout container, not either panel separately.
@@ -43,13 +62,13 @@ export function questionRoot() {
   const active = selected && elementFor(selected);
   const nearest = active?.closest(rootSelector);
   if (nearest && visible(nearest)) return nearest;
-  const matches = [...document.querySelectorAll(rootSelector)].filter(visible);
+  const matches = queryDeep(document, rootSelector).filter(visible);
   const roots = matches.filter(el=>!matches.some(parent=>parent!==el && parent.contains?.(el)));
   if (roots.length === 1) return roots[0];
   if (roots.length) return null;
   // Mastering's question body is separate from its navigation and toolbars.
   if (/(^|\.)(pearson\.com|mathxl\.com|mymathlab\.com)$/.test(location.hostname)) {
-    const parts=[...document.querySelectorAll('.section > .bd')].filter(el=>visible(el) && el.querySelector(fieldSelector));
+    const parts=queryDeep(document, '.section > .bd').filter(el=>visible(el) && queryDeep(el, fieldSelector).length);
     if (parts.length===1) return parts[0];
   }
   return fallbackRoot(active);
@@ -57,8 +76,7 @@ export function questionRoot() {
 // Sites without a known layout: use the smallest container holding every visible answer control plus some prompt text.
 function fallbackRoot(active) {
   const fields = [...document.querySelectorAll('input[type="radio"], input[type="checkbox"], input[type="text"], input[type="number"], input:not([type]), textarea, select, [contenteditable="true"]')]
-    .filter(el => visible(el) && !el.closest('nav, header, footer, [role="navigation"], [role="search"], form[action*="search" i]') &&
-      !/search|login|user ?name|email|password/i.test([el.type, el.name, el.id, el.placeholder, el.getAttribute('aria-label')].join(" ")));
+    .filter(el => visible(el) && !el.closest('nav, header, footer, [role="navigation"], [role="search"], form[action*="search" i]') && !chromeControl(el));
   if (!fields.length) return document.querySelector('main, [role="main"]') || document.body;
   const anchor = active && fields.includes(active) ? active : fields[0];
   let node = anchor.parentElement;
@@ -100,9 +118,9 @@ export function snapshot() {
   for (const [id,el] of elements) if (!el.isConnected) elements.delete(id);
   const root = questionRoot();
   const fields = [], limitations = [];
-  const drops = root ? [...root.querySelectorAll(dropSelector)].filter(el=>visible(el) && writable(el)).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
-  if (root) for (const el of root.querySelectorAll(fieldSelector)) {
-    if (!visible(el) || !writable(el)) continue;
+  const drops = root ? queryDeep(root, dropSelector).filter(el=>visible(el) && writable(el)).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
+  if (root) for (const el of queryDeep(root, fieldSelector)) {
+    if (!visible(el) || !writable(el) || chromeControl(el)) continue;
     const editor = el.closest?.('[data-aura-editor]') || el.closest?.(editorSelector);
     if (editor && editor !== el) {
       if (editor.matches('[data-aura-editor]')) continue;
@@ -114,7 +132,7 @@ export function snapshot() {
     if (el.dataset?.auraEditor === 'dojo-select') {
       try {fields.push({...base,kind:'select',adapter:'dojo-select',editorKey:el.dataset.auraEditorKey,options:JSON.parse(el.dataset.auraOptions)});} catch {limitations.push('Dropdown options could not be read.');}
     }
-    else if (el.matches('[data-aura-editor]')) fields.push({...base,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:el.dataset.auraEditor === 'mathquill' ? 'latex' : 'plain'});
+    else if (el.matches('[data-aura-editor]')) fields.push({...base,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:editorFormat(el.dataset.auraEditor)});
     else if (el.matches('[role="slider"]')) {
       const min=Number(el.getAttribute('aria-valuemin')),max=Number(el.getAttribute('aria-valuemax'));
       const now=Number(el.getAttribute('aria-valuenow')),step=Number(el.getAttribute('aria-valuestep') || el.dataset?.step || 1);
@@ -137,14 +155,18 @@ export function snapshot() {
     else if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && ["text","number",""].includes(el.type))) fields.push({...base,kind:"text"});
     else if (el.isContentEditable) fields.push({...base,kind:'text',adapter:'contenteditable',format:'plain'});
   }
-  if (root) for (const el of root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .mq-editable-field, .mathquill-editable, .acctable .inputcell[role="textbox"]')) {
-    if (visible(el) && writable(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>el===elementFor(f.id) || el.contains(elementFor(f.id)))) limitations.push('A Pearson math or table field needs a supported editor API.');
+  if (root) for (const el of queryDeep(root, 'span.eqEditor.inputField, span.eqEditor[widgetid], .mq-editable-field, .mathquill-editable, math-field, [data-wiris-editor], .wrs_editor, .acctable .inputcell[role="textbox"]')) {
+    if (!(visible(el) && writable(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>el===elementFor(f.id) || el.contains(elementFor(f.id))))) continue;
+    if (el.matches('math-field')) limitations.push('A MathLive field is visible, but it does not expose a value API.');
+    else if (el.matches('[data-wiris-editor], .wrs_editor')) limitations.push('A WIRIS formula editor is visible, but it does not expose a value API.');
+    else if (el.matches('.mq-editable-field, .mathquill-editable')) limitations.push('A MathQuill field is visible, but it does not expose a value API.');
+    else limitations.push('A Pearson math or table field needs a supported editor API.');
   }
   if (!fields.length) for (const el of saraChoices(document,location.hostname,visible)) {
     fields.push({id:idFor(el),label:(el.innerText || el.textContent).trim(),kind:'radio',group:'sara-answer',adapter:'sara-choice'});
   }
-  if (root?.querySelector('canvas, svg:not([data-aura-graph])') && !fields.some(f=>f.kind === 'point')) limitations.push("Canvas/SVG content is not read visually; complex graph actions are unsupported.");
-  if (root?.querySelector('img:not([alt]), img[alt=""]')) limitations.push("An image has no description; the model may not have enough information.");
+  if (root && !fields.some(f=>f.kind === 'point') && (root.querySelector?.('canvas, svg:not([data-aura-graph])') || queryDeep(root, 'canvas, svg:not([data-aura-graph])').length)) limitations.push("Canvas/SVG content is not read visually; complex graph actions are unsupported.");
+  if (root && (root.querySelector?.('img:not([alt]), img[alt=""]') || queryDeep(root, 'img:not([alt]), img[alt=""]').length)) limitations.push("An image has no description; the model may not have enough information.");
   const readable = root?.cloneNode?.(true);
   readable?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   readable?.querySelectorAll('[contenteditable], [data-aura-editor], textarea').forEach(el=>{el.textContent='';});
@@ -155,7 +177,10 @@ export function snapshot() {
   prompt?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   prompt?.querySelectorAll('input, textarea, select, [contenteditable], [data-aura-editor], [role="textbox"], [role="alert"], [data-aura-feedback], .feedback, .answer-feedback').forEach(el=>el.remove());
   const promptHash = fingerprint(JSON.stringify({text:clean(prompt?.textContent || question),figures}));
+  const hasMathMarkup = Boolean(root && queryDeep(root, 'math, math-field, .katex, mjx-container, .mq-editable-field, .mathquill-editable, .eqEditor, [data-wiris-editor], .wrs_editor, annotation[encoding*="MathML" i]').length);
+  const hasWidget = Boolean(root && queryDeep(root, answerWidgetSelector).some(el => visible(el) && writable(el) && !chromeControl(el)));
   const visual = Boolean(root?.querySelector('img, svg, canvas, figure, object, embed') || fields.some(f=>f.kind==='radio' || f.kind==='checkbox') || (root && [...root.querySelectorAll('*')].some(el=>visible(el) && getComputedStyle(el).backgroundImage.includes('url('))) || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));
+  const subject = classifySubject({text:question, hasMathMarkup, recognizedQuestion:Boolean(root && !isFallback(root)), hasAnswerField:hasWidget || fields.some(field=>['text','select','point'].includes(field.kind))});
   const box = root?.getBoundingClientRect?.();
   const selectedElement = elementFor(selected);
   const chosen = fields.find(f=>f.id === selected) || fields.find(f=>elementFor(f.id)?.contains?.(selectedElement));
@@ -163,8 +188,16 @@ export function snapshot() {
   const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
   const autoSelected=(empty || scalar[0])?.id || null;
   return {player:readPlayer(document,visible),url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{continue:findButtons('continue').length,submit:findButtons('submit').length,next:findButtons('next').length,similar:findButtons('similar').length},
-    fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
-    problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
+    fallback:isFallback(root),promptHash,visual,subject,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
+    problemCount:queryDeep(document, rootSelector).filter(visible).length};
+}
+export function fieldValueNow(field) {
+  const el = elementFor(field?.id);
+  if (!el) return '';
+  if (field.adapter === 'aria-number-line') return el.getAttribute?.('aria-valuenow') || '';
+  const control = el.matches?.('[data-aura-editor]') ? (el.querySelector?.('input:not([type="hidden"]), textarea') || el) : el;
+  if (control.isContentEditable) return control.textContent || '';
+  return control.value ?? control.textContent ?? '';
 }
 export function feedback() {
   const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"], .feedbackDialog, .correctDialog, .responses, .xlFeedback, [role="dialog"], [role="alertdialog"], .dijitDialog')].filter(visible);

@@ -1,6 +1,7 @@
 import {assignmentKey,decidePlayer} from '../shared/player-state.js';
 import {expectedPage} from '../shared/pilot-engine.js';
 import {fieldValue} from '../shared/solution.js';
+import {fillBlocker} from '../shared/math-question.js';
 import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
 import {editorBridge} from './editors.js';
@@ -32,7 +33,7 @@ async function collect(tabId) {
   return {top,question:options[0],frames,contexts:frames.map(f=>f.context)};
 }
 const veil = (tabId, hidden) => chrome.scripting.executeScript({target:{tabId,allFrames:true},func:hidden=>globalThis.__auraVeil?.(hidden),args:[hidden]}).catch(()=>{});
-async function screenshot(tabId, question) {
+async function screenshot(tabId, question, cropToQuestion = false) {
   const {windowId,active} = await chrome.tabs.get(tabId);
   if(!active)throw new Error("Keep the question tab active so AuraSolve can read its image.");
   await veil(tabId,true);
@@ -43,8 +44,16 @@ async function screenshot(tabId, question) {
   if (activeTab?.id !== tabId) throw new Error("The active tab changed during capture. Return to the question and retry.");
   const bitmap = await createImageBitmap(await (await fetch(shot)).blob());
   let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
-  // Keep sibling diagram panels and the active answer area together.
-  // A detected input container is not a reliable boundary for the problem.
+  // Crop only a top-frame math question. Autopilot keeps the full view so
+  // sibling diagrams outside a detected input box are not cut off.
+  const box = question?.rect;
+  if (cropToQuestion && question?.frameId === 0 && box?.width > 40 && box?.height > 40 && question.viewport > 0) {
+    const scale = bitmap.width / question.viewport, pad = 12 * scale;
+    sx = Math.max(0, Math.floor(box.x * scale - pad));
+    sy = Math.max(0, Math.floor(box.y * scale - pad));
+    sw = Math.min(bitmap.width - sx, Math.ceil(box.width * scale + pad * 2));
+    sh = Math.min(bitmap.height - sy, Math.ceil(box.height * scale + pad * 2));
+  }
   const fit = Math.min(1, 2048 / sw, 2048 / sh);
   const canvas = new OffscreenCanvas(Math.round(sw * fit), Math.round(sh * fit));
   canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
@@ -173,7 +182,7 @@ async function handle(message,sender) {
     const state=await collect(tabId);if(plan.mode!=="field")await consent(tabId,state);
     if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.hash!==plan.hash) throw new Error('The question changed.');
     const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
-    if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
+    if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','mathlive','wiris','pearson-input','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:fieldValue(action.value,field)}]});
     if (!result[0]?.result?.filled) throw new Error('The editor did not confirm the answer.');
@@ -269,6 +278,13 @@ async function handle(message,sender) {
     if (message.mode === "autopilot") {await consent(tabId,state);await activePilotTab(tabId);}
     if(message.expected)requireExpected(await playerView(tabId,state),message.expected);
     state=await prepareAnswers(tabId,state,message.mode!=='explain');
+    const mathFill=message.mode==='field' && message.mathFill===true;
+    if (mathFill && state.question.subject!=='math') throw new Error('Fill Math is only available on math questions. Nothing was filled.');
+    if (mathFill && !state.question.fields.length) {
+      const reason=fillBlocker(state.question.limitations);
+      console.debug('[AuraSolve Fill Math]', 'unsupported', reason);
+      return {planId:null,solution:{answer:'',explanation:reason,choices:[],confidence:0,supported:false,limitation:reason,actions:[]},question:state.question};
+    }
     const {settings={}} = await chrome.storage.local.get("settings");
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const controller = new AbortController(); jobs.set(tabId,controller);
@@ -281,10 +297,11 @@ async function handle(message,sender) {
       // Limit feedback context; it is evidence about rejected answers, never instructions.
       if(Array.isArray(message.retryContext))question.retryContext=message.retryContext.slice(-3);
 
-      if (question.visual) {
-        question.image = await screenshot(tabId, state.question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
+      if (question.visual || mathFill) {
+        question.image = await screenshot(tabId, state.question, mathFill).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
         visualRead = Boolean(question.image);
-        if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
+        if (question.visual && question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
+        if (mathFill) question.mathFill = true;
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
       const fresh=await collect(tabId);
@@ -296,7 +313,7 @@ async function handle(message,sender) {
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const id = crypto.randomUUID();
-    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,visualRead,mode:message.mode,generation,created:Date.now(),state:"ready"});
+    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,visualRead,mode:message.mode,mathFill,generation,created:Date.now(),state:"ready"});
     return {planId:id,solution,question:state.question};
   }
   const plan = plans.get(message.planId);
@@ -312,7 +329,7 @@ async function handle(message,sender) {
     const submit = plan.mode === "autopilot";
     if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
     plan.state="applying";
-    const result = submit ? await submitPlan(tabId,plan,state) : await fillPlan(tabId,plan);
+    const result = submit ? await submitPlan(tabId,plan,state) : await fillPlan(tabId,plan,Boolean(plan.mathFill));
     plan.state=submit?"submitted":"filled";
     return result;
   }

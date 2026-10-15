@@ -2,6 +2,7 @@ import {goToQuestion} from "./player.js";
 import {clickSaraChoice} from './sara.js';
 import {snapshot,elementFor,visible,writable,findButton,feedback} from "./detection.js";
 import {validateSolution} from "../shared/solution.js";
+import {sameEntry} from "../shared/math-question.js";
 import {sendExtension} from '../shared/messaging.js';
 function guard() {
   if (document.hidden) throw new Error("The practice page is hidden. AutoPilot stopped.");
@@ -25,7 +26,14 @@ function setValue(el,value) {
   el.dispatchEvent(new Event("input",{bubbles:true}));
   el.dispatchEvent(new Event("change",{bubbles:true}));
   el.blur?.();
-  if (el.value !== value) throw new Error("The page did not retain the requested value.");
+  if (!sameEntry(value, el.value, el.type) && typeof document.execCommand === "function" && el.select) {
+    el.focus?.();
+    el.select();
+    document.execCommand("insertText", false, value);
+    el.dispatchEvent(new Event("input",{bubbles:true}));
+    el.dispatchEvent(new Event("change",{bubbles:true}));
+  }
+  if (!sameEntry(value, el.value, el.type)) throw new Error("The page did not retain the requested value.");
 }
 async function setNumberLinePoint(el,field,value) {
   const expected=value.x,tolerance=Math.max(Number.EPSILON,field.step/100);
@@ -80,9 +88,13 @@ export async function execute(plan) {
       await clickSaraChoice(el);
     }
     else if (field.editorKey) {
-      await sendExtension({type:'writeEditor',planId:plan.id,target:a.target});
+      try { await sendExtension({type:'writeEditor',planId:plan.id,target:a.target}); }
+      catch (error) { if (plan.mathFill) console.debug('[AuraSolve Fill Math]', 'editor rejected', {adapter:field.adapter, message:error.message}); throw error; }
     }
-    else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
+    else if (a.kind === "text" || a.kind === "select") {
+      try { setValue(el,a.value); }
+      catch (error) { if (plan.mathFill) console.debug('[AuraSolve Fill Math]', 'input rejected', {type:el.type || el.tagName, message:error.message}); throw error; }
+    }
     else if (a.kind === "radio") { el.click(); if (!el.checked) throw new Error("The radio answer was not accepted by the page."); }
     else if (a.kind === "checkbox") { if (el.checked !== (a.value === "true")) el.click(); if (el.checked !== (a.value === "true")) throw new Error("Checkbox state was not retained."); }
     else if (a.kind === "point" && field.adapter === 'aria-number-line') {

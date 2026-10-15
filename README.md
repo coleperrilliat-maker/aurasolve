@@ -57,7 +57,7 @@ No OpenAI setup in the browser. Usage is billed through your Railway server.
 
 AutoPilot keeps a local checkpoint before submitting, so a reopened panel reads the live page before continuing. If a submission's result is uncertain, it waits and pauses instead of replaying it. Keep the question tab and panel open while running; reopen and start again to resume after closing them. A new run is bound to its original tab and invalidates older runs.
 
-**Fill answers:** The inline button fills all supported active answer fields and shows explanations without opening another popup. It needs no signature. Disabled/completed fields are excluded.
+**Fill Math:** On a math question, the inline button captures one screenshot, solves it, and fills supported math inputs. It verifies each value by reading it back, asks before replacing an existing answer, and does not click Check answer or Submit. It stays hidden on English and writing questions. Disabled or completed fields are excluded.
 
 **Explain:** Reads the current question and returns a worked explanation without changing answers.
 
@@ -79,7 +79,7 @@ AutoPilot requires typing **This is not a graded homework assignment** and signi
 | Graphs | One point on an explicit coordinate-grid adapter; not arbitrary graph canvases, lines, curves, or regions |
 | Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment; ARIA drop targets are recognized |
 | Pearson detection | Common question-container selectors, text, accessible math labels, and accessible matching frames |
-| Math editors | Capability-checked MathQuill API and Pearson-style Dojo widgets with a real value setter; unsupported proprietary editors remain manual. DOM detection inspected on a live MyLab player; automated writes verified on local fixtures. |
+| Math editors | Capability-checked MathQuill, MathLive, WIRIS, Pearson focus inputs, and Dojo widgets. Each write is read back; editors without a value API stay manual. |
 | Fill-in menus | Native selects, Dojo widgets, ARIA comboboxes/listboxes, and older Pearson popups discovered after opening; exact options and the retained selection are verified |
 | Pearson graph widgets | Proprietary graph/drag controls still need dedicated adapters |
 | Images | Text/alt labels plus a question screenshot for visual problems when capture succeeds |
@@ -108,7 +108,7 @@ src/background/worker.js       Request routing, consent, cancellation, plans
 src/background/api.js          Extension → Railway client
 src/content/detection.js       Question, field, feedback, and button detection
 src/content/actions.js         Validated field changes and practice navigation
-src/content/ui.js              Inline Fill answers button
+src/content/ui.js              Inline Fill Math button
 src/shared/pilot-engine.js      Durable AutoPilot controller
 src/shared/player-state.js      Question/part navigation decisions
 src/content/player.js           Pearson progress and question-list reader

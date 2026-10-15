@@ -73,3 +73,24 @@ test('a lazy Pearson dropdown binds to its sole opened popup and retains the cho
   assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'Vertical angles'}),{filled:true});
   assert.equal(el.value,'Vertical angles');
 });
+test('MathLive and Pearson focus inputs retain fractions',async()=>{
+  let latex='';
+  const math={dataset:{},localName:'math-field',isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('math-field'),getClientRects:()=>[{}],closest:()=>null,getAttribute:()=>null,
+    removeAttribute(){},dispatchEvent(){},getValue:()=>latex,setValue(value){latex=value;}};
+  globalThis.document={hidden:false,querySelectorAll:()=>[math],getElementById:()=>null,createElement:()=>({})};
+  globalThis.getComputedStyle=()=>({visibility:'visible'});globalThis.window={};
+  editorBridge();
+  assert.equal(math.dataset.auraEditor,'mathlive');
+  assert.deepEqual(await editorBridge({op:'write',key:math.dataset.auraEditorKey,adapter:'mathlive',value:'\\frac{1}{2}'}),{filled:true});
+  assert.equal(latex,'\\frac{1}{2}');
+  const input={tagName:'INPUT',value:'',disabled:false,readOnly:false,focus(){},select(){},dispatchEvent(){}};
+  const pearson={dataset:{},isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('span.eqEditor'),getClientRects:()=>[{}],closest:()=>null,getAttribute:()=>null,
+    removeAttribute(){},querySelector:()=>input,dispatchEvent(){}};
+  document.querySelectorAll=selector=>selector==='*'?[]:[pearson];
+  editorBridge();
+  assert.equal(pearson.dataset.auraEditor,'pearson-input');
+  assert.deepEqual(await editorBridge({op:'write',key:pearson.dataset.auraEditorKey,adapter:'pearson-input',value:'1/2'}),{filled:true});
+  assert.equal(input.value,'1/2');
+});

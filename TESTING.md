@@ -107,3 +107,11 @@ Validation: `npm test` passed 97 tests; `npm run check` and `git diff --check ma
 Dropdown discovery now covers native selects, Dojo registry widgets, ARIA combobox/listbox controls, and older Pearson controls whose popup is created only after opening the arrow. For an unlinked legacy control, AuraSolve proceeds only when opening it reveals exactly one visible option popup; it binds that popup to the control, records unique options, clicks an exact enabled option, and verifies the retained display value.
 
 Validation: `npm test` passed 98 tests; `npm run check` and `git diff --check main...HEAD` passed. The new regression opens a lazy unlinked popup, discovers its option, writes the selected value, and confirms read-back. It is a DOM fixture rather than a live signed-in Pearson assignment.
+
+## 1.17.0 — math fill
+
+Fill Math is separate from AutoPilot. It appears only for math questions, captures one screenshot, requests one model answer, writes supported inputs, and reads the value back before reporting Complete. It asks before replacing an existing answer and does not click Check answer or Submit. English and writing questions do not show the button. Graph canvases, and MathLive, WIRIS, or MathQuill editors without a value API, report the specific reason instead of a success state.
+
+The button is fixed near the question's upper right and moves to another open spot when that corner would cover question text, inputs, diagrams, or Pearson navigation. Placement keeps a 12px gap.
+
+Validation: `npm test` passed 108 tests and `npm run check` passed. `CHROMIUM_PATH` pointed at system Chrome for `node tests/browser-fixtures.mjs`, which passed the local fixtures: one retained equation, a fraction in a Pearson focus input and MathLive, a negative decimal, several fields including an open shadow input, a dynamically activated editor, a graph control that ends in the Error state with the graph reason, and an English passage that removes the button. The model response is stubbed. Live signed-in Pearson compatibility was not established.

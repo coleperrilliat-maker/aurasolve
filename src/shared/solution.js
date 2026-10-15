@@ -1,6 +1,6 @@
 // Plain answer boxes need slash fractions; math-editor APIs retain LaTeX.
 export function fieldValue(value, field) {
-  if (field.kind !== 'text' || field.format === 'latex') return value;
+  if (field.kind !== 'text' || field.format === 'latex' || field.format === 'mathml') return value;
   let text=value.trim().replace(/^\\[([]|\\[)\]]$/g,'');
   const atom=s=>/^[+-]?(?:\d+(?:\.\d+)?|[a-zA-Z])$/.test(s.trim())?s.trim():`(${s.trim()})`;
   for(let i=0;i<12;i++) {
