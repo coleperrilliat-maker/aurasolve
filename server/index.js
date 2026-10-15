@@ -12,6 +12,7 @@ const publicFiles = new Map([
   ["/", {url: new URL("../docs/index.html", import.meta.url), type: "text/html; charset=utf-8"}],
   ["/style.css", {url: new URL("../docs/style.css", import.meta.url), type: "text/css; charset=utf-8"}],
   ["/script.js", {url: new URL("../docs/script.js", import.meta.url), type: "text/javascript; charset=utf-8"}],
+  ["/app-icon.png", {url: new URL("../docs/app-icon.png", import.meta.url), type: "image/png"}],
   ["/icon.png", {url: new URL("../icons/icon-128.png", import.meta.url), type: "image/png"}],
   ["/icons/icon-32.png", {url: new URL("../icons/icon-32.png", import.meta.url), type: "image/png"}],
   ["/icons/icon-128.png", {url: new URL("../icons/icon-128.png", import.meta.url), type: "image/png"}],
