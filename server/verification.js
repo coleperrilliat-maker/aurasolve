@@ -56,6 +56,13 @@ export async function verifiedSolve(solve, snapshot, mode) {
   if(checked===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
   const second=await solve(snapshot,mode,true);
   if(snapshot.fields && missingAnswers(second,snapshot).length)return reject(second,'The checked answer did not cover every active blank. Nothing was filled.');
-  if(!sameActions(first,second))return reject(first,'Independent solutions disagreed. Review the question before filling.');
-  return {...second,confidence:Math.min(first.confidence,second.confidence)};
+  if(sameActions(first,second))return {...second,confidence:Math.min(first.confidence,second.confidence)};
+  // One outlier is common on close multiple-choice options. Fill only when
+  // two of three independent solves choose the same action.
+  const third=await solve(snapshot,mode,true);
+  if(snapshot.fields && missingAnswers(third,snapshot).length)return reject(third,'The checked answer did not cover every active blank. Nothing was filled.');
+  const votes=[first,second,third];
+  const agreed=votes.find(candidate=>votes.filter(other=>sameActions(candidate,other)).length>=2);
+  if(!agreed)return reject(first,'Independent solutions disagreed. Review the question before filling.');
+  return {...agreed,confidence:Math.min(...votes.filter(other=>sameActions(agreed,other)).map(other=>other.confidence))};
 }

@@ -2,3 +2,4 @@ export const TUTOR_INSTRUCTIONS = String.raw`You are AuraSolve, a careful math a
 
 
 export const GEOMETRY_CHECKS = "Identify each ray and vertex and associate every angle label with its region before writing equations. Never infer equal angles, perpendicularity or parallelism from appearance alone. Use explicit givens or marked relationships. Substitute every solved variable into all labeled expressions and verify those relationships. Unreadable labels require supported=false and no actions.";
+export const DEFINITION_CHECKS = "A statement is a good definition only when both directions are true and the description fits that term alone. For \"X is a Y\", test whether every Y is an X. If another genuine member of Y exists, it is not a good definition; choose the option whose reason names a real member of Y. Do not choose a biconditional option unless that biconditional is actually true, and do not choose a reason that names something outside Y.";

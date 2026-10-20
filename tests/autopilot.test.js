@@ -5,8 +5,13 @@ const action={target:'a1',kind:'text',value:'12',x:null,y:null,destination:''};
 const solution={supported:true,confidence:.98,actions:[action],explanation:'Checked.',answer:'12'};
 test('disagreement removes all automatic actions',async()=>{
   let n=0;
-  const result=await verifiedSolve(async()=>({...solution,actions:[{...action,value:++n===1?'12':'38/7'}]}),{},'autopilot');
+  const result=await verifiedSolve(async()=>({...solution,actions:[{...action,value:['12','38/7','5'][n++]}]}),{},'autopilot');
   assert.equal(result.supported,false);assert.deepEqual(result.actions,[]);
+});
+test('two of three matching solves fill and the outlier does not',async()=>{
+  let n=0;
+  const result=await verifiedSolve(async()=>({...solution,actions:[{...action,value:['12','7','12'][n++]}]}),{},'field');
+  assert.equal(result.supported,true);assert.equal(result.actions[0].value,'12');
 });
 test('independent matching actions can proceed',async()=>{
   const result=await verifiedSolve(async()=>structuredClone(solution),{},'autopilot');
@@ -38,7 +43,7 @@ test('identical radio clicks agree despite unused text or coordinate differences
 });
 test('different radio choices and different real field values still disagree',async()=>{
  for(const kind of ['radio','text','select','checkbox']){
-  let n=0;const result=await verifiedSolve(async()=>({...solution,actions:[{...action,kind,...(kind==='radio'?{target:++n===1?'a1':'a2'}:{value:++n===1?'first':'second'})}]}),{},'field');
+  let n=0;const result=await verifiedSolve(async()=>{n++;return {...solution,actions:[{...action,kind,...(kind==='radio'?{target:'a'+n}:{value:['first','second','third'][n-1]})}]}},{},'field');
   assert.equal(result.supported,false,kind);
  }
 });
