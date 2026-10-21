@@ -32,7 +32,7 @@ export function createUI() {
   function mount(){
     const root=questionRoot(), current=snapshot();
     const sara=current.fields.some(field=>field.adapter==='sara-choice');
-    const lazy=root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"], .mq-editable-field')].some(visible);
+    const lazy=root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, .xlFillin, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"], .mq-editable-field')].some(visible);
     const answering=Boolean(root && current.question && (sara || (!current.fallback && (current.fields.length || lazy))));
     if(!answering){if(host.isConnected)host.remove();return;}
     if(host.isConnected && root.contains(host))return;
@@ -56,7 +56,9 @@ export function createUI() {
       await sendExtension({type:'prepareField'});
       const result=await sendExtension({type:'solve',mode:'field'});
       if(!result.solution.supported || result.solution.confidence<.85 || !result.solution.actions.length)throw new Error(result.solution.limitation || 'Could not fill this answer. Open AuraSolve and choose Explain now.');
-      await sendExtension({type:'apply',planId:result.planId});
+      const applied=await sendExtension({type:'apply',planId:result.planId});
+      notice.textContent=applied.advanced==='next'?'Filled and pressed Next.':'Filled. The red Next button was not pressed.';
+      notice.hidden=false;
     }catch(error){notice.textContent=error.message;notice.hidden=false;}
     finally{running=false;button.disabled=false;button.setAttribute('aria-busy','false');button.textContent='Fill answers';}
   };

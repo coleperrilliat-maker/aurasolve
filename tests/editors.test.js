@@ -24,7 +24,8 @@ test('MathQuill uses its value API and checks retained LaTeX',()=>{
 test('unretained values fail and hidden documents cannot write',()=>{
   const f=fixture('mathquill',false);editorBridge();
   const request={op:'write',key:f.el.dataset.auraEditorKey,adapter:'mathquill',value:'5'};
-  assert.throws(()=>editorBridge(request),/did not retain/);
+  const failed=editorBridge(request);
+  assert.equal(failed.filled,false);assert.match(failed.error,/did not retain/);
   document.hidden=true;assert.throws(()=>editorBridge(request),/hidden/);
 });
 test('Dojo requires an actual value setter, not generic property assignment',()=>{
@@ -38,7 +39,8 @@ test('tutor instructions preserve LaTeX backslashes',()=>{
   assert.ok(!TUTOR_INSTRUCTIONS.includes('\f'));
 });
 test('an ARIA-linked answer menu is discovered and confirms its selected label',async()=>{
-  const menu={querySelectorAll:()=>[item]};
+  const blank={id:'choice_blank',textContent:'',parentElement:{closest:()=>null},classList:{contains:()=>false},getAttribute:()=>null,getClientRects:()=>[{}],querySelector:()=>null,click(){}};
+  const menu={querySelectorAll:()=>[item,blank]};
   const el={dataset:{},textContent:'Choose',isConnected:true,disabled:false,readOnly:false,
     matches:selector=>selector.includes('[role="combobox"]'),getClientRects:()=>[{}],closest:()=>null,
     getAttribute:key=>key==='aria-controls'?'answer-menu':null,removeAttribute(){},querySelector:()=>null,click(){},dispatchEvent(){}};
@@ -72,4 +74,89 @@ test('a lazy Pearson dropdown binds to its sole opened popup and retains the cho
   assert.deepEqual(JSON.parse(el.dataset.auraOptions),[{value:'Vertical angles',label:'Vertical angles',disabled:false}]);
   assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'Vertical angles'}),{filled:true});
   assert.equal(el.value,'Vertical angles');
+});
+test('a Pearson fill-in menu clicks the choice and reads the displayed value back',async()=>{
+  const shown={textContent:''};
+  const arrow={click(){}};
+  const choice={id:'always',textContent:'always',classList:{contains:()=>false},getAttribute:()=>null,getClientRects:()=>[{}],querySelector:()=>null,click(){shown.textContent='always';}};
+  const blank={id:'menu_blank',textContent:'',classList:{contains:()=>false},getAttribute:()=>null,getClientRects:()=>[{}],querySelector:()=>null,click(){shown.textContent='';}};
+  const el={dataset:{},isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('.xlFillin'),getClientRects:()=>[{}],closest:()=>null,getAttribute:()=>null,removeAttribute(){},dispatchEvent(){},
+    querySelector:selector=>selector.includes('xlFillinInputValueAriaLabelNode')?shown:selector.includes('xlFillinArrow')?arrow:null,
+    querySelectorAll:selector=>selector.includes('xlFillinItem')?[choice,blank]:[]};
+  globalThis.document={hidden:false,querySelectorAll:()=>[el],getElementById:()=>null,createElement:()=>({set innerHTML(value){this.textContent=value;},textContent:''})};
+  globalThis.getComputedStyle=()=>({visibility:'visible'});
+  globalThis.window={};
+  editorBridge();
+  assert.deepEqual(JSON.parse(el.dataset.auraOptions),[{value:'always',label:'always',disabled:false}]);
+  assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'always'}),{filled:true});
+  assert.equal(shown.textContent,'always');
+});
+test('a closed Pearson fill-in keeps option ids and clicks the matching reason',async()=>{
+  const shown={textContent:''};
+  let opened=false;
+  const reason=(id,label)=>({
+    id,classList:{contains:()=>false},getAttribute:()=>null,textContent:'',
+    querySelectorAll:selector=>selector==='[aria-label]'?[{getAttribute:key=>key==='aria-label'?label:null}]:[],
+    getClientRects:()=>opened?[{}]:[],
+    click(){shown.textContent=label;}
+  });
+  const given=reason('FL1-0','Given'),reflexive=reason('FL1-1','Reflexive Property');
+  const arrow={click(){opened=true;}};
+  const el={dataset:{},isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('.xlFillin'),getClientRects:()=>[{}],closest:()=>null,getAttribute:()=>null,removeAttribute(){},dispatchEvent(){},
+    querySelector:selector=>selector.includes('xlFillinInputValueAriaLabelNode')?shown:selector.includes('xlFillinArrow')?arrow:null,
+    querySelectorAll:selector=>selector.includes('.xlFillinContainer > div')?[given,reflexive]:[]};
+  globalThis.document={hidden:false,querySelectorAll:()=>[el],getElementById:()=>null,createElement:()=>({set innerHTML(value){this.textContent=value;},textContent:''})};
+  globalThis.getComputedStyle=()=>({visibility:'visible'});
+  globalThis.window={};
+  editorBridge();
+  assert.deepEqual(JSON.parse(el.dataset.auraOptions),[
+    {value:'FL1-0',label:'Given',disabled:false},
+    {value:'FL1-1',label:'Reflexive Property',disabled:false}
+  ]);
+  assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'FL1-0'}),{filled:true});
+  assert.equal(shown.textContent,'Given');
+});
+test('a Pearson fill-in does not advance when the reason click does not stick',async()=>{
+  const shown={textContent:''};
+  let clicks=0;
+  const given={id:'FL1-0',classList:{contains:()=>false},getAttribute:()=>null,textContent:'',querySelectorAll:()=>[{getAttribute:key=>key==='aria-label'?'Given':null}],getClientRects:()=>[{}],click(){clicks++;}};
+  const el={dataset:{},isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('.xlFillin'),getClientRects:()=>[{}],closest:()=>null,getAttribute:()=>null,removeAttribute(){},dispatchEvent(){},
+    querySelector:selector=>selector.includes('xlFillinInputValueAriaLabelNode')?shown:selector.includes('xlFillinArrow')?{click(){}}:null,
+    querySelectorAll:selector=>selector.includes('.xlFillinContainer > div')?[given]:selector.includes('.xlFillinContainer')?[]:[]};
+  globalThis.document={hidden:false,querySelectorAll:()=>[el],getElementById:()=>null,createElement:()=>({set innerHTML(value){this.textContent=value;},textContent:''})};
+  globalThis.getComputedStyle=()=>({visibility:'visible'});
+  globalThis.window={};
+  editorBridge();
+  const failed=await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'FL1-0'});
+  assert.equal(failed.filled,false);
+  assert.match(failed.error,/not clicked/);
+  assert.equal(clicks,1);
+  assert.equal(shown.textContent,'');
+});
+test('mouse down on the open reason selects it when click does not',async()=>{
+  const shown={textContent:''};
+  const previousMouse=globalThis.MouseEvent, previousPointer=globalThis.PointerEvent;
+  globalThis.MouseEvent=class { constructor(type, init){ this.type=type; Object.assign(this, init||{}); } };
+  globalThis.PointerEvent=globalThis.MouseEvent;
+  const given={id:'FL1-0',classList:{contains:()=>false},getAttribute:()=>null,textContent:'Given',
+    querySelectorAll:()=>[],getClientRects:()=>[{}],getBoundingClientRect:()=>({left:10,top:20,width:120,height:24}),
+    dispatchEvent(event){ if(event.type==='mousedown') shown.textContent='Given'; },click(){}};
+  const el={dataset:{},isConnected:true,disabled:false,readOnly:false,
+    matches:selector=>selector.includes('.xlFillin'),getClientRects:()=>[{}],closest:()=>null,getAttribute:()=>null,removeAttribute(){},dispatchEvent(){},
+    querySelector:selector=>selector.includes('xlFillinInputValueAriaLabelNode')?shown:selector.includes('xlFillinArrow')?{click(){}}:null,
+    querySelectorAll:selector=>selector.includes('.xlFillinContainer > div')?[given]:[]};
+  globalThis.document={hidden:false,querySelectorAll:()=>[el],getElementById:()=>null,createElement:()=>({set innerHTML(value){this.textContent=value;},textContent:''})};
+  globalThis.getComputedStyle=()=>({visibility:'visible'});
+  globalThis.window={};
+  try{
+    editorBridge();
+    assert.deepEqual(await editorBridge({op:'write',key:el.dataset.auraEditorKey,adapter:'dojo-select',value:'FL1-0'}),{filled:true});
+    assert.equal(shown.textContent,'Given');
+  }finally{
+    globalThis.MouseEvent=previousMouse;
+    globalThis.PointerEvent=previousPointer;
+  }
 });

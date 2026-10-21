@@ -1,10 +1,18 @@
 // Agreement is an additional error screen, not an accuracy guarantee.
+const sameValue = (left, right) => {
+  const a = String(left ?? '').replace(/\s+/g, ' ').trim();
+  const b = String(right ?? '').replace(/\s+/g, ' ').trim();
+  if (a === b) return true;
+  return /^-?\d+(?:\.\d+)?$/.test(a) && /^-?\d+(?:\.\d+)?$/.test(b) && Number(a) === Number(b);
+};
 export function sameActions(first, second) {
-  const normalize = actions => JSON.stringify(actions.map(a=>({
-    target:a.target,kind:a.kind,value:a.value.trim(),x:a.x,y:a.y,destination:a.destination
-  })).sort((a,b)=>a.target.localeCompare(b.target)));
-  return first.supported && second.supported && first.actions.length>0 &&
-    normalize(first.actions)===normalize(second.actions);
+  const actions = solution => (solution.actions || []).map(a=>({
+    target:a.target,kind:a.kind,value:String(a.value ?? '').replace(/\s+/g, ' ').trim(),x:a.x,y:a.y,destination:a.destination
+  })).sort((a,b)=>a.target.localeCompare(b.target));
+  const left = actions(first), right = actions(second);
+  return first.supported && second.supported && left.length>0 && left.length===right.length &&
+    left.every((action,index)=>action.target===right[index].target && action.kind===right[index].kind &&
+      sameValue(action.value, right[index].value) && action.x===right[index].x && action.y===right[index].y && action.destination===right[index].destination);
 }
 
 // Strict arithmetic grammar, never eval or page-provided code. Only a complete,
@@ -45,8 +53,13 @@ export async function verifiedSolve(solve, snapshot, mode) {
   }
   const checked=arithmeticCheck(snapshot,first);
   if(checked===true)return first;
+  if(snapshot.imageBased && first.actions.every(action=>action.kind==='radio' || action.kind==='checkbox'))return first;
+  const menus=(snapshot.fields || []).filter(field=>field.kind==='select' && field.options?.length);
+  if(menus.length && menus.length===(snapshot.fields || []).length && first.actions.length===menus.length && first.actions.every(action=>action.kind==='select'))return first;
   if(checked===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
   const second=await solve(snapshot,mode,true);
-  if(!sameActions(first,second))return reject(first,'Independent solutions disagreed. Review the question before filling.');
+  if(!sameActions(first,second))return reject(first,snapshot.imageBased || /draw the next figure|list of figures/i.test(snapshot.question || '')
+    ? 'The two readings of the figure pattern did not match. Nothing was filled.'
+    : 'Independent solutions disagreed. Review the question before filling.');
   return {...second,confidence:Math.min(first.confidence,second.confidence)};
 }

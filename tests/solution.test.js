@@ -7,8 +7,41 @@ const snapshot={question:'3x + 7 = 22',fields:[{id:'a1',kind:'text'},{id:'a2',ki
 const action={kind:'text',target:'a1',value:'5',destination:'',x:null,y:null};
 const solution={answer:'x = 5',explanation:'Subtract 7, then divide by 3.',confidence:.99,supported:true,limitation:'',actions:[action]};
 test('valid selected field answer passes',()=>assert.equal(validateSolution(solution,snapshot,'field'),solution));
+test('each radio part accepts one answer when the letters repeat',()=>{
+  const fields=[
+    {id:'a1',kind:'radio',group:'part-1',label:'A. If I am in the West, then I am not in San Diego.'},
+    {id:'c1',kind:'radio',group:'part-1',label:'C. If I am in the West, then I am in San Diego.'},
+    {id:'c2',kind:'radio',group:'part-2',label:'C. If I am in San Diego, then I am not in the West.'},
+    {id:'d3',kind:'radio',group:'part-3',label:'D. If I am not in the West, then I am not in San Diego.'},
+  ];
+  const snap={question:'Write the converse, inverse, and contrapositive.',fields,dropTargets:[],limitations:[]};
+  const radio=(target,value)=>({kind:'radio',target,value,destination:'',x:null,y:null});
+  const result=validateSolution({...solution,answer:'C\nC\nD',actions:[radio('c1','C'),radio('c2','C'),radio('d3','D')]},snap,'field');
+  assert.deepEqual(result.actions.map(action=>action.target),['c1','c2','d3']);
+  assert.throws(()=>validateSolution({...solution,actions:[radio('c1','C'),radio('a1','A')]},snap,'field'),/more than one answer in a radio group/);
+  assert.throws(()=>validateSolution({...solution,actions:[radio('c1','C')]},snap,'field'),/own answer/);
+  const bound=validateSolution({...solution,actions:[radio('part-1:C',''),radio('part-2:C',''),radio('part-3:D','')]},snap,'field');
+  assert.deepEqual(bound.actions.map(action=>action.target),['c1','c2','d3']);
+});
+test('a SARA letter is bound to that answer button',()=>{
+  const snap={question:'Which is even?',fields:[{id:'a1',kind:'radio',label:'A',adapter:'sara-choice'},{id:'a2',kind:'radio',label:'C',adapter:'sara-choice'}],dropTargets:[],limitations:[]};
+  const result=validateSolution({...solution,answer:'C',actions:[{kind:'text',target:'C',value:'',destination:'',x:null,y:null}]},snap,'field');
+  assert.equal(result.actions[0].target,'a2');
+  assert.equal(result.actions[0].kind,'radio');
+  assert.equal(result.actions[0].value,'C');
+});
 test('Fill permits every detected field but rejects invented targets',()=>{assert.ok(validateSolution({...solution,actions:[action,{...action,target:'a2'}]},snapshot,'field'));assert.throws(()=>validateSolution({...solution,actions:[{...action,target:'missing'}]},snapshot,'autopilot'));});
 test('duplicate actions are rejected',()=>assert.throws(()=>validateSolution({...solution,actions:[action,action]},snapshot,'field')));
+test('radios that share a name stay in separate parts when their lists differ',async()=>{
+  const {radioPartGroups}=await import('../src/shared/solution.js');
+  const converse={}, inverse={};
+  const groups=radioPartGroups([
+    {id:'a',name:'answer',anchor:converse},{id:'b',name:'answer',anchor:converse},{id:'c',name:'answer',anchor:inverse},
+  ]);
+  assert.equal(groups.get('a'),groups.get('b'));
+  assert.notEqual(groups.get('a'),groups.get('c'));
+  assert.equal(groups.get('a'),'part-1');
+});
 test('graph bounds are enforced',()=>{const snap={...snapshot,fields:[{id:'a1',kind:'point',bounds:{xMin:-5,xMax:5,yMin:-5,yMax:5}}]};assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'point',x:6,y:0}]},snap,'field'));});
 test('number-line points must use an exposed tick and y zero',()=>{
   const snap={...snapshot,fields:[{id:'a1',kind:'point',adapter:'aria-number-line',bounds:{xMin:-2,xMax:2,yMin:0,yMax:0},step:.5}]};

@@ -6,7 +6,7 @@ export function questionStatus(label){
   if(/in progress|incomplete|attempted/i.test(label) && !/not attempted/i.test(label))return 'incomplete';
   return 'unanswered';
 }
-export function controlKind(labels,command=''){
+export function controlKind(labels,command='',extra={}){
   const texts=labels.map(clean).filter(Boolean);
   // Assignment-level controls are never a per-question answer check. Treat a
   // dangerous visible label as authoritative even when Pearson reuses command
@@ -17,13 +17,24 @@ export function controlKind(labels,command=''){
   // Visible labels take precedence: Pearson reuses command=checkanswer for Continue.
   if(texts.some(t=>/^(continue|next part|continue to next part)$/i.test(t)))return 'continue';
   if(texts.some(t=>/^(similar question|similar exercise|try again)$/i.test(t)))return 'similar';
-  if(texts.some(t=>/^(check (my )?answer|final check|submit answer|check)$/i.test(t)))return 'submit';
+  if(texts.some(t=>/^(check (my )?answer|final check|check)$/i.test(t)))return 'submit';
   if(texts.some(t=>/^(next|next question|next problem)$/i.test(t)))return 'next';
   if(texts.some(t=>/^(ok|okay)$/i.test(t)))return 'dismiss';
-  // Never infer a write from command metadata alone. A visible, explicit
-  // per-question label is required before AutoPilot may click Check answer.
   if(texts.length)return null;
-  return {similarquestion:'similar',next:'next',continue:'continue'}[command.toLowerCase()] || null;
+  const fromCommand={similarquestion:'similar',similarexercise:'similar',next:'next',nextquestion:'next',continue:'continue'}[String(command).toLowerCase()];
+  if(fromCommand)return fromCommand;
+  // Only the player's own nav Check answer control may be identified from
+  // command metadata. Continue, Next, and assignment Submit have labels.
+  if(String(command).toLowerCase()==='checkanswer' && extra.nav && !extra.dialog)return 'submit';
+  return null;
+}
+// Several Check answer buttons can be visible. Use the player control at the
+// lower right, and never a button inside a hand-in or feedback dialog.
+export function pickCheckAnswer(entries){
+  const page=entries.filter(entry=>!entry.dialog);
+  if(!page.length)return null;
+  const rank=entry=>(entry.nav || ['checkanswer','next','nextquestion'].includes(entry.command)?100000:0)+entry.bottom*10+entry.right;
+  return page.reduce((best,entry)=>rank(entry)>rank(best)?entry:best);
 }
 export function assignmentKey(url){
   try{const u=new URL(url);const id=u.searchParams.get('homeworkId') || u.searchParams.get('testId');
@@ -34,7 +45,7 @@ export function assignmentKey(url){
 export function decidePlayer(view){
   const p=view.progress || {}, controls=view.controls || {};
   if(view.incompleteWarning)return {kind:'stay'};
-  if(view.feedback?.modal && view.feedback.state!=='unknown')return {kind:'dismiss'};
+  if(view.feedback?.modal && (view.feedback.state!=='unknown' || view.feedback.dismissible))return {kind:'dismiss'};
   if(controls.continue>0)return {kind:'continue'};
   // A completed question must have terminal controls; a correct part is not a completed question.
   const terminal=controls.similar>0 || (p.status==='correct' && !view.fields.length && !controls.submitPresent);
@@ -51,6 +62,7 @@ export function decidePlayer(view){
     return {kind:'pause',reason:'Waiting for the question score to update.'};
   }
   if(!p.current && view.feedback?.state==='correct' && controls.next)return {kind:'next'};
-  if(view.fields.length && controls.submitPresent>0)return {kind:'solve'};
+  // Fill first. Pearson often enables Check answer only after the choice is entered.
+  if(view.fields.length)return {kind:'solve'};
   return {kind:'pause',reason:'Waiting for supported answer fields or a clear Continue/Similar control.'};
 }

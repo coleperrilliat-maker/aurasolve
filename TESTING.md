@@ -107,3 +107,29 @@ Validation: `npm test` passed 97 tests; `npm run check` and `git diff --check ma
 Dropdown discovery now covers native selects, Dojo registry widgets, ARIA combobox/listbox controls, and older Pearson controls whose popup is created only after opening the arrow. For an unlinked legacy control, AuraSolve proceeds only when opening it reveals exactly one visible option popup; it binds that popup to the control, records unique options, clicks an exact enabled option, and verifies the retained display value.
 
 Validation: `npm test` passed 98 tests; `npm run check` and `git diff --check main...HEAD` passed. The new regression opens a lazy unlinked popup, discovers its option, writes the selected value, and confirms read-back. It is a DOM fixture rather than a live signed-in Pearson assignment.
+
+## 1.16.3 — Check answer, then the next question
+
+AutoPilot still fills the answer before it clicks anything. The click target is a visible Check answer, Check, or Final Check control, preferring the player button at the lower right (`button.navButton` or `command="checkanswer"`). Buttons labeled Submit, Submit answer, Finish, Turn in, or Save are not used, and a Check answer control inside a dialog is not used while a page-level one is available.
+
+Pearson fill-in menus (`.xlFillin`) are filled by opening `.xlFillinArrow`, clicking the matching `.xlFillinItem`, and reading `.xlFillinInputValueAriaLabelNode`. Blank menu rows whose id ends in `_blank` are ignored. Accounting-table listboxes and `table.dijitSelect` controls use the same open, click, and read-back path. This follows the control structure visible in Ask Labby 2.3.0; the extension's own code was not copied. `npm test` passed 99 tests and `npm run check` passed. Live signed-in Pearson was not retested.
+
+## 1.16.4 — figure patterns
+
+“Study the list of figures… draw the next figure” was solved from text that had lost the pictures, so the two answer checks disagreed and nothing was filled. Those questions now require a screenshot. Pictures in the question text are marked `[figure 1]`, `[figure 2]`, and so on. If the page has no text, choice, or dropdown field that can store the next figure, AuraSolve explains the pattern and does not fill the drawing area.
+
+## 1.16.5 — image-based questions
+
+A question is image-based when the prompt or a choice contains a picture larger than an icon (an image, SVG, canvas, or background image), including the grid choices on a “draw the next figure” multiple-choice question. Text-only radio choices are not treated as pictures. Fill scrolls that question into view and sends one screenshot cropped to the question and its choices. The letter on each choice is matched to the picture beside it. A drawing area with no choice or text field is still explained and left unfilled.
+
+## 1.16.6 — fill, then Check answer
+
+AutoPilot was pausing on “the page did not reach the expected next step” because it waited for Check answer to exist before filling, and a selected choice could make the question look changed before that button was clicked. It now fills the answer fields first, then clicks the player Check answer control (`button.navButton` or `command="checkanswer"`), still ignoring Continue, Submit, Finish, Turn in, and Save. Picture choices use one screenshot reading. Selecting a choice no longer blocks the Check answer click.
+
+## 1.16.7 — Next on a pre-test
+
+A pre-test such as Chapter 2 fills the choice and then shows Next at the lower right, with Submit only in the assignment header. After the fill, AutoPilot clicks Check answer when that control exists. When the page has no Check answer, it clicks the lower-right Next (`Next` or `command="nextquestion"`). The header Submit button is not clicked.
+
+## 1.16.8 — several radio groups
+
+A question such as converse, inverse, and contrapositive has three choice lists that each repeat A–D. Those lists stay separate groups, including when the inputs share one name. Fill and AutoPilot select one answer in each group. Two selections in the same group are still rejected. This follows the visible Pearson containers (`.xlMultipleChoice`, `.QuestionResponseMc`, `.part`, fieldset, and radiogroup) and the part prompts between them. Ask Labby's source was not copied.

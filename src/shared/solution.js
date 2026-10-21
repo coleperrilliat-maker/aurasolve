@@ -38,10 +38,15 @@ export function validateSolution(solution, snapshot, mode) {
   if (!Array.isArray(solution.choices) || solution.choices.length > 12 || solution.choices.some(c => typeof c !== "string" || c.length > 500))
     throw new Error("The model returned invalid answer choices.");
   if (solution.actions.length > 24) throw new Error("Too many actions in the response.");
-  const ids = new Map(snapshot.fields.map(f => [f.id, f]));
   const seen = new Set();
+  const radioPicks = new Map();
   for (const a of solution.actions) {
-    const f = ids.get(a.target);
+    const f = fieldForAction(a.target, snapshot.fields);
+    if (f && a.target !== f.id) {
+      a.target = f.id;
+      if (f.kind === "radio") a.kind = "radio";
+      if (!a.value) a.value = f.adapter === "sara-choice" ? f.label : (optionLetter(f.label) || f.label);
+    }
     if (!f || a.kind !== f.kind || typeof a.value !== "string" || a.value.length > 4000) throw new Error("The solution references an unsupported field.");
     a.value = fieldValue(a.value, f);
     if (seen.has(a.target)) throw new Error("Duplicate field actions are not supported.");
@@ -53,7 +58,54 @@ export function validateSolution(solution, snapshot, mode) {
       (a.y !== 0 || Math.abs((a.x-f.bounds.xMin)/f.step-Math.round((a.x-f.bounds.xMin)/f.step)) > 1e-8))
       throw new Error("The number-line point does not match an available tick.");
     if (a.kind === "drag" && !snapshot.dropTargets.some(d => d.id === a.destination)) throw new Error("Unknown drop target.");
+    if (a.kind === "radio" && f.adapter !== "sara-choice" && f.group) {
+      if (radioPicks.has(f.group)) throw new Error("The solution selected more than one answer in a radio group.");
+      radioPicks.set(f.group, a.target);
+    }
+  }
+  if (mode !== "explain" && radioPicks.size) {
+    const groups = [...new Set((snapshot.fields || []).filter(field => field.kind === "radio" && field.adapter !== "sara-choice" && field.group).map(field => field.group))];
+    if (groups.length > 1 && groups.some(group => !radioPicks.has(group))) throw new Error("Each part of this question needs its own answer.");
   }
   return solution;
+}
+export function radioPartGroups(rows) {
+  const ids = new Map(), out = new Map();
+  for (const row of rows) {
+    const key = row.anchor ?? (row.name ? `name:${row.name}` : row.id);
+    if (!ids.has(key)) ids.set(key, `part-${ids.size + 1}`);
+    out.set(row.id, ids.get(key));
+  }
+  return out;
+}
+function optionLetter(label) {
+  const text = String(label || "").trim();
+  const wrapped = text.match(/^\(([A-H])\)\s*(?:[.)]\s*)?/i);
+  if (wrapped) return wrapped[1].toUpperCase();
+  const plain = text.match(/^([A-H])[.)](?:\s|$)/i);
+  if (plain) return plain[1].toUpperCase();
+  const only = text.match(/^([A-H])$/i);
+  return only ? only[1].toUpperCase() : null;
+}
+function fieldForAction(target, fields) {
+  const known = fields.find(field => field.id === target);
+  if (known) return known;
+  const text = String(target || "").trim();
+  const scoped = text.match(/^(part-\d+)\s*[:/#]\s*\(?([A-H])\)?$/i);
+  if (scoped) {
+    const group = scoped[1].toLowerCase();
+    const letter = scoped[2].toUpperCase();
+    const scopedMatches = fields.filter(field => field.kind === "radio" && String(field.group || "").toLowerCase() === group && optionLetter(field.label) === letter);
+    if (scopedMatches.length === 1) return scopedMatches[0];
+  }
+  const letter = text.match(/^\(?([A-E])\)?[.):]?$/i)?.[1]?.toUpperCase();
+  if (letter) {
+    const sara = fields.filter(field => field.adapter === "sara-choice" && String(field.label || "").trim().toUpperCase() === letter);
+    if (sara.length === 1) return sara[0];
+    const labeled = fields.filter(field => field.kind === "radio" && optionLetter(field.label) === letter);
+    if (labeled.length === 1) return labeled[0];
+  }
+  const byLabel = fields.filter(field => field.kind === "radio" && String(field.label || "").trim().toLowerCase() === text.toLowerCase());
+  return byLabel.length === 1 ? byLabel[0] : null;
 }
 

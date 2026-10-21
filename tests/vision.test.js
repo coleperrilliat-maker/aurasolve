@@ -9,9 +9,11 @@ test('question screenshot reaches vision as a high-detail image',async()=>{
     const body=JSON.parse(options.body);
     assert.deepEqual(body.input[0].content[1],{type:'input_image',image_url:image,detail:'high'});
     assert.equal(JSON.parse(body.input[0].content[0].text).screenshotAttached,true);
+    assert.match(body.instructions,/image-based/);
+    assert.match(body.instructions,/every answer choice/);
     return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({answer:'B',choices:['B'],explanation:'Compare the graphs.',confidence:.9,supported:true,limitation:'',actions:[]})}]}]})};
   };
-  try{await solveWithOpenAI({question:'Which graph?',fields:[],dropTargets:[],limitations:[],image},'explain');}
+  try{await solveWithOpenAI({question:'Which graph?',fields:[],dropTargets:[],limitations:[],image,imageBased:true},'explain');}
   finally{globalThis.fetch=original;if(previous===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous;}
 });
 

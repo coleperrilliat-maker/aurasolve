@@ -100,6 +100,7 @@ async function run(mode) {
       },checkpoint,delay,limit,budget,onEvent:async event=>{
         live();const v=event.view,p=v.progress;
         const label=p.current?`Question ${p.current}${p.part?`, Part ${p.part} of ${p.totalParts}`:''}`:'Current question';
+        if(event.kind==='wait')status(`Waiting for ${event.waiting || 'the page to update'}…`);
         if(event.kind==='start'){
           const remaining=p.questions.filter(q=>q.status!=='correct').length;
           $('progress').max=limit || remaining || 1;
@@ -139,7 +140,8 @@ async function run(mode) {
       status('Reading the question…');$('loader').hidden=false;
       const result=await send({type:'solve',mode});await checkpoint();card(result,mode,1);
       if(mode==='field' && result.solution.supported && result.solution.actions.length && result.solution.confidence>=.85){
-        await send({type:'apply',planId:result.planId});live();status('Field filled. You choose whether to submit.');
+        const applied=await send({type:'apply',planId:result.planId});live();
+        status(applied.advanced==='next'?'Filled and pressed Next.':'Filled. The red Next button was not pressed.');
       }else if(mode==='explain')$('status').hidden=true;
       else status('Fill this one yourself using the explanation.');
     }

@@ -1,6 +1,6 @@
 import {goToQuestion} from "./player.js";
 import {clickSaraChoice} from './sara.js';
-import {snapshot,elementFor,visible,writable,findButton,feedback} from "./detection.js";
+import {snapshot,elementFor,visible,writable,findButton,feedback,radioPartKey} from "./detection.js";
 import {validateSolution} from "../shared/solution.js";
 import {sendExtension} from '../shared/messaging.js';
 function guard() {
@@ -50,6 +50,16 @@ async function setNumberLinePoint(el,field,value) {
   await new Promise(resolve=>setTimeout(resolve,50));
   if(!retained())throw new Error('The number line did not confirm the plotted value. Complete it manually.');
 }
+function separateSharedRadios(el) {
+  if (el?.type !== "radio" || !el.name) return;
+  const key = radioPartKey(el);
+  if (!key) return;
+  const peers = [...document.querySelectorAll('input[type="radio"]')].filter(peer => peer.type === "radio" && peer.name === el.name);
+  const keys = new Set(peers.map(radioPartKey).filter(Boolean));
+  if (keys.size < 2) return;
+  const name = `${el.name}__${key}`;
+  for (const peer of peers) if (radioPartKey(peer) === key) peer.name = name;
+}
 export async function execute(plan) {
   guard();
   const current = snapshot();
@@ -83,7 +93,13 @@ export async function execute(plan) {
       await sendExtension({type:'writeEditor',planId:plan.id,target:a.target});
     }
     else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
-    else if (a.kind === "radio") { el.click(); if (!el.checked) throw new Error("The radio answer was not accepted by the page."); }
+    else if (a.kind === "radio") {
+      separateSharedRadios(el);
+      const choice=el.labels?.[0] || el.closest?.('label, .dijitRadio, [role="radio"]') || el;
+      choice.click();
+      if(choice!==el)el.click();
+      if (!el.checked) throw new Error("The radio answer was not accepted by the page.");
+    }
     else if (a.kind === "checkbox") { if (el.checked !== (a.value === "true")) el.click(); if (el.checked !== (a.value === "true")) throw new Error("Checkbox state was not retained."); }
     else if (a.kind === "point" && field.adapter === 'aria-number-line') {
       await setNumberLinePoint(el,field,a);
@@ -139,7 +155,7 @@ export function dismissFeedback(){
   guard();
   const dialogs=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.correctDialog,[role="alert"]')].filter(visible)
     .filter(el=>/incorrect|correct|excellent|well done|great job|fantastic|nice work|try again/i.test(el.innerText));
-  const buttons=[...new Set(dialogs.flatMap(dialog=>[...dialog.querySelectorAll('button,[role="button"],input[type="button"]')]))]
+  const buttons=[...new Set(dialogs.flatMap(dialog=>[...dialog.querySelectorAll('button,[role="button"],input[type="button"],[data-dojo-attach-point="btnOk"]')]))]
     .filter(el=>visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].some(value=>/^(ok|okay)$/i.test((value || '').trim())));
   if(buttons.length>1)throw new Error('Several feedback OK buttons are visible. Close the feedback manually.');
   if(!buttons.length)return {clicked:false};

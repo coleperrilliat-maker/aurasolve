@@ -1,7 +1,8 @@
 import {readPlayer} from "./player.js";
-import {controlKind} from "../shared/player-state.js";
+import {controlKind,pickCheckAnswer} from "../shared/player-state.js";
 import {saraChoices} from './sara.js';
 import {fingerprint} from "../shared/policy.js";
+import {radioPartGroups} from "../shared/solution.js";
 const ids = new WeakMap(), elements = new Map();
 let sequence = 0, selected = null;
 export const visible = el => Boolean(el?.isConnected && el.getClientRects().length && getComputedStyle(el).visibility !== "hidden" && !el.closest('[aria-hidden="true"], [hidden], #aurasolve-root'));
@@ -17,8 +18,10 @@ const dropSelector = '[data-aura-drop], [aria-dropeffect]:not([aria-dropeffect="
 // Pearson leaves earlier parts' editor wrappers visible after disabling their inputs.
 // Those are answer history, not unsupported controls for the current part.
 export function writable(el) {
+  if (el.matches?.('.xlFillin') || el.dataset?.auraEditor === 'dojo-select') return el.getAttribute('aria-disabled') !== 'true' && !el.classList?.contains('disabled') && !el.matches?.('.xlFillin.disabled, .dijitDisabled, .dijitSelectDisabled');
   if (el.disabled || el.readOnly || el.getAttribute('disabled') !== null || el.getAttribute('readonly') !== null ||
-      el.closest('[aria-disabled="true"], [aria-readonly="true"], fieldset[disabled], .eqEditor.disabled, .inputcell.disabled, .dijitDisabled')) return false;
+      el.closest('[aria-disabled="true"], [aria-readonly="true"], fieldset[disabled], .eqEditor.disabled, .inputcell.disabled, .inputcell.correct, .dijitDisabled, .dijitSelectDisabled, .xlFillin.disabled') ||
+      el.matches?.('.correct, .dijitSelectDisabled, .dijitDisabled')) return false;
   const inputs = [...(el.querySelectorAll?.('input:not([type="hidden"]), textarea, select') || [])];
   return !inputs.length || inputs.some(input => !input.disabled && !input.readOnly && !input.closest('[aria-disabled="true"], [aria-readonly="true"], fieldset[disabled]'));
 }
@@ -26,7 +29,7 @@ export function fieldContext(el) {
   let parent=el.parentElement;
   for(let depth=0;parent && depth<3;depth++,parent=parent.parentElement){
     const copy=parent.cloneNode(true);
-    copy.querySelectorAll('input,textarea,select,[contenteditable],[data-aura-editor],#aurasolve-root').forEach(node=>node.replaceWith(document.createTextNode(' [answer] ')));
+    copy.querySelectorAll('input,textarea,select,[contenteditable],[data-aura-editor],.xlFillinContainer,#aurasolve-root').forEach(node=>node.replaceWith(document.createTextNode(' [answer] ')));
     const text=clean(copy.textContent);
     if(text.length>=8)return text.slice(0,500);
   }
@@ -35,6 +38,76 @@ export function fieldContext(el) {
 export function labelFor(el) {
   const editable = el.isContentEditable || el.matches?.('[data-aura-editor]');
   return clean(el.getAttribute("aria-label") || [...(el.labels || [])].map(l=>l.innerText).join(" ") || el.getAttribute("placeholder") || el.getAttribute("title") || (!editable && el.innerText) || el.name || el.id || 'Answer').slice(0,350);
+}
+const PROMPT_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, legend, [role="heading"], .prompt, .stem, .question-stem';
+const CHOICE_LIST = 'fieldset, [role="radiogroup"], .xlMultipleChoice, .QuestionResponseMc, .part';
+function follows(prompt, el) {
+  try { return Boolean(prompt?.compareDocumentPosition?.(el) & 4); }
+  catch { return false; }
+}
+function partPrompts(root) {
+  if (!root?.querySelectorAll) return [];
+  return [...root.querySelectorAll(PROMPT_SELECTOR)].filter(el => {
+    if (!visible(el) || el.querySelector?.('input[type="radio"], input[type="checkbox"]')) return false;
+    const text = clean(el.textContent || el.innerText || '');
+    return text.length >= 8 && !/^[A-H][.)]\s/.test(text);
+  });
+}
+function tightList(el) {
+  let node = el?.parentElement;
+  while (node && node !== document.documentElement) {
+    const count = [...(node.querySelectorAll?.('input[type="radio"]') || [])].filter(radio => radio.type === 'radio').length;
+    if (count > 1) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+function choiceList(el) {
+  const explicit = el.closest?.(CHOICE_LIST);
+  const count = [...(explicit?.querySelectorAll?.('input[type="radio"]') || [])].filter(radio => radio.type === 'radio').length;
+  return explicit && count > 1 ? explicit : tightList(el);
+}
+function scopedPrompts(el, prompts) {
+  const list = choiceList(el);
+  return prompts.filter(prompt => {
+    if (!follows(prompt, el) || prompt.contains?.(el)) return false;
+    if (!list) return true;
+    if (list.contains(prompt)) return true;
+    const parent = list.parentElement;
+    return Boolean(parent?.contains(prompt) && !list.contains(prompt) && follows(prompt, list));
+  });
+}
+function groupAnchor(el, prompts) {
+  const list = choiceList(el);
+  const prior = scopedPrompts(el, prompts);
+  if (prior.length > 1) return prior[prior.length - 1];
+  if (list) return list;
+  if (prior.length === 1) return prior[0];
+  return el?.name ? `name:${el.name}` : el;
+}
+function partContext(el, prompts) {
+  const prior = prompts.filter(prompt => follows(prompt, el) && !prompt.contains?.(el));
+  if (!prior.length) return '';
+  const nearest = prior[prior.length - 1];
+  let text = clean(nearest.textContent || nearest.innerText || '');
+  if (/^choose the correct answer\b/i.test(text)) {
+    const earlier = [...prior].reverse().find(prompt => !/^choose the correct answer\b/i.test(clean(prompt.textContent || prompt.innerText || '')));
+    if (earlier) text = clean(`${earlier.textContent || earlier.innerText || ''} ${text}`);
+  }
+  return text.slice(0, 500);
+}
+export function describeRadioGroups(root, radios) {
+  const prompts = partPrompts(root);
+  const rows = radios.filter(Boolean).map(el => ({id: el, name: el.name || '', anchor: groupAnchor(el, prompts)}));
+  const groups = radioPartGroups(rows);
+  return new Map(radios.filter(Boolean).map(el => [el, {group: groups.get(el), context: partContext(el, prompts)}]));
+}
+export function radioPartKey(el) {
+  if (!el || el.type !== 'radio') return '';
+  const root = el.closest?.(rootSelector) || questionRoot() || el.parentElement || el;
+  const radios = [...(root.querySelectorAll?.('input[type="radio"]') || [])].filter(radio => radio.type === 'radio' && visible(radio));
+  const info = describeRadioGroups(root, radios.length ? radios : [el]);
+  return info.get(el)?.group || (el.name ? `name:${el.name}` : '');
 }
 // Pearson's split player puts the prompt in #top and the inputs in #bottom.
 // Read their common layout container, not either panel separately.
@@ -101,6 +174,8 @@ export function snapshot() {
   const root = questionRoot();
   const fields = [], limitations = [];
   const drops = root ? [...root.querySelectorAll(dropSelector)].filter(el=>visible(el) && writable(el)).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
+  const radioInputs = root ? [...root.querySelectorAll('input[type="radio"]')].filter(el => el.type === "radio" && visible(el) && writable(el)) : [];
+  const radioInfo = radioInputs.length ? describeRadioGroups(root, radioInputs) : new Map();
   if (root) for (const el of root.querySelectorAll(fieldSelector)) {
     if (!visible(el) || !writable(el)) continue;
     const editor = el.closest?.('[data-aura-editor]') || el.closest?.(editorSelector);
@@ -110,9 +185,14 @@ export function snapshot() {
       if (editor.matches('.mq-editable-field, .mathquill-editable')) {limitations.push('This math editor has no accessible value API.');continue;}
     }
     if (el.isContentEditable && el.parentElement?.closest('[contenteditable="true"], [contenteditable="plaintext-only"]')) continue;
-    const base = {id:idFor(el),label:labelFor(el),context:fieldContext(el)};
+    const radio = el.type === "radio" ? radioInfo.get(el) : null;
+    const base = {id:idFor(el),label:labelFor(el),context:radio?.context || fieldContext(el)};
     if (el.dataset?.auraEditor === 'dojo-select') {
-      try {fields.push({...base,kind:'select',adapter:'dojo-select',editorKey:el.dataset.auraEditorKey,options:JSON.parse(el.dataset.auraOptions)});} catch {limitations.push('Dropdown options could not be read.');}
+      try {
+        const options=JSON.parse(el.dataset.auraOptions);
+        const label=el.matches('.xlFillin') ? (clean(el.getAttribute('aria-label')) || 'Reason') : base.label;
+        fields.push({...base,label,kind:'select',adapter:'dojo-select',editorKey:el.dataset.auraEditorKey,options});
+      } catch {limitations.push('Dropdown options could not be read.');}
     }
     else if (el.matches('[data-aura-editor]')) fields.push({...base,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:el.dataset.auraEditor === 'mathquill' ? 'latex' : 'plain'});
     else if (el.matches('[role="slider"]')) {
@@ -132,7 +212,7 @@ export function snapshot() {
       else limitations.push('This drag item has no explicitly identified drop targets.');
     }
     else if (el.tagName === "SELECT" && !el.multiple) fields.push({...base,kind:"select",options:[...el.options].map(o=>({value:o.value,label:o.text,disabled:o.disabled}))});
-    else if (el.type === "radio") fields.push({...base,kind:"radio",group:el.name || base.id});
+    else if (el.type === "radio") fields.push({...base,kind:"radio",group:radio?.group || el.name || base.id});
     else if (el.type === "checkbox") fields.push({...base,kind:"checkbox"});
     else if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && ["text","number",""].includes(el.type))) fields.push({...base,kind:"text"});
     else if (el.isContentEditable) fields.push({...base,kind:'text',adapter:'contenteditable',format:'plain'});
@@ -146,43 +226,103 @@ export function snapshot() {
   if (root?.querySelector('canvas, svg:not([data-aura-graph])') && !fields.some(f=>f.kind === 'point')) limitations.push("Canvas/SVG content is not read visually; complex graph actions are unsupported.");
   if (root?.querySelector('img:not([alt]), img[alt=""]')) limitations.push("An image has no description; the model may not have enough information.");
   const readable = root?.cloneNode?.(true);
-  readable?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
+  readable?.querySelectorAll('#aurasolve-root, .xlFillinContainer').forEach(el=>el.remove());
+  readable?.querySelectorAll('img, svg, canvas, figure, object, embed').forEach((el,index)=>el.replaceWith(document.createTextNode(` [figure ${index + 1}] `)));
   readable?.querySelectorAll('[contenteditable], [data-aura-editor], textarea').forEach(el=>{el.textContent='';});
   const question = root ? clean((readable ? readable.textContent : root.innerText) + " " + [...root.querySelectorAll('math, img[alt], [aria-label]')].filter(el=>!el.closest?.('[data-aura-editor]')).map(el=>el.getAttribute('alt') || el.getAttribute('aria-label') || el.textContent).join(" ")).slice(0,16000) : "";
-  const figures=root ? [...root.querySelectorAll('img,svg')].map(el=>el.tagName.toLowerCase()==='img'?{src:el.currentSrc || el.getAttribute('src'),alt:el.getAttribute('alt')}:{svg:el.outerHTML?.slice(0,24000)}) : [];
-  const hash = fingerprint(JSON.stringify({question,figures,fields:fields.map(({context,...field})=>field),drops}));
+  const figures=root ? [...root.querySelectorAll('img,svg')].map(el=>el.tagName.toLowerCase()==='img'?{src:el.currentSrc || el.getAttribute('src'),alt:el.getAttribute('alt')}:{paths:el.querySelectorAll('path,rect,line,circle,polygon,polyline,text').length}) : [];
+  const stableLabel=value=>clean(String(value || '').replace(/\b(selected|checked|unselected|unchecked)\b/ig,''));
+  const hash = fingerprint(JSON.stringify({question:stableLabel(question),figures,fields:fields.map(({context,imageChoice,...field})=>({...field,label:stableLabel(field.label)})),drops}));
   const prompt = root?.cloneNode?.(true);
   prompt?.querySelectorAll('#aurasolve-root').forEach(el=>el.remove());
   prompt?.querySelectorAll('input, textarea, select, [contenteditable], [data-aura-editor], [role="textbox"], [role="alert"], [data-aura-feedback], .feedback, .answer-feedback').forEach(el=>el.remove());
   const promptHash = fingerprint(JSON.stringify({text:clean(prompt?.textContent || question),figures}));
-  const visual = Boolean(root?.querySelector('img, svg, canvas, figure, object, embed') || fields.some(f=>f.kind==='radio' || f.kind==='checkbox') || (root && [...root.querySelectorAll('*')].some(el=>visible(el) && getComputedStyle(el).backgroundImage.includes('url('))) || /\b(figure|diagram|graph|picture|image|shown)\b/i.test(question));
-  const box = root?.getBoundingClientRect?.();
+  const pictureNodes = pictureChoices(root, fields);
+  const imageBased = pictureNodes.length > 0;
+  const visual = imageBased || /\b(figures?|diagrams?|graphs?|pictures?|images?|shown|draw the next)\b/i.test(question);
+  const box = unionRect([root, ...pictureNodes]);
   const selectedElement = elementFor(selected);
   const chosen = fields.find(f=>f.id === selected) || fields.find(f=>elementFor(f.id)?.contains?.(selectedElement));
   const scalar=fields.filter(f=>['text','select','point','drag'].includes(f.kind));
   const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
   const autoSelected=(empty || scalar[0])?.id || null;
   return {player:readPlayer(document,visible),url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{continue:findButtons('continue').length,submit:findButtons('submit').length,next:findButtons('next').length,similar:findButtons('similar').length},
-    fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
+    fallback:isFallback(root),promptHash,visual,imageBased,rect:box,viewport:globalThis.innerWidth || 0,viewportHeight:globalThis.innerHeight || 0,devicePixelRatio:globalThis.devicePixelRatio || 1,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
+}
+function graphic(el) {
+  if (!el || !visible(el) || el.closest?.('#aurasolve-root, nav, header, button')) return false;
+  const box = el.getBoundingClientRect();
+  return box.width >= 36 && box.height >= 36;
+}
+function pictureChoices(root, fields) {
+  if (!root) return [];
+  const pictures = [...root.querySelectorAll('img, svg, canvas, figure, object, embed')].filter(graphic);
+  for (const el of root.querySelectorAll('*')) {
+    if (graphic(el) && getComputedStyle(el).backgroundImage.includes('url(')) pictures.push(el);
+  }
+  for (const field of fields) {
+    if (field.kind !== 'radio' && field.kind !== 'checkbox') continue;
+    const el = elementFor(field.id);
+    let node = el;
+    for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+      if ([...node.querySelectorAll('img, svg, canvas, figure, object, embed')].some(graphic)) { pictures.push(node); field.imageChoice = true; break; }
+    }
+  }
+  return pictures;
+}
+function unionRect(nodes) {
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity, any = false;
+  for (const el of nodes) {
+    const box = el?.getBoundingClientRect?.();
+    if (!box || box.width < 2 || box.height < 2) continue;
+    any = true;
+    left = Math.min(left, box.left); top = Math.min(top, box.top);
+    right = Math.max(right, box.right); bottom = Math.max(bottom, box.bottom);
+  }
+  return any ? {x:left, y:top, width:right - left, height:bottom - top} : null;
+}
+export function revealQuestion() {
+  const root = questionRoot();
+  if (root) {
+    const box = root.getBoundingClientRect();
+    const fits = box.height > 0 && box.height <= (globalThis.innerHeight || box.height) - 24;
+    root.scrollIntoView({block: fits ? 'center' : 'start', inline: 'nearest'});
+  }
+  return snapshot();
 }
 export function feedback() {
   const nodes = [...document.querySelectorAll('[data-aura-feedback], .feedback, .answer-feedback, [role="alert"], .feedbackDialog, .correctDialog, .responses, .xlFeedback, [role="dialog"], [role="alertdialog"], .dijitDialog')].filter(visible);
   const dialogs=nodes.filter(el=>el.matches?.('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.correctDialog') || el.querySelector?.('button,[role="button"]'));
   const text = clean((dialogs.length?dialogs:nodes).map(el=>el.innerText).join(" "));
   const modal=dialogs.length>0;
-  if (/\b(incorrect|wrong|try again|not correct)\b/i.test(text)) return {state:"incorrect",text,modal};
-  if (/\b(correct|well done|great job|excellent|fantastic|nice work)\b/i.test(text)) return {state:"correct",text,modal};
-  return {state:"unknown",text,modal};
+  const dismissible=dialogs.some(dialog=>[...dialog.querySelectorAll('button,[role="button"],input[type="button"],[data-dojo-attach-point="btnOk"]')].some(el=>visible(el) && /^(ok|okay)$/i.test(clean(el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title')))));
+  if (/\b(incorrect|wrong|try again|not correct)\b/i.test(text)) return {state:"incorrect",text,modal,dismissible};
+  if (/\b(correct|well done|great job|excellent|fantastic|nice work)\b/i.test(text)) return {state:"correct",text,modal,dismissible};
+  return {state:"unknown",text,modal,dismissible};
 }
+const controlSelector='button,input[type="submit"],input[type="button"],[role="button"],a.navButton,[command="checkanswer"],[command="continue"],[command="similarexercise"],[command="next"],[command="nextquestion"],[command="similarquestion"]';
 export function findButtons(kind) {
-  return [...document.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"]')].filter(el=>
-    visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' &&
-    controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '')===kind);
-
+  return [...document.querySelectorAll(controlSelector)].filter(el=>{
+    if(!visible(el) || el.disabled || el.getAttribute('aria-disabled')==='true')return false;
+    const nav=el.matches?.('button.navButton, a.navButton, .navButton');
+    const dialog=Boolean(el.closest?.('.xlDialogButtonContainer, [role="dialog"], [role="alertdialog"], .dijitDialog, .feedbackDialog'));
+    return controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '',{nav,dialog})===kind;
+  });
 }
 export function findButton(kind) {
   const buttons = findButtons(kind);
+  if (kind === 'submit' || kind === 'next') {
+    const chosen = pickCheckAnswer(buttons.map(el=>{
+      const box=el.getBoundingClientRect?.() || {bottom:0,right:0};
+      return {el,bottom:box.bottom,right:box.right,
+        nav:Boolean(el.matches?.('button.navButton, a.navButton, button.navButton.gr-btn-primary, button.navButton.btn-primary')),
+        dialog:Boolean(el.closest?.('.xlDialogButtonContainer, [role="dialog"], [role="alertdialog"], .dijitDialog, .feedbackDialog')),
+        command:(el.getAttribute?.('command') || '').toLowerCase()};
+    }));
+    if (!chosen) throw new Error(kind==='submit'?'Check answer is not available. Nothing was submitted.':'Next is not available. Nothing was submitted.');
+    return chosen.el;
+  }
   if (buttons.length !== 1) throw new Error(`Could not identify exactly one ${kind} button. Continue manually.`);
   return buttons[0];
 }

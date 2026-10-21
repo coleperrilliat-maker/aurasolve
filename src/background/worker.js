@@ -5,6 +5,7 @@ import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/poli
 import {checkBackend, solve} from "./api.js";
 import {editorBridge} from './editors.js';
 import {frameCall} from './frame-call.js';
+import {cropBox} from '../shared/capture.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map();
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
   const {settings={}}=await chrome.storage.local.get("settings");
@@ -43,8 +44,10 @@ async function screenshot(tabId, question) {
   if (activeTab?.id !== tabId) throw new Error("The active tab changed during capture. Return to the question and retry.");
   const bitmap = await createImageBitmap(await (await fetch(shot)).blob());
   let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
-  // Keep sibling diagram panels and the active answer area together.
-  // A detected input container is not a reliable boundary for the problem.
+  // Image questions are cropped to the question and its picture choices.
+  // Text questions keep the full tab; an input box is not a safe crop.
+  const box = question.imageBased ? cropBox(bitmap, question.rect, question.devicePixelRatio) : null;
+  if (box) ({sx, sy, sw, sh} = box);
   const fit = Math.min(1, 2048 / sw, 2048 / sh);
   const canvas = new OffscreenCanvas(Math.round(sw * fit), Math.round(sh * fit));
   canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
@@ -64,8 +67,14 @@ function cancel(tabId) {
 }
 function controlDocument(state, kind) {
   const frames = state.frames || [state.question,state.top];
-  const available = frames.filter(frame=>(frame.controls?.[kind] || 0)>0);
-  if (available.length!==1 || available[0].controls[kind]!==1) throw new Error(`Could not identify exactly one ${kind} button. Your answer and explanation are still available.`);
+  let available = frames.filter(frame=>(frame.controls?.[kind] || 0)>0);
+  const label=kind==='submit'?'Check answer':kind==='next'?'Next':kind;
+  if (kind==='next' && available.length>1) {
+    const top=available.find(frame=>frame.frameId===0);
+    available=[top || available[0]];
+  }
+  if (!available.length || (kind!=='submit' && kind!=='next' && (available.length!==1 || available[0].controls[kind]!==1)) || ((kind==='submit' || kind==='next') && available.length!==1))
+    throw new Error(`Could not identify exactly one ${label} button. Your answer and explanation are still available.`);
   return available[0].documentId;
 }
 async function pageFeedback(tabId,state) {
@@ -76,6 +85,58 @@ async function pageFeedback(tabId,state) {
   return candidates.find(o=>o.state==='incorrect') || candidates.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
 const fillPlan = (tabId,plan,requireComplete=false) => frameCall(tabId,plan.documentId,'execute',{...plan,submit:false,requireComplete});
+function footerNext(op) {
+  try {
+    const clean = value => String(value || '').replace(/\s+/g,' ').trim();
+    const labelOf = el => clean([el.innerText, el.value, el.getAttribute('aria-label'), el.getAttribute('title')].map(clean).find(Boolean) || '');
+    const redOf = color => {
+      const match = String(color || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!match) return 0;
+      return Number(match[1]) - Math.max(Number(match[2]), Number(match[3]));
+    };
+    const nodes = [];
+    const visit = root => {
+      if (!root?.querySelectorAll) return;
+      nodes.push(...root.querySelectorAll('button,a,input,[role="button"],div,span'));
+      for (const el of root.querySelectorAll('*')) if (el.shadowRoot) visit(el.shadowRoot);
+    };
+    visit(document);
+    const candidates = [];
+    for (const el of nodes) {
+      if (!/^next(?:\s+(?:question|problem))?(?:\s*[›>»→])?$/i.test(labelOf(el))) continue;
+      if (el.disabled || el.getAttribute('aria-disabled')==='true' || el.closest('[hidden],[aria-hidden="true"]')) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width<40 || rect.height<22 || rect.width>320 || rect.height>88) continue;
+      const style = getComputedStyle(el);
+      if (style.display==='none' || style.visibility==='hidden' || style.pointerEvents==='none' || Number(style.opacity)===0) continue;
+      candidates.push({el, area:rect.width*rect.height, bottom:rect.bottom, right:rect.right, red:redOf(style.backgroundColor)});
+    }
+    const vivid = candidates.filter(item=>item.red>25);
+    const pool = vivid.length ? vivid : candidates;
+    pool.sort((a,b)=>b.red-a.red || b.bottom-a.bottom || a.area-b.area);
+    const best = pool[0];
+    if (!best) return {count:0, clicked:false, red:0, bottom:0};
+    if (op!=='press') return {count:pool.length, clicked:false, red:best.red, bottom:best.bottom, right:best.right};
+    best.el.click();
+    return {count:pool.length, clicked:true, red:best.red, bottom:best.bottom};
+  } catch { return {count:0, clicked:false, red:0, bottom:0}; }
+}
+async function clickFooterNext(tabId) {
+  let listed = [];
+  try { listed = await chrome.scripting.executeScript({target:{tabId, allFrames:true}, func:footerNext, args:['locate']}); }
+  catch { listed = []; }
+  const ranked = listed.filter(frame=>frame.result?.count>0).sort((a,b)=>(b.result.red-a.result.red) || (b.result.bottom-a.result.bottom));
+  const best = ranked[0];
+  if (!best) return {clicked:false};
+  try {
+    const pressed = await chrome.scripting.executeScript({target:{tabId, frameIds:[best.frameId]}, func:footerNext, args:['press']});
+    if (!pressed[0]?.result?.clicked) return {clicked:false};
+    return {clicked:true, kind:'next'};
+  } catch (error) {
+    if (!error.submission) error.submission = 'unknown';
+    throw error;
+  }
+}
 async function prepareAnswers(tabId,state,activate=true) {
   if(activate)await frameCall(tabId,state.question.documentId,'prepareField');
   await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
@@ -89,22 +150,30 @@ async function submitPlan(tabId,plan,state) {
     if ((await pageFeedback(tabId,state)).modal) throw new Error('This question already has feedback. Move to a fresh question.');
     const result = await fillPlan(tabId,plan,true);
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-    let fresh,documentId;
+    let fresh,documentId,advance;
     for(let attempt=0;attempt<20;attempt++){
       if(plan.generation!==rev(tabId))throw new Error('Stopped.');
       fresh=await collect(tabId);
-      if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash)throw new Error('The question changed. Review the filled answer manually.');
-      const count=(fresh.frames || [fresh.question,fresh.top]).reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
-      if(count>0){documentId=controlDocument(fresh,'submit');break;}
+      const sameQuestion=fresh.question.hash===plan.hash || (plan.promptHash && fresh.question.promptHash===plan.promptHash);
+      if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || !sameQuestion)throw new Error('The question changed. Review the filled answer manually.');
+      const frames=fresh.frames || [fresh.question,fresh.top];
+      const submit=frames.reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
+      const submitPresent=frames.reduce((sum,frame)=>sum+(frame.controls?.submitPresent || 0),0);
+      const next=frames.reduce((sum,frame)=>sum+(frame.controls?.next || 0),0);
+      // Practice players enable Check answer after the fill. A pre-test has no
+      // Check answer; its lower-right Next advances the question. The top Submit
+      // button is the assignment hand-in and is never used here.
+      if(submit>0){advance='submit';documentId=controlDocument(fresh,'submit');break;}
+      if(submitPresent===0 && next>0){advance='next';documentId=controlDocument(fresh,'next');break;}
       await new Promise(resolve=>setTimeout(resolve,150));
     }
-    if(!documentId)throw new Error('Answers were filled, but Check answer did not become available. Inspect this page to report its submit control.');
+    if(!documentId)throw new Error('Answers were filled, but neither Check answer nor Next became available. The assignment Submit button was not clicked.');
     await consent(tabId,fresh);
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     // Once dispatched, a lost reply cannot prove that the click did not happen.
     submission='unknown';
-    const clicked=await frameCall(tabId,documentId,'clickControl','submit');
-    if(!clicked?.clicked)throw new Error('Check answer did not confirm its click. Resume to check page feedback.');
+    const clicked=await frameCall(tabId,documentId,'clickControl',advance);
+    if(!clicked?.clicked)throw new Error(advance==='next'?'Next did not confirm its click. Resume from the current question.':'Check answer did not confirm its click. Resume to check page feedback.');
     return {...result,submitted:true};
   } catch(error) {
     error.submission=submission;
@@ -171,12 +240,15 @@ async function handle(message,sender) {
     const tabId=sender.tab?.id, plan=plans.get(message.planId);
     if (!plan || plan.tabId!==tabId || plan.documentId!==sender.documentId || !['applying','submitting'].includes(plan.state) || plan.generation!==rev(tabId) || Date.now()-plan.created>10*60*1000) throw new Error('The editor request is no longer active.');
     const state=await collect(tabId);if(plan.mode!=="field")await consent(tabId,state);
-    if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.hash!==plan.hash) throw new Error('The question changed.');
+    const samePrompt=Boolean(plan.promptHash) && state.question.promptHash===plan.promptHash;
+    if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || (state.question.hash!==plan.hash && !samePrompt)) throw new Error('The question changed.');
     const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
     if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:fieldValue(action.value,field)}]});
-    if (!result[0]?.result?.filled) throw new Error('The editor did not confirm the answer.');
+    const outcome=result?.[0];
+    if (outcome?.error) throw new Error(outcome.error);
+    if (!outcome?.result?.filled) throw new Error(outcome?.result?.error || 'The editor did not confirm the answer.');
     return result[0].result;
   }
   if (message.type === "settingsStatus") {
@@ -281,22 +353,38 @@ async function handle(message,sender) {
       // Limit feedback context; it is evidence about rejected answers, never instructions.
       if(Array.isArray(message.retryContext))question.retryContext=message.retryContext.slice(-3);
 
+      const drawFigure=/draw the next figure|list of figures/i.test(question.question || '');
+      if (question.imageBased || drawFigure || /\bfigures?\b/i.test(question.question || '')) question.visual = true;
+      if (question.imageBased) {
+        const revealed = state.question.documentId ? await frameCall(tabId, state.question.documentId, 'revealQuestion').catch(() => null) : null;
+        question.rect = revealed?.rect || rect;
+        if (revealed?.devicePixelRatio) question.devicePixelRatio = revealed.devicePixelRatio;
+      }
       if (question.visual) {
-        question.image = await screenshot(tabId, state.question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
+        question.image = await screenshot(tabId, question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
         visualRead = Boolean(question.image);
         if (question.image) question.limitations = question.limitations.filter(l => !/Canvas\/SVG|image has no description/.test(l));
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
       const fresh=await collect(tabId);
-      if(fresh.question.hash!==state.question.hash || fresh.question.documentId!==state.question.documentId)throw new Error("The question changed while reading it. Please retry.");
+      if(fresh.question.documentId!==state.question.documentId || (fresh.question.hash!==state.question.hash && fresh.question.promptHash!==state.question.promptHash))throw new Error("The question changed while reading it. Please retry.");
+      state.question.hash=fresh.question.hash;
+      const discrete=question.fields.some(field=>['text','select','radio','checkbox'].includes(field.kind));
       const missingField=message.mode==='field' && !question.fields.length;
-      solution = await solve(question,missingField?'explain':message.mode==='field'?'autopilot':message.mode,settings,controller.signal);
-      if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
+      if (drawFigure && !discrete && message.mode!=='explain') {
+        solution = await solve(question,'explain',settings,controller.signal);
+        const next=String(solution.answer || '').replace(/\s+/g,' ').trim();
+        solution={...solution,supported:false,actions:[],confidence:Math.min(solution.confidence || 0,.49),
+          limitation:next ? `This question asks you to draw the next figure. Nothing was filled. ${next}` : 'This question asks you to draw the next figure. The drawing area cannot be filled automatically.'};
+      } else {
+        solution = await solve(question,missingField?'explain':message.mode==='field'?'autopilot':message.mode,settings,controller.signal);
+        if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
+      }
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const id = crypto.randomUUID();
-    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,visualRead,mode:message.mode,generation,created:Date.now(),state:"ready"});
+    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,promptHash:state.question.promptHash,solution,visualRead,mode:message.mode,generation,created:Date.now(),state:"ready"});
     return {planId:id,solution,question:state.question};
   }
   const plan = plans.get(message.planId);
@@ -312,8 +400,15 @@ async function handle(message,sender) {
     const submit = plan.mode === "autopilot";
     if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
     plan.state="applying";
-    const result = submit ? await submitPlan(tabId,plan,state) : await fillPlan(tabId,plan);
-    plan.state=submit?"submitted":"filled";
+    if (!submit) {
+      const filled = await fillPlan(tabId,plan);
+      const follow = await clickFooterNext(tabId);
+      plan.state = "filled";
+      if (!follow.clicked) throw Object.assign(new Error('Filled the answer, but the red Next button was not pressed.'), {submission:'not_sent'});
+      return {...filled, submitted:false, advanced:'next'};
+    }
+    const result = await submitPlan(tabId,plan,state);
+    plan.state="submitted";
     return result;
   }
   if (message.type === "submitField") {

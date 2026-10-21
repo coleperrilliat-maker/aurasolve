@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assignmentKey,controlKind,questionStatus,decidePlayer} from '../src/shared/player-state.js';
+import {assignmentKey,controlKind,pickCheckAnswer,questionStatus,decidePlayer} from '../src/shared/player-state.js';
 const view=overrides=>({fields:[{id:'a1'}],controls:{submitPresent:1},progress:{current:21,part:3,totalParts:3,status:'partial',questions:[]},feedback:{state:'unknown',modal:false},...overrides});
 test('Continue never aliases Check answer or Next question despite reused command',()=>{
  assert.equal(controlKind(['Continue'],'checkanswer'),'continue');
@@ -14,6 +14,18 @@ test('assignment Submit and unlabeled command metadata can never check an answer
  for(const text of ['Finish homework','Turn in test','Submit quiz','Finish assignment'])
    assert.equal(controlKind([text],'checkanswer'),null);
  assert.equal(controlKind(['Check answer'],'checkanswer'),'submit');
+ assert.equal(controlKind([],'checkanswer',{nav:true}),'submit');
+ assert.equal(controlKind(['Continue'],'checkanswer',{nav:true}),'continue');
+ assert.equal(controlKind([],'similarexercise'),'similar');
+ assert.equal(controlKind([],'nextquestion'),'next');
+ assert.equal(controlKind(['Next'],''),'next');
+ assert.equal(controlKind(['Submit'],''),null);
+ assert.equal(controlKind(['Submit answer'],'checkanswer'),null);
+ const lower={bottom:40,right:20,nav:false,dialog:false,command:''};
+ const check={bottom:700,right:900,nav:true,dialog:false,command:'checkanswer'};
+ const dialog={bottom:800,right:1000,nav:true,dialog:true,command:'checkanswer'};
+ assert.equal(pickCheckAnswer([lower,dialog,check]),check);
+ assert.equal(pickCheckAnswer([dialog]),null);
 });
 test('question status distinguishes correct, partially correct, incorrect and unanswered',()=>{
  for(const [text,status] of [['Correct','correct'],['Partially correct','partial'],['Incorrect','incorrect'],['Not attempted','unanswered'],['In progress','incomplete']])assert.equal(questionStatus('Question 21, '+text),status);
@@ -32,6 +44,7 @@ test('correct feedback on one part closes OK then uses Continue',()=>{
 });
 test('live Part 3 solves only enabled fields even when Next question is visible',()=>{
  assert.equal(decidePlayer(view({controls:{submitPresent:1,next:1}})).kind,'solve');
+ assert.equal(decidePlayer(view({controls:{}})).kind,'solve');
 });
 test('terminal partial credit retries Similar, never Next or Save best score',()=>{
  assert.equal(decidePlayer(view({fields:[],controls:{similar:1,next:1}})).kind,'similar');

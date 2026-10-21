@@ -11,9 +11,11 @@ export function readPlayer(doc,visible){
     return {number:Number(label.match(/^Question\s+(\d+)/i)?.[1]),status:questionStatus(label)};
   }).filter(q=>q.number>0);
   const controls={submit:0,submitPresent:0,continue:0,next:0,similar:0};
-  for(const el of doc.querySelectorAll('button,input[type="button"],input[type="submit"],[role="button"]')){
+  for(const el of doc.querySelectorAll('button,input[type="button"],input[type="submit"],[role="button"],a.navButton,[command="checkanswer"],[command="continue"],[command="similarexercise"],[command="next"],[command="nextquestion"],[command="similarquestion"]')){
     if(!visible(el))continue;
-    const kind=controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '');
+    const nav=el.matches?.('button.navButton, a.navButton, .navButton');
+    const dialog=Boolean(el.closest?.('.xlDialogButtonContainer, [role="dialog"], [role="alertdialog"], .dijitDialog, .feedbackDialog'));
+    const kind=controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '',{nav,dialog});
     if(kind==='submit')controls.submitPresent++;
     if(kind in controls && !el.disabled && el.getAttribute('aria-disabled')!=='true')controls[kind]++;
   }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 let captureFails=false, captured=0, solveCalls=0, lastSnapshot;
-let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false, enableOnFill=false;
+let listener, applied=0, nextButton=true, split=false, clickedDocument=null, clickedKind=null, verdict='unknown', staleAfterFill=false, enableOnFill=false;
 let prepared=0,fillFails=false,clickFails=false;const executed=[];
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
@@ -12,7 +12,8 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   const wrapped=data=>[{result:{ok:true,data}}];
   if(input.args?.[0]==='prepareField'){prepared++;return wrapped({ready:true});}
   if(input.args?.[0]==='dismissFeedback'){verdict='unknown';return wrapped({clicked:true});}
-  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];if(clickFails)throw new Error('Lost click reply');return wrapped({clicked:true});}
+  if(input.args?.[0]==='footer-next' || input.args?.[0]==='locate' || input.args?.[0]==='press'){if(input.args[0]==='press'){clickedKind='next';if(clickFails)throw new Error('Lost click reply');return [{frameId:0,result:{clicked:true,count:1,bottom:700,right:900,red:90}}];}return [{frameId:0,result:{clicked:false,count:1,bottom:700,right:900,red:90}}];}
+  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];clickedKind=input.args[1];if(clickFails)throw new Error('Lost click reply');return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
   if(input.args[0]==='execute'){executed.push(input.args[1]);if(fillFails)return [{result:{ok:false,error:'The page did not retain the requested value.'}}];applied++;if(enableOnFill)state.controls.submit=1;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
   if(input.args[0]==='feedback')return wrapped({state:input.target.documentIds[0]==='doc1'?verdict:'unknown',text:''});
@@ -116,9 +117,12 @@ test('Fill solves and applies without any signature',async()=>{
   assert.equal(session['grant:1'],undefined);
   const result=await request({type:'solve',mode:'field'});
   assert.equal(result.ok,true);
+  clickedKind=null;
   const filled=await request({type:'apply',planId:result.data.planId});
   assert.equal(filled.ok,true);
   assert.equal(filled.data.submitted,false);
+  assert.equal(filled.data.advanced,'next');
+  assert.equal(clickedKind,'next');
   assert.equal(session['grant:1'],undefined);
 });
 test('a visual question never silently falls back to text when capture fails',async()=>{
@@ -137,6 +141,46 @@ test('text-only questions do not capture or send screenshots',async()=>{
   assert.equal(result.ok,true);
   assert.equal(solveCalls,before+1);assert.equal(captured,shots);
   assert.equal(lastSnapshot.image,undefined);
+});
+test('drawing the next figure is explained from a screenshot and is not filled',async()=>{
+  const calls=solveCalls,shots=captured;
+  state.question='Study the list of figures below. Use the pattern to draw the next figure in the list.';
+  state.fields=[];state.visual=false;
+  try {
+    await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+    const result=await request({type:'solve',mode:'autopilot'});
+    assert.equal(result.ok,true);
+    assert.equal(result.data.solution.supported,false);
+    assert.match(result.data.solution.limitation,/draw the next figure/);
+    assert.match(result.data.solution.limitation,/Nothing was filled/);
+    assert.equal(solveCalls,calls+1);assert.equal(captured,shots+1);
+  } finally {
+    state.question='3x+7=22';state.fields=[{id:'a1',kind:'text'}];state.visual=false;
+  }
+});
+test('an image-based question sends one screenshot of the question and its choices',async()=>{
+  let drawn;
+  const Original=globalThis.OffscreenCanvas;
+  globalThis.OffscreenCanvas=class {constructor(w,h){this.width=w;this.height=h;}getContext(){return {drawImage(...args){drawn=args;}};}async convertToBlob(){return new Blob(['fixture']);}};
+  const fields=state.fields, question=state.question;
+  state.imageBased=true;state.visual=false;
+  state.rect={x:100,y:40,width:500,height:360};state.devicePixelRatio=2;
+  state.fields=[{id:'a',kind:'radio',label:'A.'},{id:'b',kind:'radio',label:'B.'}];
+  state.question='Study the list of figures below. Use the pattern to draw the next figure in the list.';
+  const shots=captured;
+  try {
+    const result=await request({type:'solve',mode:'field'});
+    assert.equal(result.ok,true);
+    assert.equal(result.data.solution.supported,true);
+    assert.equal(lastSnapshot.imageBased,true);
+    assert.match(lastSnapshot.image,/^data:image\/jpeg;base64,/);
+    assert.equal(captured,shots+1);
+    assert.deepEqual(drawn.slice(1,5),[168,48,1064,784]);
+  } finally {
+    globalThis.OffscreenCanvas=Original;
+    state.imageBased=false;state.visual=false;state.rect=undefined;state.devicePixelRatio=undefined;
+    state.fields=fields;state.question=question;
+  }
 });
 test('visual questions include a screenshot in the same single solve call',async()=>{
   state.visual=true;
@@ -161,6 +205,17 @@ test('AutoPilot fills before resolving a submit button disabled until input',asy
  }finally{enableOnFill=false;state.controls.submit=1;}
 });
 
+test('a pre-test with Next and no Check answer advances with Next',async()=>{
+ await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+ const controls=state.controls;
+ state.controls={submit:0,submitPresent:0,next:1};clickedKind=null;
+ try{
+  const result=await request({type:'solve',mode:'autopilot'});
+  const response=await request({type:'apply',planId:result.data.planId});
+  assert.equal(response.ok,true);assert.equal(response.data.submitted,true);
+  assert.equal(clickedKind,'next');
+ }finally{state.controls=controls;}
+});
 test('Fill and AutoPilot prepare and fill through the same non-submitting executor',async()=>{
  const before=prepared;
  for(const mode of ['field','autopilot']){
