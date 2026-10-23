@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 let captureFails=false, captured=0, solveCalls=0, lastSnapshot;
 let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false, enableOnFill=false;
-let prepared=0,fillFails=false,clickFails=false;const executed=[];
+let prepared=0,fillFails=false,clickFails=false,clickedKind=null;const executed=[];
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[],controls:{submit:1,next:1}};
@@ -12,7 +12,7 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   const wrapped=data=>[{result:{ok:true,data}}];
   if(input.args?.[0]==='prepareField'){prepared++;return wrapped({ready:true});}
   if(input.args?.[0]==='dismissFeedback'){verdict='unknown';return wrapped({clicked:true});}
-  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];if(clickFails)throw new Error('Lost click reply');return wrapped({clicked:true});}
+  if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];clickedKind=input.args[1];if(clickFails)throw new Error('Lost click reply');return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
   if(input.args[0]==='execute'){executed.push(input.args[1]);if(fillFails)return [{result:{ok:false,error:'The page did not retain the requested value.'}}];applied++;if(enableOnFill)state.controls.submit=1;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
   if(input.args[0]==='feedback')return wrapped({state:input.target.documentIds[0]==='doc1'?verdict:'unknown',text:''});
@@ -68,9 +68,8 @@ test('a reviewed field answer can be explicitly submitted once',async()=>{
   await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
   const before=applied;
   const result=await request({type:'solve',mode:'field'});assert.equal(result.ok,true);
-  assert.equal((await request({type:'apply',planId:result.data.planId})).data.submitted,false);
-  assert.equal((await request({type:'submitField',planId:result.data.planId})).data.submitted,true);
-  assert.equal(applied,before+2);
+  assert.equal((await request({type:'apply',planId:result.data.planId})).data.submitted,true);
+  assert.equal(applied,before+1);
   assert.equal((await request({type:'submitField',planId:result.data.planId})).ok,false);
 });
 test('AutoPilot fills a child frame and submits and reads feedback in the parent',async()=>{
@@ -116,9 +115,11 @@ test('Fill solves and applies without any signature',async()=>{
   assert.equal(session['grant:1'],undefined);
   const result=await request({type:'solve',mode:'field'});
   assert.equal(result.ok,true);
+  clickedKind=null;
   const filled=await request({type:'apply',planId:result.data.planId});
   assert.equal(filled.ok,true);
-  assert.equal(filled.data.submitted,false);
+  assert.equal(filled.data.submitted,true);
+  assert.equal(clickedKind,'submit');
   assert.equal(session['grant:1'],undefined);
 });
 test('a visual question never silently falls back to text when capture fails',async()=>{
@@ -181,14 +182,30 @@ test('failed fill reports no submission and never clicks Check answer',async()=>
 });
 test('lost submit reply stays unknown and prevents replaying a reviewed field',async()=>{
  const result=await request({type:'solve',mode:'field'}),planId=result.data.planId;
- await request({type:'apply',planId});clickFails=true;
+ clickFails=true;clickedDocument=null;
  try{
-  const response=await request({type:'submitField',planId});
+  const response=await request({type:'apply',planId});
   assert.equal(response.ok,false);assert.equal(response.submission,'unknown');
  }finally{clickFails=false;}
  clickedDocument=null;
  assert.equal((await request({type:'submitField',planId})).ok,false);
  assert.equal(clickedDocument,null);
+});
+test('Fill still clicks after the filled answer changes only the field hash',async()=>{
+ state.promptHash='same-prompt';staleAfterFill=true;clickedKind=null;
+ try{
+  const result=await request({type:'solve',mode:'field'});
+  const filled=await request({type:'apply',planId:result.data.planId});
+  assert.equal(filled.ok,true);assert.equal(clickedKind,'submit');
+ }finally{staleAfterFill=false;state.hash='q1';delete state.promptHash;}
+});
+test('Fill clicks Next when Check answer is absent',async()=>{
+ const saved=state.controls;state.controls={submit:0,next:1};clickedKind=null;
+ try{
+  const result=await request({type:'solve',mode:'field'});
+  const filled=await request({type:'apply',planId:result.data.planId});
+  assert.equal(filled.ok,true);assert.equal(filled.data.submitted,false);assert.equal(clickedKind,'next');
+ }finally{state.controls=saved;}
 });
 
 test('correct popup acknowledgement preserves permission to advance',async()=>{

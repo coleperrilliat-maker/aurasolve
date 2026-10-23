@@ -12,7 +12,7 @@ export function controlKind(labels,command=''){
   if(texts.some(t=>/^(continue|next part|continue to next part)$/i.test(t)))return 'continue';
   if(texts.some(t=>/^(similar question|similar exercise|try again)$/i.test(t)))return 'similar';
   if(texts.some(t=>/^(check (my )?answer|final check|submit answer|check)$/i.test(t)))return 'submit';
-  if(texts.some(t=>/^(next|next question|next problem)$/i.test(t)))return 'next';
+  if(texts.some(t=>/^(next|next question|next problem)(?:\s*[›>»→])?$/i.test(t)))return 'next';
   if(texts.some(t=>/^(ok|okay)$/i.test(t)))return 'dismiss';
   // Never treat assignment Submit, Save or Save best score as a per-part submission.
   if(texts.length)return null;

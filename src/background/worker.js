@@ -76,6 +76,96 @@ async function pageFeedback(tabId,state) {
   return candidates.find(o=>o.state==='incorrect') || candidates.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
 const fillPlan = (tabId,plan,requireComplete=true) => frameCall(tabId,plan.documentId,'execute',{...plan,submit:false,requireComplete});
+function controlCount(state, kind) {
+  return (state.frames || [state.question,state.top]).reduce((sum,frame)=>sum+(frame.controls?.[kind] || 0),0);
+}
+function sameFilledQuestion(fresh, plan) {
+  if (fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId) return false;
+  if (fresh.question.hash===plan.hash) return true;
+  // Selecting an answer can rebuild the choice widgets. The prompt is still the same question.
+  return Boolean(plan.promptHash) && fresh.question.promptHash===plan.promptHash;
+}
+function pageControl(kind) {
+  const clean = value => String(value || '').replace(/\s+/g,' ').trim();
+  const kindOf = el => {
+    const texts = [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].map(clean).filter(Boolean);
+    if (texts.some(t=>/^(continue|next part|continue to next part)$/i.test(t))) return 'continue';
+    if (texts.some(t=>/^(similar question|similar exercise|try again)$/i.test(t))) return 'similar';
+    if (texts.some(t=>/^(check (my )?answer|final check|submit answer|check)$/i.test(t))) return 'submit';
+    if (texts.some(t=>/^(next|next question|next problem)(?:\s*[›>»→])?$/i.test(t))) return 'next';
+    if (texts.length) return null;
+    return {checkanswer:'submit',similarquestion:'similar',next:'next',continue:'continue'}[(el.getAttribute('command') || '').toLowerCase()] || null;
+  };
+  const shown = el => Boolean(el?.isConnected && el.getClientRects().length && getComputedStyle(el).visibility!=='hidden' && !el.closest('[aria-hidden="true"], [hidden]'));
+  if (document.hidden) return {submit:0,next:0,clicked:false};
+  const nodes = [];
+  const visit = root => {
+    if (!root?.querySelectorAll) return;
+    nodes.push(...root.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"],a,[data-testid*="next" i],[data-testid*="check" i],[class*="next" i]'));
+    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) visit(el.shadowRoot);
+  };
+  visit(document);
+  const ofKind = name => {
+    const matches = nodes.filter(el=>shown(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && kindOf(el)===name);
+    return matches.filter(el=>!matches.some(other=>other!==el && el.contains(other)));
+  };
+  const submit = ofKind('submit'), next = ofKind('next');
+  if (!kind) return {submit:submit.length,next:next.length,clicked:false};
+  const chosen = kind==='submit' ? submit : kind==='next' ? next : [];
+  if (chosen.length!==1) return {submit:submit.length,next:next.length,clicked:false};
+  chosen[0].click();
+  return {submit:submit.length,next:next.length,clicked:true};
+}
+async function clickAcrossFrames(tabId, kind) {
+  let listed;
+  try { listed = await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:pageControl,args:[null]}); }
+  catch { return {clicked:false,count:0}; }
+  const total = listed.reduce((sum,frame)=>sum+(frame.result?.[kind] || 0),0);
+  if (total!==1) return {clicked:false,count:total};
+  const frame = listed.find(item=>item.result?.[kind]===1);
+  try {
+    const clicked = await chrome.scripting.executeScript({target:{tabId,frameIds:[frame.frameId]},func:pageControl,args:[kind]});
+    if (!clicked[0]?.result?.clicked) throw new Error(kind==='submit' ? 'Check answer did not confirm its click.' : 'Next did not confirm its click.');
+    return {clicked:true,kind,count:total};
+  } catch (error) {
+    if (!error.submission) error.submission='unknown';
+    throw error;
+  }
+}
+async function clickCheckOrNext(tabId, plan) {
+  let kind, documentId;
+  for (let attempt=0; attempt<20; attempt++) {
+    if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
+    const fresh = await collect(tabId);
+    if (!sameFilledQuestion(fresh, plan)) throw new Error('The question changed. Review the filled answer manually.');
+    const submit = controlCount(fresh,'submit'), next = controlCount(fresh,'next'), submitPresent = controlCount(fresh,'submitPresent');
+    if (submit===1) { kind='submit'; documentId=controlDocument(fresh,'submit'); break; }
+    // This page has no Check answer control. Press its Next button.
+    if (submitPresent===0 && next===1) { kind='next'; documentId=controlDocument(fresh,'next'); break; }
+    // The footer Next can live outside the question frame, including a frame the content script did not classify.
+    if (submitPresent===0 && submit===0 && next===0) {
+      const scanned = await clickAcrossFrames(tabId, 'submit');
+      if (scanned.clicked) return scanned;
+      if (scanned.count===0) {
+        const advanced = await clickAcrossFrames(tabId, 'next');
+        if (advanced.clicked) return advanced;
+      }
+    }
+    // Check answer can appear only after the page accepts the filled value.
+    // Wait out that delay before using Next, so an always-visible Next does not skip the check.
+    if (attempt===19 && submit===0 && next===1) { kind='next'; documentId=controlDocument(fresh,'next'); break; }
+    await new Promise(resolve=>setTimeout(resolve,150));
+  }
+  if (!documentId) return {clicked:false,kind:null};
+  try {
+    const clicked = await frameCall(tabId,documentId,'clickControl',kind);
+    if (!clicked?.clicked) throw new Error(kind==='submit' ? 'Check answer did not confirm its click.' : 'Next did not confirm its click.');
+    return {clicked:true,kind};
+  } catch (error) {
+    if (!error.submission) error.submission='unknown';
+    throw error;
+  }
+}
 async function prepareAnswers(tabId,state,activate=true) {
   if(activate)await frameCall(tabId,state.question.documentId,'prepareField');
   await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
@@ -299,7 +389,7 @@ async function handle(message,sender) {
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
     const id = crypto.randomUUID();
-    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,solution,visualRead,mode:message.mode,generation,created:Date.now(),state:"ready"});
+    plans.set(id,{id,tabId,frameId:state.question.frameId,documentId:state.question.documentId,topUrl:state.top.url,url:state.question.url,hash:state.question.hash,promptHash:state.question.promptHash,solution,visualRead,mode:message.mode,generation,created:Date.now(),state:"ready"});
     return {planId:id,solution,question:state.question};
   }
   const plan = plans.get(message.planId);
@@ -315,8 +405,16 @@ async function handle(message,sender) {
     const submit = plan.mode === "autopilot";
     if (plan.generation!==rev(tabId)) throw new Error("Stopped.");
     plan.state="applying";
-    const result = submit ? await submitPlan(tabId,plan,state) : await fillPlan(tabId,plan);
-    plan.state=submit?"submitted":"filled";
+    if (!submit) {
+      const filled = await fillPlan(tabId,plan);
+      let follow;
+      try { follow = await clickCheckOrNext(tabId,plan); }
+      catch (error) { plan.state=error.submission==='unknown'?'submission_unknown':'filled'; throw error; }
+      plan.state=follow.kind==='submit'?'submitted':'filled';
+      return {...filled,submitted:follow.kind==='submit',advanced:follow.kind};
+    }
+    const result = await submitPlan(tabId,plan,state);
+    plan.state="submitted";
     return result;
   }
   if (message.type === "submitField") {

@@ -5,6 +5,8 @@ const view=overrides=>({fields:[{id:'a1'}],controls:{submitPresent:1},progress:{
 test('Continue never aliases Check answer or Next question despite reused command',()=>{
  assert.equal(controlKind(['Continue'],'checkanswer'),'continue');
  assert.equal(controlKind(['Next question'],'checkanswer'),'next');
+ assert.equal(controlKind(['Next ›']),'next');
+ assert.equal(controlKind(['Next assignment'],'next'),null);
  assert.equal(controlKind(['Final Check'],'checkanswer'),'submit');
  for(const text of ['Submit','Submit assignment','Save','Save best score','Leave question'])assert.equal(controlKind([text],'checkanswer'),null);
 });

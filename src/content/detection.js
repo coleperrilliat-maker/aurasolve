@@ -1,4 +1,4 @@
-import {readPlayer} from "./player.js";
+import {readPlayer,matchedControls} from "./player.js";
 import {controlKind} from "../shared/player-state.js";
 import {saraChoices} from './sara.js';
 import {fingerprint} from "../shared/policy.js";
@@ -184,7 +184,13 @@ export function snapshot() {
   const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
   const autoSelected=(empty || scalar[0])?.id || null;
   const unmappedControls=[...new Set(limitations.filter(l=>/editor.*API|field needs|dropdown.*options|graph.*adapter/i.test(l)))];
-  return {player:readPlayer(document,visible),url:location.href,context:context(),question,fields,unmappedControls,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{continue:findButtons('continue').length,submit:findButtons('submit').length,next:findButtons('next').length,similar:findButtons('similar').length},
+  const controls={continue:0,submit:0,submitPresent:0,next:0,similar:0};
+  for(const el of matchedControls(document,visible)){
+    const kind=controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '');
+    if(kind==='submit')controls.submitPresent++;
+    if(!el.disabled && el.getAttribute('aria-disabled')!=='true')controls[kind]++;
+  }
+  return {player:readPlayer(document,visible),url:location.href,context:context(),question,fields,unmappedControls,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls,
     fallback:isFallback(root),promptHash,visual,rect:box?{x:box.left,y:box.top,width:box.width,height:box.height}:null,viewport:globalThis.innerWidth || 0,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
@@ -198,10 +204,9 @@ export function feedback() {
   return {state:"unknown",text,modal};
 }
 export function findButtons(kind) {
-  return [...document.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"]')].filter(el=>
-    visible(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' &&
+  return matchedControls(document,visible).filter(el=>
+    !el.disabled && el.getAttribute('aria-disabled')!=='true' &&
     controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '')===kind);
-
 }
 export function findButton(kind) {
   const buttons = findButtons(kind);

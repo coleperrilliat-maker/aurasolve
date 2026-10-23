@@ -1,6 +1,8 @@
 import {BUILD_VERSION} from '../src/shared/version.js';
 import http from "node:http";
-import {readFile} from "node:fs/promises";
+import {readFile, stat} from "node:fs/promises";
+import nodePath from "node:path";
+import {fileURLToPath} from "node:url";
 import {solveWithOpenAI, DEFAULT_MODEL} from "./openai.js";
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -8,15 +10,43 @@ const MAX_BODY = 4_000_000;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 40;
 const hits = new Map();
+const docsRoot = nodePath.resolve(fileURLToPath(new URL("../docs/", import.meta.url)));
+const iconsRoot = nodePath.resolve(fileURLToPath(new URL("../icons/", import.meta.url)));
+const mimeByExt = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".mp4": "video/mp4",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+};
 const publicFiles = new Map([
-  ["/", {url: new URL("../docs/index.html", import.meta.url), type: "text/html; charset=utf-8"}],
-  ["/style.css", {url: new URL("../docs/style.css", import.meta.url), type: "text/css; charset=utf-8"}],
-  ["/script.js", {url: new URL("../docs/script.js", import.meta.url), type: "text/javascript; charset=utf-8"}],
-  ["/app-icon.png", {url: new URL("../docs/app-icon.png", import.meta.url), type: "image/png"}],
-  ["/icon.png", {url: new URL("../icons/icon-128.png", import.meta.url), type: "image/png"}],
-  ["/icons/icon-32.png", {url: new URL("../icons/icon-32.png", import.meta.url), type: "image/png"}],
-  ["/icons/icon-128.png", {url: new URL("../icons/icon-128.png", import.meta.url), type: "image/png"}],
+  ["/", {file: nodePath.join(docsRoot, "index.html"), type: "text/html; charset=utf-8"}],
+  ["/style.css", {file: nodePath.join(docsRoot, "style.css"), type: "text/css; charset=utf-8"}],
+  ["/script.js", {file: nodePath.join(docsRoot, "script.js"), type: "text/javascript; charset=utf-8"}],
+  ["/app-icon.png", {file: nodePath.join(docsRoot, "app-icon.png"), type: "image/png"}],
+  ["/icon.png", {file: nodePath.join(docsRoot, "icon.png"), type: "image/png"}],
+  ["/icons/icon-32.png", {file: nodePath.join(iconsRoot, "icon-32.png"), type: "image/png"}],
+  ["/icons/icon-128.png", {file: nodePath.join(iconsRoot, "icon-128.png"), type: "image/png"}],
 ]);
+
+function resolveDocsAsset(requestPath) {
+  if (!requestPath || requestPath.includes("\0")) return null;
+  const decoded = decodeURIComponent(requestPath);
+  if (!decoded.startsWith("/") || decoded.includes("..")) return null;
+  const relative = decoded.slice(1);
+  if (!relative || relative.endsWith("/")) return null;
+  const absolute = nodePath.resolve(docsRoot, relative);
+  if (absolute !== docsRoot && !absolute.startsWith(docsRoot + nodePath.sep)) return null;
+  const ext = nodePath.extname(absolute).toLowerCase();
+  const type = mimeByExt[ext];
+  if (!type) return null;
+  return {file: absolute, type};
+}
 
 function clientIp(req) {
   const forwarded = req.headers["x-forwarded-for"];
@@ -42,10 +72,11 @@ function sendJson(res, status, payload) {
 }
 
 async function sendPublicFile(res, file) {
-  const body = await readFile(file.url);
+  const body = await readFile(file.file);
+  const longCache = file.type.startsWith("image/") || file.type === "video/mp4";
   res.writeHead(200, {
     "Content-Type": file.type,
-    "Cache-Control": file.type === "image/png" ? "public, max-age=86400" : "public, max-age=300",
+    "Cache-Control": longCache ? "public, max-age=86400" : "public, max-age=300",
   });
   res.end(body);
 }
@@ -81,13 +112,18 @@ const server = http.createServer(async (req, res) => {
 
   const path = req.url?.split("?")[0];
 
-  if (req.method === "GET" && publicFiles.has(path)) {
-    try {
-      await sendPublicFile(res, publicFiles.get(path));
-    } catch {
-      sendJson(res, 500, {error: "Landing page unavailable"});
+  if (req.method === "GET") {
+    const exact = publicFiles.get(path);
+    const asset = exact || resolveDocsAsset(path);
+    if (asset) {
+      try {
+        await stat(asset.file);
+        await sendPublicFile(res, asset);
+      } catch {
+        sendJson(res, exact ? 500 : 404, {error: exact ? "Landing page unavailable" : "Not found"});
+      }
+      return;
     }
-    return;
   }
 
   if (path === "/api/v1/health" && req.method === "GET") {

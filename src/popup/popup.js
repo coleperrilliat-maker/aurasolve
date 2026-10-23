@@ -139,7 +139,8 @@ async function run(mode) {
       status('Reading the question…');$('loader').hidden=false;
       const result=await send({type:'solve',mode});await checkpoint();card(result,mode,1);
       if(mode==='field' && result.solution.supported && result.solution.actions.length && result.solution.confidence>=.85){
-        await send({type:'apply',planId:result.planId});live();status('Field filled. You choose whether to submit.');
+        const applied=await send({type:'apply',planId:result.planId});live();
+        status(applied.submitted?'Filled and checked.':applied.advanced==='next'?'Filled and moved to the next question.':'Filled. Check Answer or Next was not found.');
       }else if(mode==='explain')$('status').hidden=true;
       else status('Fill this one yourself using the explanation.');
     }

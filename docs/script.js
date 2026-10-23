@@ -18,3 +18,13 @@ fetch(releaseApi, {headers: {Accept: "application/vnd.github+json"}})
     if (version && label) label.textContent = `Version ${version} · Chrome`;
   })
   .catch(() => {});
+
+const logoTrack = document.querySelector(".logo-track");
+if (logoTrack) {
+  logoTrack.append(...[...logoTrack.children].map(node => {
+    const copy = node.cloneNode(true);
+    copy.setAttribute("aria-hidden", "true");
+    copy.querySelector("img")?.setAttribute("alt", "");
+    return copy;
+  }));
+}
