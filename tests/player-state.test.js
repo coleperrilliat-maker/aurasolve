@@ -11,11 +11,12 @@ test('Continue never aliases Check answer or Next question despite reused comman
  assert.equal(controlKind(['Final Check ›','Submit'],''),'submit');
  assert.equal(controlKind(['Submit','Final Check'],''),'submit');
  assert.equal(controlKind(['Submit assignment','Final Check'],''),null);
- for(const text of ['Submit','Submit assignment','Save','Save best score','Leave question'])assert.equal(controlKind([text],'checkanswer'),null);
+ for(const text of ['Submit assignment','Save','Save best score','Leave question'])assert.equal(controlKind([text],'checkanswer'),null);
+ assert.equal(controlKind(['Submit'],'checkanswer'),'submit');
+ assert.equal(controlKind(['Check'],''),'submit');
 });
 test('assignment Submit and unlabeled command metadata can never check an answer',()=>{
  assert.equal(controlKind([],'checkanswer'),null);
- assert.equal(controlKind(['Submit','Check answer'],'checkanswer'),null);
  for(const text of ['Finish homework','Turn in test','Submit quiz','Finish assignment'])
    assert.equal(controlKind([text],'checkanswer'),null);
  assert.equal(controlKind(['Check answer'],'checkanswer'),'submit');
@@ -24,17 +25,20 @@ test('assignment Submit and unlabeled command metadata can never check an answer
  assert.equal(footerAdvanceKind('Final check'),'check');
  assert.equal(footerAdvanceKind('Final Check ›'),'check');
  assert.equal(footerAdvanceKind('Submit your answer Final Check'),'check');
+ assert.equal(footerAdvanceKind('Submit'),'check');
+ assert.equal(footerAdvanceKind('Submit answer'),'check');
+ assert.equal(footerAdvanceKind('Check'),'check');
  assert.equal(footerAdvanceKind('Next'),'next');
  assert.equal(footerAdvanceKind('Next ›'),'next');
  assert.equal(footerAdvanceKind('Next question'),'next');
- for(const text of ['Submit','Submit assignment','Save best score','Clear all',''])assert.equal(footerAdvanceKind(text),'');
+ for(const text of ['Submit assignment','Save best score','Clear all',''])assert.equal(footerAdvanceKind(text),'');
  assert.equal(controlKind([],'checkanswer',{nav:true}),'submit');
  assert.equal(controlKind(['Continue'],'checkanswer',{nav:true}),'continue');
  assert.equal(controlKind([],'similarexercise'),'similar');
  assert.equal(controlKind([],'nextquestion'),'next');
  assert.equal(controlKind(['Next'],''),'next');
- assert.equal(controlKind(['Submit'],''),null);
- assert.equal(controlKind(['Submit answer'],'checkanswer'),null);
+ assert.equal(controlKind(['Submit'],''),'submit');
+ assert.equal(controlKind(['Submit answer'],'checkanswer'),'submit');
  const lower={bottom:40,right:20,nav:false,dialog:false,command:''};
  const check={bottom:700,right:900,nav:true,dialog:false,command:'checkanswer'};
  const dialog={bottom:800,right:1000,nav:true,dialog:true,command:'checkanswer'};

@@ -14,16 +14,15 @@ export function controlKind(labels,command='',extra={}){
   // "Final Check" is the last-part Check answer, even when another accessible
   // name on that same control says Submit. A real assignment hand-in stays blocked.
   if(texts.some(finalCheckText) && !assignmentHandIn)return 'submit';
-  // Assignment-level controls are never a per-question answer check. Treat a
-  // dangerous visible label as authoritative even when Pearson reuses command
-  // metadata or another accessible label says "Check answer".
-  if(texts.some(t=>/^(submit|save|finish|turn in)$/i.test(t) ||
+  // Assignment hand-in stays blocked. A lone red "Submit" / "Check" is the
+  // per-question footer control on many MyLab players, so those stay allowed.
+  if(texts.some(t=>/^(save|finish|turn in)$/i.test(t) ||
     /\b(?:submit|finish|turn in) (?:assignment|homework|test|quiz|exam)\b/i.test(t) ||
     /^save best score$/i.test(t)))return null;
   // Visible labels take precedence: Pearson reuses command=checkanswer for Continue.
   if(texts.some(t=>/^(continue|next part|continue to next part)$/i.test(t)))return 'continue';
   if(texts.some(t=>/^(similar question|similar exercise|try again)$/i.test(t)))return 'similar';
-  if(texts.some(t=>/^(check (my )?answer|final check|check)$/i.test(t)))return 'submit';
+  if(texts.some(t=>/^(check(?:\s+my)?\s+answer|final check|check|submit(?:\s+answer)?)$/i.test(t)))return 'submit';
   if(texts.some(t=>/^(next|next question|next problem)$/i.test(t)))return 'next';
   if(texts.some(t=>/^(ok|okay)$/i.test(t)))return 'dismiss';
   if(texts.length)return null;
@@ -34,11 +33,13 @@ export function controlKind(labels,command='',extra={}){
   if(String(command).toLowerCase()==='checkanswer' && extra.nav && !extra.dialog)return 'submit';
   return null;
 }
-// The red footer control is either Check answer or Next. They advance the
-// same way. Assignment Submit is never one of them.
+// The red footer control is Check answer, Submit, Check, Final Check, or Next.
+// Assignment hand-in labels are never treated as that control.
 export function footerAdvanceKind(label){
   const text=buttonText(label);
-  if(/^(?:check(?:\s+my)?\s+answer|final\s+check)$/i.test(text) || finalCheckText(text))return 'check';
+  if(!text)return '';
+  if(/\b(?:submit|finish|turn in)\s+(?:assignment|homework|test|quiz|exam)\b/i.test(text) || /^save best score$/i.test(text))return '';
+  if(/^(?:check(?:\s+my)?\s+answer|final\s+check|check|submit(?:\s+answer)?)$/i.test(text) || finalCheckText(text))return 'check';
   if(/^next(?:\s+(?:question|problem))?$/i.test(text))return 'next';
   return '';
 }

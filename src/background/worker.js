@@ -89,11 +89,13 @@ function footerNext(op, only='') {
   try {
     const clean = value => String(value || '').replace(/\s+/g,' ').trim();
     const buttonText = value => clean(String(value || '').replace(/[\u200B-\u200D\uFEFF\uE000-\uF8FF]/g,'').replace(/\s*[›>»→]+\s*$/,''));
+    const blocked = text => /\b(?:submit|finish|turn in)\s+(?:assignment|homework|test|quiz|exam)\b/i.test(text) || /^save best score$/i.test(text);
     const classify = label => {
       const text = buttonText(label);
-      if (!text) return '';
+      if (!text || blocked(text)) return '';
       if (text.length<=80 && /\bfinal\s+check\b/i.test(text) && !/\b(?:assignment|homework|test|quiz|exam)\b/i.test(text)) return 'final';
-      if (/^(?:check(?:\s+my)?\s+answer)$/i.test(text)) return 'check';
+      // MyLab's red footer control uses all of these labels across players.
+      if (/^(?:check(?:\s+my)?\s+answer|check|submit(?:\s+answer)?)$/i.test(text)) return 'check';
       if (/^next(?:\s+(?:question|problem))?$/i.test(text)) return 'next';
       return '';
     };
@@ -101,7 +103,7 @@ function footerNext(op, only='') {
       const bits = [el.innerText, el.value, el.getAttribute?.('aria-label'), el.getAttribute?.('title')];
       for (const child of el.querySelectorAll?.(':scope > span, :scope > div') || []) bits.push(child.innerText);
       const labels = bits.map(buttonText).filter(Boolean);
-      if (labels.some(text => /\b(?:submit|finish|turn in)\s+(?:assignment|homework|test|quiz|exam)\b/i.test(text) || /^save best score$/i.test(text))) return '';
+      if (labels.some(blocked)) return '';
       let kind = '';
       for (const text of labels) {
         const next = classify(text);
@@ -113,7 +115,9 @@ function footerNext(op, only='') {
     const redOf = color => {
       const match = String(color || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
       if (!match) return 0;
-      return Number(match[1]) - Math.max(Number(match[2]), Number(match[3]));
+      const r = Number(match[1]), g = Number(match[2]), b = Number(match[3]);
+      // MyLab's primary footer button is vividly red; grey/blue/white score near 0.
+      return r - Math.max(g, b) + Math.max(0, r - 140) / 4;
     };
     const nodes = [];
     const visit = root => {
@@ -134,35 +138,46 @@ function footerNext(op, only='') {
     const seen = new Set();
     let disabledCheck = false;
     for (const el of nodes) {
-      let kind = kindOf(el);
-      if (!kind) continue;
       let target = el;
       if (!el.matches?.('button,a,input,[role="button"]')) {
         const host = el.closest?.('button,a,input,[role="button"]');
-        if (host) { target = host; if (kindOf(host)==='final' || kind==='final') kind = 'final'; else kind = kindOf(host) || kind; }
+        if (!host) continue;
+        target = host;
       }
       if (seen.has(target)) continue;
       seen.add(target);
       if (target.closest('[hidden],[aria-hidden="true"]')) continue;
+      let kind = kindOf(target) || kindOf(el);
+      const rect = target.getBoundingClientRect();
+      if (rect.width<40 || rect.height<22 || rect.width>360 || rect.height>96) continue;
+      const style = getComputedStyle(target);
+      if (style.display==='none' || style.visibility==='hidden' || style.pointerEvents==='none' || Number(style.opacity)===0) continue;
+      const red = Math.max(redOf(style.backgroundColor), redOf(style.backgroundImage?.includes?.('rgb') ? '' : style.backgroundColor));
+      const dialog = Boolean(target.closest?.('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.xlDialogButtonContainer'));
+      // Unknown short labels on a clearly red footer button still count. MyLab
+      // renames that control often; color is the reliable signal.
+      if (!kind && red>35 && rect.bottom > (globalThis.innerHeight || 800) * 0.55) {
+        const bits = [target.innerText, target.value, target.getAttribute?.('aria-label'), target.getAttribute?.('title')].map(buttonText).filter(Boolean);
+        if (bits.some(blocked)) continue;
+        if (bits.some(text => /^(cancel|clear|help|hint|ok|okay|yes|no|close|back)$/i.test(text))) continue;
+        if (bits.length && bits.every(text => text.length <= 40)) kind = 'check';
+      }
+      if (!kind) continue;
       if (target.disabled || target.getAttribute('aria-disabled')==='true' || target.classList?.contains('disabled')) {
         if ((kind==='check' || kind==='final') && target.getClientRects().length) disabledCheck = true;
         continue;
       }
       if (only && kind!==only) continue;
-      const rect = target.getBoundingClientRect();
-      if (rect.width<40 || rect.height<22 || rect.width>320 || rect.height>88) continue;
-      const style = getComputedStyle(target);
-      if (style.display==='none' || style.visibility==='hidden' || style.pointerEvents==='none' || Number(style.opacity)===0) continue;
-      const dialog = Boolean(target.closest?.('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.xlDialogButtonContainer'));
-      candidates.push({el:target, kind, dialog, area:rect.width*rect.height, bottom:rect.bottom, right:rect.right, red:redOf(style.backgroundColor)});
+      candidates.push({el:target, kind, dialog, area:rect.width*rect.height, bottom:rect.bottom, right:rect.right, red});
     }
     const page = candidates.filter(item=>!item.dialog);
     const visible = page.length ? page : candidates;
+    // Always prefer the red button. Label only breaks ties and filters junk.
     const checks = visible.filter(item=>item.kind==='final' || item.kind==='check');
     const base = checks.length ? checks : visible;
     const vivid = base.filter(item=>item.red>25);
     const pool = vivid.length ? vivid : base;
-    const ranked = pool.slice().sort((a,b)=>((b.kind==='final')-(a.kind==='final')) || b.red-a.red || b.bottom-a.bottom || a.area-b.area);
+    const ranked = pool.slice().sort((a,b)=>b.red-a.red || ((b.kind==='final')-(a.kind==='final')) || b.bottom-a.bottom || b.right-a.right || a.area-b.area);
     const best = ranked[0];
     const hasFinal = visible.some(item=>item.kind==='final');
     const hasNext = visible.some(item=>item.kind==='next');
@@ -186,7 +201,8 @@ async function clickFooterNext(tabId, generation, only='') {
     try { listed = await chrome.scripting.executeScript({target:{tabId, allFrames:true}, func:footerNext, args:['locate', only]}); }
     catch { listed = []; }
     waitingForCheck = !only && listed.some(frame=>frame.result?.disabledCheck);
-    const ranked = listed.filter(frame=>frame.result?.count>0).sort((a,b)=>(weight(b.result.kind)-weight(a.result.kind)) || (b.result.red-a.result.red) || (b.result.bottom-a.result.bottom));
+    // Red wins. Final Check / Check / Submit beat Next only when redness ties.
+    const ranked = listed.filter(frame=>frame.result?.count>0).sort((a,b)=>(b.result.red-a.result.red) || (weight(b.result.kind)-weight(a.result.kind)) || (b.result.bottom-a.result.bottom));
     best = ranked[0] || null;
     if (best && (best.result.kind!=='next' || !waitingForCheck)) break;
     best = null;
