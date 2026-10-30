@@ -33,17 +33,15 @@ test('a geometry diagram tells the model to read the figure and fill the blank',
   try{await solveWithOpenAI({question:'Find the values of x and y. [figure 1]',fields:[{id:'x',kind:'text',label:'x'}],dropTargets:[],limitations:[],image,imageBased:true},'field');}
   finally{globalThis.fetch=original;if(previous===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous;}
 });
-test('a dropdown proof drops the diagram before the model call',async()=>{
+test('a dropdown proof keeps its diagram so the model can read the marks',async()=>{
   const original=globalThis.fetch,previous=process.env.OPENAI_API_KEY;
   process.env.OPENAI_API_KEY='fixture-only';
   let calls=0;
   globalThis.fetch=async(_url,options)=>{
     calls++;
     const body=JSON.parse(options.body);
-    assert.equal(typeof body.input,'string');
-    const payload=JSON.parse(body.input);
-    assert.equal(payload.screenshotAttached,false);
-    assert.deepEqual(payload.limitations,[]);
+    assert.equal(JSON.parse(body.input[0].content[0].text).screenshotAttached,true);
+    assert.equal(body.input[0].content[1].type,'input_image');
     assert.deepEqual(body.text.format.schema.properties.answers.properties.blank_2.enum,['1) Definition of midpoint']);
     return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({answer:'Given',choices:[],explanation:'The first statement is given.',confidence:.9,supported:true,limitation:'',answers:{blank_1:'1) Given',blank_2:'1) Definition of midpoint'}})}]}]})};
   };
@@ -57,7 +55,7 @@ test('a dropdown proof drops the diagram before the model call',async()=>{
         {id:'FL2',kind:'select',options:[{value:'FL2-0',label:'Definition of midpoint'}]}
       ]
     },'field');
-    assert.equal(calls,1);
+    assert.equal(calls,2);
     assert.deepEqual(solution.actions.map(a=>[a.target,a.value]),[['FL1','FL1-0'],['FL2','FL2-0']]);
   } finally {globalThis.fetch=original;if(previous===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous;}
 });

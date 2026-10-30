@@ -1,6 +1,6 @@
 import {assignmentKey,decidePlayer} from '../shared/player-state.js';
 import {expectedPage} from '../shared/pilot-engine.js';
-import {fieldValue, dropdownsOnly, withoutDropdownDiagram} from '../shared/solution.js';
+import {fieldValue} from '../shared/solution.js';
 import {statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
 import {editorBridge} from './editors.js';
@@ -626,12 +626,6 @@ async function handle(message,sender) {
 
       const drawFigure=/draw the next figure|list of figures/i.test(question.question || '');
       if (question.imageBased || drawFigure || /\bfigures?\b/i.test(question.question || '')) question.visual = true;
-      if (dropdownsOnly(question.fields)) {
-        const slim=withoutDropdownDiagram(question);
-        question.visual=false;question.imageBased=false;
-        delete question.image;delete question.figureImages;
-        question.limitations=slim.limitations;
-      }
       if (question.imageBased) {
         const revealed = state.question.documentId ? await frameCall(tabId, state.question.documentId, 'revealQuestion').catch(() => null) : null;
         question.rect = revealed?.rect || rect;
@@ -644,6 +638,13 @@ async function handle(message,sender) {
         question.figureImages=Array.isArray(figures)?figures.filter(f=>{imageBytes+=f.image?.length || 0;return imageBytes<3400000;}):[];
         visualRead = Boolean(question.image);
         if (question.image) question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
+      } else {
+        // Tick marks, tables and graphs often sit outside the scraped text.
+        const image = await screenshot(tabId, question).catch(() => null);
+        if (image) {
+          question.image = image;
+          question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
+        }
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
       const fresh=await collect(tabId);

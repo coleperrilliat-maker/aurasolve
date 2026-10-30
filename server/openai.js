@@ -1,5 +1,5 @@
-import {verifiedSolve} from "./verification.js";
-import {solutionSchema, validateSolution, withoutDropdownDiagram} from "../src/shared/solution.js";
+import {verifiedSolve, sameActions} from "./verification.js";
+import {solutionSchema, validateSolution} from "../src/shared/solution.js";
 import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS, PAGE_CLUES, CONGRUENCE_CHECKS} from "../src/shared/instructions.js";
 import {answerSlots, slotSolutionSchema, slotsToActions} from "../src/shared/answer-slots.js";
 
@@ -22,18 +22,6 @@ export function congruenceQuestion(snapshot) {
     ...fields.flatMap(field => [field.label, field.context, ...(field.options || []).map(option => option.label)]),
   ];
   return CONGRUENCE.test(parts.filter(Boolean).join("\n"));
-}
-// Mini misses page clues on diagrams, tables, mixed blanks, and choice questions.
-// Those go straight to the strong model. Only a lone plain text blank stays cheap.
-export function hardQuestion(snapshot) {
-  if (!snapshot) return false;
-  if (snapshot.retryContext?.length || snapshot.visual || snapshot.imageBased) return true;
-  if (typeof snapshot.image === "string" && snapshot.image) return true;
-  if (Array.isArray(snapshot.figureImages) && snapshot.figureImages.length) return true;
-  if (congruenceQuestion(snapshot)) return true;
-  const fields = snapshot.fields || [];
-  if (fields.length > 1) return true;
-  return fields.some(field => field.kind !== "text" || field.choice || field.format === "latex");
 }
 function radioNote(snapshot) {
   const groups = new Set((snapshot.fields || []).filter(field => field.kind === "radio" && field.adapter !== "sara-choice" && field.group).map(field => field.group));
@@ -81,16 +69,12 @@ function visualNote(snapshot) {
 const SLOT_NOTE = "\nThis response has an answers object instead of actions. It has exactly one entry per blank on the page, already typed: pick a dropdown or multiple-choice entry from its numbered options, set each checkbox true or false, and type only the value for each answer box. Fill every entry. The diagram is context, not an extra blank. Keep supported true unless a needed label is unreadable.";
 
 async function solveOnce(snapshot, mode, model, signal, requestedEffort) {
-  snapshot = withoutDropdownDiagram(snapshot);
   const slots = mode === "explain" ? null : answerSlots(snapshot.fields || [], snapshot.dropTargets || []);
   const notes = slots ? SLOT_NOTE : radioNote(snapshot) + dropdownNote(snapshot) + answerPlanNote(snapshot);
-  const hard = hardQuestion(snapshot);
   const congruence = congruenceQuestion(snapshot);
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("Server is missing OPENAI_API_KEY.");
-  const preferred = EFFORTS.includes(requestedEffort) ? requestedEffort : process.env.OPENAI_REASONING_EFFORT?.trim() || "medium";
-  // Diagrams, mixed blanks, and congruence need the high reasoning pass.
-  const effort = hard && EFFORTS.indexOf(preferred) < EFFORTS.indexOf("high") ? "high" : preferred;
+  const effort = EFFORTS.includes(requestedEffort) ? requestedEffort : process.env.OPENAI_REASONING_EFFORT?.trim() || "medium";
   const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort}} : {};
 
   const image = typeof snapshot.image === "string" && snapshot.image.length < 3_500_000 && /^data:image\/(jpeg|png);base64,/.test(snapshot.image) ? snapshot.image : null;
@@ -127,7 +111,7 @@ async function solveOnce(snapshot, mode, model, signal, requestedEffort) {
       input: image
         ? [{role: "user", content: [{type: "input_text", text}, {type: "input_image", image_url: image, detail: "high"},...figures.flatMap(f=>[{type:'input_text',text:'Close-up of question figure: '+String(f.label || '').slice(0,300)},{type:'input_image',image_url:f.image,detail:'high'}])]}]
         : text,
-      max_output_tokens: reasoning.reasoning ? 12000 : 3000,
+      max_output_tokens: reasoning.reasoning ? (effort === "high" ? 20000 : 12000) : 3000,
       text: {
         format: {
           type: "json_schema",
@@ -177,7 +161,6 @@ async function solveOnce(snapshot, mode, model, signal, requestedEffort) {
 export function strongModel() {
   return process.env.OPENAI_STRONG_MODEL?.trim() || STRONG_MODEL;
 }
-const unsure = (solution, snapshot, mode) => mode !== "explain" && (snapshot.fields || []).length > 0 && (!solution.supported || solution.confidence < 0.92);
 function modelChain(...names) {
   const seen = new Set();
   return names.filter(name => name && !seen.has(name) && seen.add(name));
@@ -196,22 +179,23 @@ async function solveOnceAvailable(models, question, runMode, signal, effort) {
 
 export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,requestedEffort){
  const cheap=pickModel(requestedModel), strong=strongModel();
- const hard=hardQuestion(snapshot);
- // Anything with a diagram, mixed blanks, choices, or a prior miss prefers the
- // strong model. Mini only keeps lone plain-text blanks, and even those get
- // rechecked when confidence is under 0.92. Always keep gpt-4.1 as the last seat.
- const preferred=hard ? strong : cheap;
- const effort=hard && !EFFORTS.includes(requestedEffort) ? "high" : requestedEffort;
- const chain=hard ? modelChain(strong, cheap, FALLBACK_MODEL) : modelChain(cheap, FALLBACK_MODEL);
- const solveWith=models=>verifiedSolve((question,runMode)=>solveOnceAvailable(models,question,runMode,signal,effort),snapshot,mode);
- let solution, failure;
- try { solution=await solveWith(chain); }
- catch(error){ failure=error; }
- if(solution && !unsure(solution,snapshot,mode))return solution;
- if(preferred===strong || signal?.aborted){ if(solution)return solution; throw failure; }
- try {
-  const second=await solveWith(modelChain(strong, FALLBACK_MODEL));
-  if(!solution || second.supported && (second.confidence>=solution.confidence || !solution.supported))return second;
- } catch(error){ if(!solution)throw failure; }
- return solution;
+ const chosen=EFFORTS.includes(requestedEffort) ? requestedEffort : undefined;
+ const solveWith=(models,effort)=>verifiedSolve((question,runMode)=>solveOnceAvailable(models,question,runMode,signal,effort),snapshot,mode);
+ const cheapChain=modelChain(cheap,FALLBACK_MODEL), strongChain=modelChain(strong,cheap,FALLBACK_MODEL);
+ if(mode==="explain" || !(snapshot.fields || []).length)return solveWith(cheapChain,chosen);
+ // Pearson already rejected an answer, so pay for the strong model.
+ if(snapshot.retryContext?.length || cheap===strong)return solveWith(strongChain,chosen || "high");
+ // Mini's own confidence is not trusted; it is often confidently wrong. Two
+ // cheap solves with different reasoning budgets must fill every blank the
+ // same way. Only a disagreement or failure pays for the strong model.
+ const [quick,deep]=await Promise.allSettled([solveWith(cheapChain,chosen || "medium"),solveWith(cheapChain,"high")]);
+ const a=quick.status==="fulfilled" ? quick.value : null, b=deep.status==="fulfilled" ? deep.value : null;
+ if(a && b && sameActions(a,b))return b;
+ if(signal?.aborted){ if(b || a)return b || a; throw deep.reason || quick.reason; }
+ try { return await solveWith(strongChain,"high"); }
+ catch(error){
+  const fallback=[b,a].find(solution=>solution?.supported) || b || a;
+  if(fallback)return fallback;
+  throw error;
+ }
 }

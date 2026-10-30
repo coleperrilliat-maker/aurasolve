@@ -68,8 +68,6 @@ export function keepCoveredSolution(solution, snapshot) {
   if (solution.confidence < 0.85 && !excuse) return solution;
   return {...solution, supported:true, confidence:Math.max(solution.confidence || 0, 0.9), limitation:excuse ? '' : (solution.limitation || '')};
 }
-// One reasoning-model call per question. The model checks its own work; a second
-// paid call doubled the cost and mostly surfaced a weaker model's noise.
 export async function verifiedSolve(solve, snapshot, mode) {
   const first=keepCoveredSolution(await solve(snapshot,mode), snapshot);
   if(mode==='explain' || !first.supported || !first.actions.length)return first;

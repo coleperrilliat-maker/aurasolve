@@ -1,14 +1,3 @@
-// Every answer is a dropdown whose choices are already in the request.
-export function dropdownsOnly(fields) {
-  return Array.isArray(fields) && fields.length > 0 && fields.every(field => field?.kind === 'select' && Array.isArray(field.options) && field.options.length > 0);
-}
-const diagramLimitation = /diagram needs a screenshot|Canvas\/SVG|image has no description/i;
-export function withoutDropdownDiagram(snapshot) {
-  if (!dropdownsOnly(snapshot?.fields)) return snapshot;
-  const {image, figureImages, ...rest} = snapshot;
-  return {...rest, visual:false, imageBased:false, limitations:(snapshot.limitations || []).filter(item => !diagramLimitation.test(item))};
-}
-
 // Plain answer boxes need slash fractions; math-editor APIs retain LaTeX.
 export function fieldValue(value, field) {
   if (field.kind !== 'text' || field.format === 'latex') return value;

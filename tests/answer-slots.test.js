@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {answerSlots, answerSlotsSchema, slotsToActions} from '../src/shared/answer-slots.js';
-import {hardQuestion, solveWithOpenAI} from '../server/openai.js';
+import {solveWithOpenAI} from '../server/openai.js';
 
 const mixed=[
   {id:'a',kind:'radio',group:'why',label:'A. SAS'},{id:'b',kind:'radio',group:'why',label:'B. SSS'},
@@ -48,57 +48,47 @@ const question={question:'Why are the triangles congruent?',dropTargets:[],limit
   {id:'FL1',kind:'select',options:[{value:'FL1-0',label:'Given'},{value:'FL1-1',label:'SAS Postulate'}]}
 ]};
 
-test('only a lone plain text blank stays on the cheap model',async()=>{
-  assert.equal(hardQuestion({question:'Solve 2x = 10',fields:[{id:'x',kind:'text'}]}),false);
-  assert.equal(hardQuestion({question:'Find x',fields:[{id:'x',kind:'text'}],imageBased:true}),true);
-  assert.equal(hardQuestion({question:'Pick one',fields:[{id:'a',kind:'radio',group:'g'}]}),true);
-  assert.equal(hardQuestion({question:'Two blanks',fields:[{id:'x',kind:'text'},{id:'y',kind:'text'}]}),true);
-  const models=[];
-  const simple={question:'Solve 2x = 10',dropTargets:[],limitations:[],fields:[{id:'x',kind:'text',label:'x'}]};
-  const solution=await withFetch(body=>{
-    models.push(body.model);
-    assert.match(body.instructions,/Use every clue on the page/);
-    return reply({answer:'5',confidence:.95,supported:true,answers:{blank_1:'5'}});
-  },()=>solveWithOpenAI(simple,'field'));
-  assert.deepEqual(models,['gpt-5-mini']);
-  assert.equal(solution.actions[0].value,'5');
-});
-
-test('diagrams and mixed blanks go straight to the strong model with the page-clue checklist',async()=>{
-  const models=[];
+test('two cheap solves that agree are used without paying for the strong model',async()=>{
+  const calls=[];
   let instructions='';
   const solution=await withFetch(body=>{
-    models.push(body.model);
+    calls.push([body.model,body.reasoning.effort]);
     instructions=body.instructions;
-    assert.equal(body.reasoning.effort,'high');
     return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
   },()=>solveWithOpenAI(question,'field'));
-  assert.deepEqual(models,['gpt-5']);
+  assert.deepEqual(calls.sort(),[['gpt-5-mini','high'],['gpt-5-mini','medium']]);
   assert.match(instructions,/Use every clue on the page/);
   assert.match(instructions,/ASA vs AAS trap/);
   assert.deepEqual(solution.actions.map(a=>a.target),['a','FL1']);
-
-  models.length=0;
-  await withFetch(body=>{
-    models.push(body.model);
-    assert.equal(body.reasoning.effort,'high');
-    assert.match(body.instructions,/screenshot\/figure/);
-    return reply({answer:'4',confidence:.95,supported:true,answers:{blank_1:'4'}});
-  },()=>solveWithOpenAI({question:'Find the intercept',fields:[{id:'x',kind:'text'}],dropTargets:[],limitations:[],imageBased:true,image:'data:image/png;base64,fixture'},'field'));
-  assert.deepEqual(models,['gpt-5']);
 });
 
-test('an unsure plain-text answer is re-solved once by the strong model',async()=>{
+test('confident cheap solves that disagree are settled by the strong model',async()=>{
   const models=[];
-  const simple={question:'Find x',dropTargets:[],limitations:[],fields:[{id:'x',kind:'text',label:'x'}]};
   const solution=await withFetch(body=>{
     models.push(body.model);
-    return body.model==='gpt-5-mini'
-      ? reply({answer:'?',confidence:.9,supported:true,answers:{blank_1:'3'}})
-      : reply({answer:'5',confidence:.95,supported:true,answers:{blank_1:'5'}});
-  },()=>solveWithOpenAI(simple,'field'));
-  assert.deepEqual(models,['gpt-5-mini','gpt-5']);
-  assert.equal(solution.actions[0].value,'5');
+    if(body.model==='gpt-5')return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
+    const pick=body.reasoning.effort==='high' ? '2) SAS Postulate' : '1) Given';
+    return reply({answer:'A',confidence:.99,supported:true,answers:{choice_1:'1) A. SAS',blank_2:pick}});
+  },()=>solveWithOpenAI(question,'field'));
+  assert.deepEqual(models.sort(),['gpt-5','gpt-5-mini','gpt-5-mini']);
+  assert.equal(solution.actions[1].value,'FL1-1');
+});
+
+test('a failed cheap solve is settled by the strong model',async()=>{
+  const models=[];
+  await withFetch(body=>{
+    models.push(body.model);
+    if(body.model==='gpt-5-mini' && body.reasoning.effort==='medium')return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:'not json'}]}]})};
+    return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
+  },()=>solveWithOpenAI(question,'field'));
+  assert.deepEqual(models.sort(),['gpt-5','gpt-5-mini','gpt-5-mini']);
+});
+
+test('explain mode makes one cheap call',async()=>{
+  const models=[];
+  await withFetch(body=>{models.push(body.model);return reply({answer:'A',confidence:.5,supported:true,actions:[]});},
+    ()=>solveWithOpenAI(question,'explain'));
+  assert.deepEqual(models,['gpt-5-mini']);
 });
 
 test('a retry after Pearson marked it wrong goes straight to the strong model',async()=>{
@@ -108,14 +98,14 @@ test('a retry after Pearson marked it wrong goes straight to the strong model',a
   assert.deepEqual(models,['gpt-5']);
 });
 
-test('an unavailable strong model falls through mini to gpt-4.1 instead of dying',async()=>{
+test('an unavailable model falls through to gpt-4.1 instead of dying',async()=>{
   const models=[];
   const solution=await withFetch(body=>{
     models.push(body.model);
     if(body.model==='gpt-5' || body.model==='gpt-5-mini')
       return {ok:false,status:404,text:async()=>'{"error":{"code":"model_not_found","message":"The model does not exist"}}'};
     return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
-  },()=>solveWithOpenAI(question,'field'));
+  },()=>solveWithOpenAI({...question,retryContext:[{actions:[],feedback:'Incorrect.'}]},'field'));
   assert.deepEqual(models,['gpt-5','gpt-5-mini','gpt-4.1']);
   assert.equal(solution.actions[0].target,'a');
 });

@@ -132,7 +132,7 @@ test('a visual question never silently falls back to text when capture fails',as
   } finally {state.visual=false;captureFails=false;}
 });
 
-test('a proof made only of dropdowns does not send its diagram',async()=>{
+test('a proof made only of dropdowns still sends its diagram',async()=>{
   const fields=state.fields, visual=state.visual, question=state.question, limitations=state.limitations;
   state.fields=[
     {id:'FL1',kind:'select',options:[{value:'FL1-0',label:'Given'}]},
@@ -145,22 +145,28 @@ test('a proof made only of dropdowns does not send its diagram',async()=>{
   try {
     const result=await request({type:'solve',mode:'field'});
     assert.equal(result.ok,true);
-    assert.equal(captured,shots);
+    assert.equal(captured,shots+1);
     assert.equal(solveCalls,before+1);
-    assert.equal(lastSnapshot.visual,false);
-    assert.equal(lastSnapshot.image,undefined);
+    assert.equal(lastSnapshot.visual,true);
+    assert.match(lastSnapshot.image,/^data:image\/jpeg;base64,/);
     assert.deepEqual(lastSnapshot.limitations,[]);
   } finally {
     state.fields=fields;state.visual=visual;state.question=question;state.limitations=limitations;
   }
 });
-test('text-only questions do not capture or send screenshots',async()=>{
+test('text questions also send a page screenshot, and a failed capture does not block them',async()=>{
   state.visual=false;
   const before=solveCalls, shots=captured;
   const result=await request({type:'solve',mode:'field'});
   assert.equal(result.ok,true);
-  assert.equal(solveCalls,before+1);assert.equal(captured,shots);
-  assert.equal(lastSnapshot.image,undefined);
+  assert.equal(solveCalls,before+1);assert.equal(captured,shots+1);
+  assert.match(lastSnapshot.image,/^data:image\/jpeg;base64,/);
+  captureFails=true;
+  try {
+    const blind=await request({type:'solve',mode:'field'});
+    assert.equal(blind.ok,true);
+    assert.equal(lastSnapshot.image,undefined);
+  } finally {captureFails=false;}
 });
 test('drawing the next figure is explained from a screenshot and is not filled',async()=>{
   const calls=solveCalls,shots=captured;
