@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {answerSlots, answerSlotsSchema, slotsToActions} from '../src/shared/answer-slots.js';
-import {solveWithOpenAI} from '../server/openai.js';
+import {hardQuestion, solveWithOpenAI} from '../server/openai.js';
 
 const mixed=[
   {id:'a',kind:'radio',group:'why',label:'A. SAS'},{id:'b',kind:'radio',group:'why',label:'B. SSS'},
@@ -48,16 +48,23 @@ const question={question:'Why are the triangles congruent?',dropTargets:[],limit
   {id:'FL1',kind:'select',options:[{value:'FL1-0',label:'Given'},{value:'FL1-1',label:'SAS Postulate'}]}
 ]};
 
-test('a non-congruence question uses the cheap model when confident',async()=>{
+test('only a lone plain text blank stays on the cheap model',async()=>{
+  assert.equal(hardQuestion({question:'Solve 2x = 10',fields:[{id:'x',kind:'text'}]}),false);
+  assert.equal(hardQuestion({question:'Find x',fields:[{id:'x',kind:'text'}],imageBased:true}),true);
+  assert.equal(hardQuestion({question:'Pick one',fields:[{id:'a',kind:'radio',group:'g'}]}),true);
+  assert.equal(hardQuestion({question:'Two blanks',fields:[{id:'x',kind:'text'},{id:'y',kind:'text'}]}),true);
   const models=[];
   const simple={question:'Solve 2x = 10',dropTargets:[],limitations:[],fields:[{id:'x',kind:'text',label:'x'}]};
-  const solution=await withFetch(body=>{models.push(body.model);return reply({answer:'5',confidence:.95,supported:true,answers:{blank_1:'5'}});},
-    ()=>solveWithOpenAI(simple,'field'));
+  const solution=await withFetch(body=>{
+    models.push(body.model);
+    assert.match(body.instructions,/Use every clue on the page/);
+    return reply({answer:'5',confidence:.95,supported:true,answers:{blank_1:'5'}});
+  },()=>solveWithOpenAI(simple,'field'));
   assert.deepEqual(models,['gpt-5-mini']);
   assert.equal(solution.actions[0].value,'5');
 });
 
-test('congruence questions go straight to the strong model with the ASA/AAS checklist',async()=>{
+test('diagrams and mixed blanks go straight to the strong model with the page-clue checklist',async()=>{
   const models=[];
   let instructions='';
   const solution=await withFetch(body=>{
@@ -67,18 +74,27 @@ test('congruence questions go straight to the strong model with the ASA/AAS chec
     return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
   },()=>solveWithOpenAI(question,'field'));
   assert.deepEqual(models,['gpt-5']);
+  assert.match(instructions,/Use every clue on the page/);
   assert.match(instructions,/ASA vs AAS trap/);
-  assert.match(instructions,/INCLUD/);
   assert.deepEqual(solution.actions.map(a=>a.target),['a','FL1']);
+
+  models.length=0;
+  await withFetch(body=>{
+    models.push(body.model);
+    assert.equal(body.reasoning.effort,'high');
+    assert.match(body.instructions,/screenshot\/figure/);
+    return reply({answer:'4',confidence:.95,supported:true,answers:{blank_1:'4'}});
+  },()=>solveWithOpenAI({question:'Find the intercept',fields:[{id:'x',kind:'text'}],dropTargets:[],limitations:[],imageBased:true,image:'data:image/png;base64,fixture'},'field'));
+  assert.deepEqual(models,['gpt-5']);
 });
 
-test('an unsure non-congruence answer is re-solved once by the strong model',async()=>{
+test('an unsure plain-text answer is re-solved once by the strong model',async()=>{
   const models=[];
   const simple={question:'Find x',dropTargets:[],limitations:[],fields:[{id:'x',kind:'text',label:'x'}]};
   const solution=await withFetch(body=>{
     models.push(body.model);
     return body.model==='gpt-5-mini'
-      ? reply({answer:'?',confidence:.4,supported:true,answers:{blank_1:'3'}})
+      ? reply({answer:'?',confidence:.9,supported:true,answers:{blank_1:'3'}})
       : reply({answer:'5',confidence:.95,supported:true,answers:{blank_1:'5'}});
   },()=>solveWithOpenAI(simple,'field'));
   assert.deepEqual(models,['gpt-5-mini','gpt-5']);

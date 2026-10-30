@@ -3,7 +3,16 @@ export const TUTOR_INSTRUCTIONS = String.raw`You are AuraSolve, a careful math a
 
 export const GEOMETRY_CHECKS = "Identify each ray and vertex and associate every angle label with its region before writing equations. Never infer equal angles, perpendicularity or parallelism from appearance alone. Use explicit givens or marked relationships. Substitute every solved variable into all labeled expressions and verify those relationships. Unreadable labels require supported=false and no actions.";
 
-// Triangle congruence is the highest-error chapter. The model must inventory marks
+// Accuracy fails when the model answers from the question stem alone and skips
+// diagram marks, table values, axis scales, given equations, or field context.
+export const PAGE_CLUES = `Use every clue on the page. Before solving, the explanation must inventory:
+1) Every given from the question text: equations, inequalities, constraints, units, "find ___", "which of the following", "not enough information", and any stated theorem or definition.
+2) Every clue from the screenshot/figure when one is attached: axis scales, tick marks, shaded regions, graph intercepts, table cells, labels on points/sides/angles, hash marks, right-angle marks, arrows, colors, and the exact wording on each visible choice.
+3) Every supplied field: its kind, label, context, and what quantity that blank wants. Multi-part questions answer only the active part's fields, but still read earlier completed parts as given facts when they appear.
+4) Solve only after that inventory. An answer that ignores a marked length, a table value, a graph feature, a field context, or a stated constraint is wrong even if the algebra looks clean.
+5) Re-check by substituting the answer back into every given and by testing why each rejected multiple-choice option fails. If two interpretations remain, lower confidence below 0.85 and prefer the reading that uses more of the page clues. Unreadable necessary labels require supported=false.`;
+
+// Triangle congruence is a high-error chapter. The model must inventory marks
 // before naming a postulate, and must not confuse ASA with AAS.
 export const CONGRUENCE_CHECKS = `Triangle congruence checklist (follow in order before answering):
 1) Inventory ONLY marked or given facts from the text and diagram ticks/arcs/right-angle marks. Do not invent equal sides or angles from how the figure looks.
