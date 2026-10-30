@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How to install the AuraSolve Chrome extension, step by step.">
+  <meta name="theme-color" content="#ffffff">
+  <title>Install AuraSolve</title>
+  <link rel="icon" type="image/png" href="icon.png?v=3">
+  <link rel="apple-touch-icon" href="icon.png?v=3">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=48">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html" aria-label="AuraSolve home">
+      <img src="icon.png?v=3" alt="" width="28" height="28">
+      <span>AuraSolve</span>
+    </a>
+    <nav class="nav-center" aria-label="Sections">
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#features">Features</a>
+      <a href="index.html#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-primary btn-sm" data-direct href="https://github.com/coleperrilliat-maker/aurasolve/releases/latest/download/AuraSolve-extension.zip">Download zip</a>
+  </header>
+
+  <main class="install">
+    <div class="install-head">
+      <span class="chip install-chip" id="download-status"><span class="dot"></span>Your download is starting…</span>
+      <h1>Install AuraSolve in <em>5 steps</em></h1>
+      <p class="section-lead">About a minute in Google Chrome. If the download didn't start, <a data-direct href="https://github.com/coleperrilliat-maker/aurasolve/releases/latest/download/AuraSolve-extension.zip">click here to download it again</a>.</p>
+      <div class="os-switch" role="tablist" aria-label="Your computer">
+        <button type="button" role="tab" data-os="mac" aria-selected="true">Mac</button>
+        <button type="button" role="tab" data-os="win" aria-selected="false">Windows</button>
+      </div>
+    </div>
+
+    <ol class="install-steps">
+      <li class="install-step">
+        <span class="install-num">1</span>
+        <div class="install-body">
+          <h2>Find the zip you downloaded</h2>
+          <p>It's called <code>AuraSolve-extension.zip</code>.</p>
+          <ul class="os-mac">
+            <li>Open <strong>Finder</strong> and click <strong>Downloads</strong> in the sidebar.</li>
+            <li>Or click the download arrow in the top right of Chrome and choose <strong>Show in Finder</strong>.</li>
+          </ul>
+          <ul class="os-win">
+            <li>Open <strong>File Explorer</strong> and click <strong>Downloads</strong>.</li>
+            <li>Or click the download arrow in the top right of Chrome and choose <strong>Show in folder</strong>.</li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="install-step">
+        <span class="install-num">2</span>
+        <div class="install-body">
+          <h2>Unzip it</h2>
+          <ul class="os-mac">
+            <li><strong>Double-click</strong> <code>AuraSolve-extension.zip</code>.</li>
+            <li>A folder named <code>AuraSolve-extension</code> appears next to it.</li>
+          </ul>
+          <ul class="os-win">
+            <li><strong>Right-click</strong> <code>AuraSolve-extension.zip</code> and choose <strong>Extract All…</strong></li>
+            <li>Click <strong>Extract</strong>. A folder named <code>AuraSolve-extension</code> opens.</li>
+            <li>Don't skip this. Chrome can't load the extension from inside the zip.</li>
+          </ul>
+          <p class="install-tip"><strong>Tip:</strong> move the <code>AuraSolve-extension</code> folder to <strong>Documents</strong> now. Chrome runs it from wherever it sits, so if you delete it later, AuraSolve stops working.</p>
+          <img class="install-shot" src="steps/download-unzip.png?v=2" alt="The zip and the unzipped AuraSolve-extension folder" loading="lazy">
+        </div>
+      </li>
+
+      <li class="install-step">
+        <span class="install-num">3</span>
+        <div class="install-body">
+          <h2>Open Chrome's extensions page</h2>
+          <ul>
+            <li>Copy this into Chrome's address bar and press Enter: <button type="button" class="copy" data-copy="chrome://extensions"><code>chrome://extensions</code><span>Copy</span></button></li>
+            <li>Or click the <strong>⋮</strong> menu → <strong>Extensions</strong> → <strong>Manage Extensions</strong>.</li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="install-step">
+        <span class="install-num">4</span>
+        <div class="install-body">
+          <h2>Turn on Developer mode and load the folder</h2>
+          <ul>
+            <li>Flip the <strong>Developer mode</strong> switch in the top right corner on.</li>
+            <li>Click <strong>Load unpacked</strong> in the top left.</li>
+            <li>Pick the <code>AuraSolve-extension</code> folder and click <strong><span class="os-mac-inline">Open</span><span class="os-win-inline">Select Folder</span></strong>.</li>
+          </ul>
+          <p class="install-tip"><strong>Pick the folder that has <code>manifest.json</code> directly inside it.</strong> If Chrome says "Manifest file is missing," you picked the wrong folder. <span class="os-win-inline">On Windows, Extract All sometimes makes a folder inside a folder. Open it once and pick the inner one.</span></p>
+          <img class="install-shot" src="steps/load-unpacked.png?v=1" alt="Developer mode switch and the Load unpacked button in chrome://extensions" loading="lazy">
+        </div>
+      </li>
+
+      <li class="install-step">
+        <span class="install-num">5</span>
+        <div class="install-body">
+          <h2>Pin it and open MyLab practice</h2>
+          <ul>
+            <li>Click the <strong>puzzle piece</strong> icon in Chrome's toolbar and pin <strong>AuraSolve</strong>.</li>
+            <li>Open a MyLab practice question, or refresh it if it was already open.</li>
+            <li>Press <strong>Fill answers</strong> in the AuraSolve panel beside the question.</li>
+          </ul>
+          <img class="install-shot" src="steps/fill-answers.png?v=1" alt="The Fill answers button on a MyLab practice question" loading="lazy">
+        </div>
+      </li>
+    </ol>
+
+    <section class="faq install-faq">
+      <h2>Something not <em>working?</em></h2>
+      <div class="faq-list">
+        <details>
+          <summary>Chrome says "Manifest file is missing or unreadable"</summary>
+          <p>You picked the wrong folder, or you picked the zip itself. Unzip first, then in Load unpacked choose the <code>AuraSolve-extension</code> folder that has <code>manifest.json</code> directly inside it.</p>
+        </details>
+        <details>
+          <summary>I don't see the AuraSolve panel on MyLab</summary>
+          <p>Refresh the MyLab tab after installing. Make sure AuraSolve is switched on in <code>chrome://extensions</code>, and that you're on a practice question, not the assignment list.</p>
+        </details>
+        <details>
+          <summary>How do I update to a new version?</summary>
+          <p>Download the new zip and unzip it. In <code>chrome://extensions</code>, click <strong>Remove</strong> on the old AuraSolve, then use <strong>Load unpacked</strong> again with the new folder. Delete the old folder after that.</p>
+        </details>
+        <details>
+          <summary>Chrome shows a "Developer mode extensions" warning</summary>
+          <p>That's normal for extensions loaded with Load unpacked. Click the X to close it. AuraSolve keeps working.</p>
+        </details>
+        <details>
+          <summary>AuraSolve disappeared after I deleted the folder</summary>
+          <p>Chrome runs the extension from that folder, so deleting it removes AuraSolve. Download it again, put the unzipped folder in Documents, and repeat step 4.</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-left">
+      <span class="brand brand-sm"><img src="icon.png?v=3" alt="" width="20" height="20">AuraSolve</span>
+      <span>Made for practice, not graded work.</span>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#faq">FAQ</a>
+      <a href="terms.html">Terms</a>
+      <a href="privacy.html">Privacy</a>
+    </nav>
+    <span>© 2026 AuraSolve. Not affiliated with Pearson.</span>
+  </footer>
+
+  <script src="script.js?v=2"></script>
+</body>
+</html>
