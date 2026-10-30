@@ -26,6 +26,8 @@ const mimeByExt = {
 };
 const publicFiles = new Map([
   ["/", {file: nodePath.join(docsRoot, "index.html"), type: "text/html; charset=utf-8"}],
+  ["/terms", {file: nodePath.join(docsRoot, "terms.html"), type: "text/html; charset=utf-8"}],
+  ["/privacy", {file: nodePath.join(docsRoot, "privacy.html"), type: "text/html; charset=utf-8"}],
   ["/style.css", {file: nodePath.join(docsRoot, "style.css"), type: "text/css; charset=utf-8"}],
   ["/script.js", {file: nodePath.join(docsRoot, "script.js"), type: "text/javascript; charset=utf-8"}],
   ["/app-icon.png", {file: nodePath.join(docsRoot, "app-icon.png"), type: "image/png"}],
