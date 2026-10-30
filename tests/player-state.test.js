@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assignmentKey,controlKind,pickCheckAnswer,questionStatus,decidePlayer} from '../src/shared/player-state.js';
+import {assignmentKey,controlKind,footerAdvanceKind,pickCheckAnswer,questionStatus,decidePlayer} from '../src/shared/player-state.js';
 const view=overrides=>({fields:[{id:'a1'}],controls:{submitPresent:1},progress:{current:21,part:3,totalParts:3,status:'partial',questions:[]},feedback:{state:'unknown',modal:false},...overrides});
 test('Continue never aliases Check answer or Next question despite reused command',()=>{
  assert.equal(controlKind(['Continue'],'checkanswer'),'continue');
  assert.equal(controlKind(['Next question'],'checkanswer'),'next');
  assert.equal(controlKind(['Final Check'],'checkanswer'),'submit');
+ assert.equal(controlKind(['Final Check ›','Submit'],''),'submit');
+ assert.equal(controlKind(['Submit','Final Check'],''),'submit');
+ assert.equal(controlKind(['Submit assignment','Final Check'],''),null);
  for(const text of ['Submit','Submit assignment','Save','Save best score','Leave question'])assert.equal(controlKind([text],'checkanswer'),null);
 });
 test('assignment Submit and unlabeled command metadata can never check an answer',()=>{
@@ -14,6 +17,15 @@ test('assignment Submit and unlabeled command metadata can never check an answer
  for(const text of ['Finish homework','Turn in test','Submit quiz','Finish assignment'])
    assert.equal(controlKind([text],'checkanswer'),null);
  assert.equal(controlKind(['Check answer'],'checkanswer'),'submit');
+ assert.equal(footerAdvanceKind('Check answer'),'check');
+ assert.equal(footerAdvanceKind('Check my answer'),'check');
+ assert.equal(footerAdvanceKind('Final check'),'check');
+ assert.equal(footerAdvanceKind('Final Check ›'),'check');
+ assert.equal(footerAdvanceKind('Submit your answer Final Check'),'check');
+ assert.equal(footerAdvanceKind('Next'),'next');
+ assert.equal(footerAdvanceKind('Next ›'),'next');
+ assert.equal(footerAdvanceKind('Next question'),'next');
+ for(const text of ['Submit','Submit assignment','Save best score','Clear all',''])assert.equal(footerAdvanceKind(text),'');
  assert.equal(controlKind([],'checkanswer',{nav:true}),'submit');
  assert.equal(controlKind(['Continue'],'checkanswer',{nav:true}),'continue');
  assert.equal(controlKind([],'similarexercise'),'similar');

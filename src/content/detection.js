@@ -2,6 +2,7 @@ import {readPlayer} from "./player.js";
 import {controlKind,pickCheckAnswer} from "../shared/player-state.js";
 import {saraChoices} from './sara.js';
 import {fingerprint} from "../shared/policy.js";
+import {preferContentRect} from "../shared/capture.js";
 import {radioPartGroups} from "../shared/solution.js";
 const ids = new WeakMap(), elements = new Map();
 let sequence = 0, selected = null;
@@ -84,6 +85,17 @@ function groupAnchor(el, prompts) {
   if (list) return list;
   if (prior.length === 1) return prior[0];
   return el?.name ? `name:${el.name}` : el;
+}
+function choiceOwner(el, radios) {
+  let node = el?.parentElement;
+  for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+    const inside = (radios || []).filter(radio => node.contains?.(radio));
+    if (inside.length === 1) return {radio: inside[0], row: node};
+  }
+  return null;
+}
+export function choiceOwnerRadio(el, radios) {
+  return choiceOwner(el, radios)?.radio || null;
 }
 function partContext(el, prompts) {
   const prior = prompts.filter(prompt => follows(prompt, el) && !prompt.contains?.(el));
@@ -177,7 +189,8 @@ export function snapshot() {
   const radioInputs = root ? [...root.querySelectorAll('input[type="radio"]')].filter(el => el.type === "radio" && visible(el) && writable(el)) : [];
   const radioInfo = radioInputs.length ? describeRadioGroups(root, radioInputs) : new Map();
   if (root) for (const el of root.querySelectorAll(fieldSelector)) {
-    if (!visible(el) || !writable(el)) continue;
+    const owned = el.type === 'radio' || el.type === 'checkbox' ? null : choiceOwner(el, radioInputs);
+    if (!visible(el) || (!writable(el) && !owned)) continue;
     const editor = el.closest?.('[data-aura-editor]') || el.closest?.(editorSelector);
     if (editor && editor !== el) {
       if (editor.matches('[data-aura-editor]')) continue;
@@ -186,7 +199,9 @@ export function snapshot() {
     }
     if (el.isContentEditable && el.parentElement?.closest('[contenteditable="true"], [contenteditable="plaintext-only"]')) continue;
     const radio = el.type === "radio" ? radioInfo.get(el) : null;
-    const base = {id:idFor(el),label:labelFor(el),context:radio?.context || fieldContext(el)};
+    const rowText = owned ? clean(owned.row?.innerText || owned.row?.textContent || '') : '';
+    const base = {id:idFor(el),label:rowText && !el.getAttribute?.('aria-label') ? rowText.slice(0,180) : labelFor(el),context:radio?.context || rowText || fieldContext(el)};
+    const choice = owned ? {choice:idFor(owned.radio)} : {};
     if (el.dataset?.auraEditor === 'dojo-select') {
       try {
         const options=JSON.parse(el.dataset.auraOptions);
@@ -194,7 +209,7 @@ export function snapshot() {
         fields.push({...base,label,kind:'select',adapter:'dojo-select',editorKey:el.dataset.auraEditorKey,options});
       } catch {limitations.push('Dropdown options could not be read.');}
     }
-    else if (el.matches('[data-aura-editor]')) fields.push({...base,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:el.dataset.auraEditor === 'mathquill' ? 'latex' : 'plain'});
+    else if (el.matches('[data-aura-editor]')) fields.push({...base,...choice,kind:'text',adapter:el.dataset.auraEditor,editorKey:el.dataset.auraEditorKey,format:el.dataset.auraEditor === 'mathquill' ? 'latex' : 'plain'});
     else if (el.matches('[role="slider"]')) {
       const min=Number(el.getAttribute('aria-valuemin')),max=Number(el.getAttribute('aria-valuemax'));
       const now=Number(el.getAttribute('aria-valuenow')),step=Number(el.getAttribute('aria-valuestep') || el.dataset?.step || 1);
@@ -214,11 +229,14 @@ export function snapshot() {
     else if (el.tagName === "SELECT" && !el.multiple) fields.push({...base,kind:"select",options:[...el.options].map(o=>({value:o.value,label:o.text,disabled:o.disabled}))});
     else if (el.type === "radio") fields.push({...base,kind:"radio",group:radio?.group || el.name || base.id});
     else if (el.type === "checkbox") fields.push({...base,kind:"checkbox"});
-    else if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && ["text","number",""].includes(el.type))) fields.push({...base,kind:"text"});
-    else if (el.isContentEditable) fields.push({...base,kind:'text',adapter:'contenteditable',format:'plain'});
+    else if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && ["text","number",""].includes(el.type))) fields.push({...base,...choice,kind:"text"});
+    else if (el.isContentEditable) fields.push({...base,...choice,kind:'text',adapter:'contenteditable',format:'plain'});
   }
   if (root) for (const el of root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .mq-editable-field, .mathquill-editable, .acctable .inputcell[role="textbox"]')) {
     if (visible(el) && writable(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>el===elementFor(f.id) || el.contains(elementFor(f.id)))) limitations.push('A Pearson math or table field needs a supported editor API.');
+  }
+  if (root) for (const el of root.querySelectorAll('.xlFillin:not(.disabled)')) {
+    if (visible(el) && !el.matches('[data-aura-editor]') && !fields.some(f=>elementFor(f.id)===el)) limitations.push("A Pearson answer dropdown's choices could not be read, so it cannot be filled.");
   }
   if (!fields.length) for (const el of saraChoices(document,location.hostname,visible)) {
     fields.push({id:idFor(el),label:(el.innerText || el.textContent).trim(),kind:'radio',group:'sara-answer',adapter:'sara-choice'});
@@ -240,7 +258,13 @@ export function snapshot() {
   const pictureNodes = pictureChoices(root, fields);
   const imageBased = pictureNodes.length > 0;
   const visual = imageBased || /\b(figures?|diagrams?|graphs?|pictures?|images?|shown|draw the next)\b/i.test(question);
-  const box = unionRect([root, ...pictureNodes]);
+  const contentNodes = [...pictureNodes];
+  for (const field of fields) {
+    const el = elementFor(field.id);
+    if (el) contentNodes.push(el.parentElement || el);
+  }
+  if (root) contentNodes.push(...[...root.querySelectorAll('p, h1, h2, h3, h4, [role="heading"], .prompt, .stem')].filter(el => painted(el)).slice(0, 8));
+  const box = preferContentRect(unionRect([root]), unionRect(contentNodes));
   const selectedElement = elementFor(selected);
   const chosen = fields.find(f=>f.id === selected) || fields.find(f=>elementFor(f.id)?.contains?.(selectedElement));
   const scalar=fields.filter(f=>['text','select','point','drag'].includes(f.kind));
@@ -250,23 +274,30 @@ export function snapshot() {
     fallback:isFallback(root),promptHash,visual,imageBased,rect:box,viewport:globalThis.innerWidth || 0,viewportHeight:globalThis.innerHeight || 0,devicePixelRatio:globalThis.devicePixelRatio || 1,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
-function graphic(el) {
-  if (!el || !visible(el) || el.closest?.('#aurasolve-root, nav, header, button')) return false;
+function painted(el) {
+  if (!el?.isConnected || el.closest?.('#aurasolve-root, nav, header, button, [role="navigation"]')) return false;
+  let style;
+  try { style = getComputedStyle(el); } catch { return false; }
+  if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
   const box = el.getBoundingClientRect();
   return box.width >= 36 && box.height >= 36;
 }
 function pictureChoices(root, fields) {
   if (!root) return [];
-  const pictures = [...root.querySelectorAll('img, svg, canvas, figure, object, embed')].filter(graphic);
+  const pictures = [...root.querySelectorAll('img, svg, canvas, figure, object, embed, .xlFigure, [data-dojo-type*="figure"]')].filter(painted);
+  for (const frame of root.querySelectorAll('iframe')) {
+    const box = frame.getBoundingClientRect?.();
+    if (painted(frame) && box && box.width <= 720 && box.height <= 520) pictures.push(frame);
+  }
   for (const el of root.querySelectorAll('*')) {
-    if (graphic(el) && getComputedStyle(el).backgroundImage.includes('url(')) pictures.push(el);
+    if (painted(el) && getComputedStyle(el).backgroundImage.includes('url(')) pictures.push(el);
   }
   for (const field of fields) {
     if (field.kind !== 'radio' && field.kind !== 'checkbox') continue;
     const el = elementFor(field.id);
     let node = el;
     for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
-      if ([...node.querySelectorAll('img, svg, canvas, figure, object, embed')].some(graphic)) { pictures.push(node); field.imageChoice = true; break; }
+      if ([...node.querySelectorAll('img, svg, canvas, figure, object, embed, .xlFigure')].some(painted)) { pictures.push(node); field.imageChoice = true; break; }
     }
   }
   return pictures;

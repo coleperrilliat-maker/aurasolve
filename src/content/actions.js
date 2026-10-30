@@ -60,6 +60,11 @@ function separateSharedRadios(el) {
   const name = `${el.name}__${key}`;
   for (const peer of peers) if (radioPartKey(peer) === key) peer.name = name;
 }
+export function actionsInDisplayOrder(actions, fields) {
+  const order = new Map(fields.map((field, index) => [field.id, index]));
+  const opens = new Set(actions.filter(action => action.kind === 'radio' && fields.some(field => field.choice === action.target)).map(action => action.target));
+  return [...actions].sort((a, b) => ((opens.has(a.target) ? -1 : 1) * 1e6 + (order.get(a.target) ?? 1e9)) - ((opens.has(b.target) ? -1 : 1) * 1e6 + (order.get(b.target) ?? 1e9)));
+}
 export async function execute(plan) {
   guard();
   const current = snapshot();
@@ -70,18 +75,20 @@ export async function execute(plan) {
   // (including diagrams and completed editors) is not a second filling policy.
   if (plan.submit || plan.requireComplete) {
     const targets = new Set(plan.solution.actions.map(a=>a.target));
+    const picked = new Set(plan.solution.actions.filter(a=>a.kind==='radio').map(a=>a.target));
     for (const f of current.fields) {
-      const covered = f.kind === "radio" ? current.fields.some(other=>other.kind === "radio" && other.group === f.group && targets.has(other.id)) : targets.has(f.id);
+      const covered = f.kind === "radio" ? current.fields.some(other=>other.kind === "radio" && other.group === f.group && targets.has(other.id)) : f.choice ? !picked.has(f.choice) || targets.has(f.id) : targets.has(f.id);
       if (!covered) throw new Error("The solution does not cover all answer fields. Nothing was submitted.");
     }
   }
   // Validate every target and submit control before making any changes.
   for (const a of plan.solution.actions) {
     const el = elementFor(a.target);
-    if (!visible(el) || !writable(el)) throw new Error("An answer field is no longer available.");
+    const field = current.fields.find(f=>f.id === a.target);
+    if (!visible(el) || (!writable(el) && !field?.choice)) throw new Error("An answer field is no longer available.");
   }
   if (plan.submit && !plan.deferSubmit) findButton("submit");
-  for (const a of plan.solution.actions) {
+  for (const a of actionsInDisplayOrder(plan.solution.actions, current.fields)) {
     guard();
     const el = elementFor(a.target);
     const field = current.fields.find(f=>f.id === a.target);
@@ -92,13 +99,18 @@ export async function execute(plan) {
     else if (field.editorKey) {
       await sendExtension({type:'writeEditor',planId:plan.id,target:a.target});
     }
-    else if (a.kind === "text" || a.kind === "select") setValue(el,a.value);
+    else if (a.kind === "text" || a.kind === "select") {
+      if (field.choice && !plan.solution.actions.some(other => other.kind === 'radio' && other.target === field.choice)) continue;
+      if (!writable(el)) throw new Error("The blank inside that choice did not become editable.");
+      setValue(el,a.value);
+    }
     else if (a.kind === "radio") {
       separateSharedRadios(el);
       const choice=el.labels?.[0] || el.closest?.('label, .dijitRadio, [role="radio"]') || el;
       choice.click();
       if(choice!==el)el.click();
       if (!el.checked) throw new Error("The radio answer was not accepted by the page.");
+      if (current.fields.some(f => f.choice === field.id)) await new Promise(resolve => setTimeout(resolve, 120));
     }
     else if (a.kind === "checkbox") { if (el.checked !== (a.value === "true")) el.click(); if (el.checked !== (a.value === "true")) throw new Error("Checkbox state was not retained."); }
     else if (a.kind === "point" && field.adapter === 'aria-number-line') {
@@ -151,8 +163,66 @@ export async function advance() {
 }
 
 
+function plainText(el) {
+  return String(el?.innerText || el?.value || '').replace(/\s+/g, ' ').trim();
+}
+function okButton(root) {
+  return [...root.querySelectorAll('button,[role="button"],input[type="button"],[data-dojo-attach-point="btnOk"]')]
+    .find(el => visible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' && /^(ok|okay)$/i.test(plainText(el) || String(el.getAttribute?.('aria-label') || el.getAttribute?.('title') || '').trim()));
+}
+// Pearson's "That's incorrect" card is not always marked as a dialog.
+export function findIncorrectDialog() {
+  const hits = [...document.querySelectorAll('div,section,aside,[role="dialog"],[role="alertdialog"]')].filter(el => {
+    if (!visible(el)) return false;
+    const text = plainText(el);
+    if (text.length > 700 || !/that['’]s incorrect\b/i.test(text)) return false;
+    return Boolean(okButton(el));
+  });
+  hits.sort((a, b) => plainText(a).length - plainText(b).length);
+  return hits[0] || null;
+}
+export function incorrectNotice() {
+  return {open: Boolean(findIncorrectDialog())};
+}
+export function askRetry() {
+  return new Promise(resolve => {
+    const host = document.createElement('div');
+    host.setAttribute('data-aura-retry', '');
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgba(15,23,42,.35);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+    const card = document.createElement('div');
+    card.style.cssText = 'width:min(360px,calc(100vw - 32px));background:#fff;color:#0f172a;border-radius:16px;padding:22px 22px 18px;box-shadow:0 24px 60px rgba(15,23,42,.22)';
+    card.innerHTML = '<p style="margin:0 0 6px;font-size:16px;font-weight:650">That\'s incorrect</p><p style="margin:0 0 18px;color:#475569">Try this question again?</p>';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:flex-end;gap:8px';
+    const no = document.createElement('button');
+    no.type = 'button';
+    no.textContent = 'Not now';
+    no.style.cssText = 'height:36px;padding:0 14px;border:0;border-radius:999px;background:#eef2f7;color:#0f172a;font:inherit;cursor:pointer';
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.textContent = 'Try again';
+    yes.style.cssText = 'height:36px;padding:0 14px;border:0;border-radius:999px;background:#0666f5;color:white;font:inherit;cursor:pointer';
+    const finish = choice => { host.remove(); resolve({yes: choice}); };
+    no.onclick = () => finish(false);
+    yes.onclick = () => finish(true);
+    host.addEventListener('click', event => { if (event.target === host) finish(false); });
+    host.addEventListener('keydown', event => { if (event.key === 'Escape') finish(false); });
+    row.append(no, yes);
+    card.append(row);
+    host.append(card);
+    (document.body || document.documentElement).appendChild(host);
+    yes.focus?.();
+  });
+}
 export function dismissFeedback(){
   guard();
+  const incorrect = findIncorrectDialog();
+  if (incorrect) {
+    const button = okButton(incorrect);
+    if (!button) return {clicked:false};
+    button.click();
+    return {clicked:true};
+  }
   const dialogs=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.correctDialog,[role="alert"]')].filter(visible)
     .filter(el=>/incorrect|correct|excellent|well done|great job|fantastic|nice work|try again/i.test(el.innerText));
   const buttons=[...new Set(dialogs.flatMap(dialog=>[...dialog.querySelectorAll('button,[role="button"],input[type="button"],[data-dojo-attach-point="btnOk"]')]))]

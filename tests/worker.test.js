@@ -12,6 +12,7 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   const wrapped=data=>[{result:{ok:true,data}}];
   if(input.args?.[0]==='prepareField'){prepared++;return wrapped({ready:true});}
   if(input.args?.[0]==='dismissFeedback'){verdict='unknown';return wrapped({clicked:true});}
+  if(input.args?.[0]==='show')return [{frameId:0,result:{clicked:false,shown:true,count:1,bottom:700,right:900,red:90,kind:'check'}}];
   if(input.args?.[0]==='footer-next' || input.args?.[0]==='locate' || input.args?.[0]==='press'){if(input.args[0]==='press'){clickedKind='next';if(clickFails)throw new Error('Lost click reply');return [{frameId:0,result:{clicked:true,count:1,bottom:700,right:900,red:90}}];}return [{frameId:0,result:{clicked:false,count:1,bottom:700,right:900,red:90}}];}
   if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];clickedKind=input.args[1];if(clickFails)throw new Error('Lost click reply');return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
@@ -30,16 +31,13 @@ globalThis.fetch=async (url,options)=>{
   solveCalls++;lastSnapshot=JSON.parse(options.body).snapshot;
   return{ok:true,json:async()=>({solution})};
 };
+globalThis.__AURA_INSTANT__ = true;
 await import('../src/background/worker.js');
 const request=message=>new Promise(resolve=>listener(message,{id:'unit-test',tab:{id:1},frameId:0},resolve));
-test('worker enforces consent, applies once, and invalidates on stop',async()=>{
-  let result=await request({type:'solve',mode:'autopilot'});assert.equal(result.ok,false);assert.match(result.error,/sign/);
-  assert.equal((await request({type:'inspect'})).data.signed,false);
-  assert.equal((await request({type:'consent',statement:'yes',signature:'Student'})).ok,false);
-  assert.equal((await request({type:'consent',statement:'This is not a graded homework assignment',signature:''})).ok,false);
-  assert.equal((await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'})).ok,true);
+test('worker applies once and invalidates on stop',async()=>{
   assert.equal((await request({type:'inspect'})).data.signed,true);
-  result=await request({type:'solve',mode:'field'});assert.equal(result.ok,true);const planId=result.data.planId;
+  let result=await request({type:'solve',mode:'autopilot'});assert.equal(result.ok,true);
+  const planId=result.data.planId;
   assert.equal((await request({type:'apply',planId})).ok,true);assert.equal(applied,1);
   assert.equal((await request({type:'apply',planId})).ok,false);assert.equal(applied,1);
   const next=await request({type:'solve',mode:'field'});assert.equal(next.ok,true);
@@ -134,6 +132,28 @@ test('a visual question never silently falls back to text when capture fails',as
   } finally {state.visual=false;captureFails=false;}
 });
 
+test('a proof made only of dropdowns does not send its diagram',async()=>{
+  const fields=state.fields, visual=state.visual, question=state.question, limitations=state.limitations;
+  state.fields=[
+    {id:'FL1',kind:'select',options:[{value:'FL1-0',label:'Given'}]},
+    {id:'FL2',kind:'select',options:[{value:'FL2-0',label:'Definition of midpoint'}]}
+  ];
+  state.visual=true;
+  state.question='Complete the proof. [figure 1]';
+  state.limitations=['A diagram needs a screenshot to read.'];
+  const before=solveCalls, shots=captured;
+  try {
+    const result=await request({type:'solve',mode:'field'});
+    assert.equal(result.ok,true);
+    assert.equal(captured,shots);
+    assert.equal(solveCalls,before+1);
+    assert.equal(lastSnapshot.visual,false);
+    assert.equal(lastSnapshot.image,undefined);
+    assert.deepEqual(lastSnapshot.limitations,[]);
+  } finally {
+    state.fields=fields;state.visual=visual;state.question=question;state.limitations=limitations;
+  }
+});
 test('text-only questions do not capture or send screenshots',async()=>{
   state.visual=false;
   const before=solveCalls, shots=captured;

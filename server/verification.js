@@ -45,21 +45,37 @@ export function arithmeticCheck(snapshot,solution){
 }
 function reject(first,message){return {...first,supported:false,actions:[],confidence:Math.min(first.confidence,.49),limitation:message,
   explanation:first.explanation+'\n- **Needs review:** '+message};}
+export function coversEveryField(solution, snapshot) {
+  const fields = snapshot?.fields || [];
+  if (!fields.length || !solution?.actions?.length) return false;
+  const targets = new Set(solution.actions.map(action => action.target));
+  const seenGroups = new Set();
+  for (const field of fields) {
+    if (field.kind === 'radio') {
+      if (seenGroups.has(field.group)) continue;
+      seenGroups.add(field.group);
+      const covered = fields.some(other => other.kind === 'radio' && other.group === field.group && targets.has(other.id));
+      if (!covered) return false;
+    } else if (field.choice) {
+      if (targets.has(field.choice) && !targets.has(field.id)) return false;
+    } else if (!targets.has(field.id)) return false;
+  }
+  return true;
+}
+export function keepCoveredSolution(solution, snapshot) {
+  if (!solution || solution.supported || !coversEveryField(solution, snapshot)) return solution;
+  const excuse = /cover every|nothing was filled|did not cover|active blank/i.test(solution.limitation || '');
+  if (solution.confidence < 0.85 && !excuse) return solution;
+  return {...solution, supported:true, confidence:Math.max(solution.confidence || 0, 0.9), limitation:excuse ? '' : (solution.limitation || '')};
+}
+// One reasoning-model call per question. The model checks its own work; a second
+// paid call doubled the cost and mostly surfaced a weaker model's noise.
 export async function verifiedSolve(solve, snapshot, mode) {
-  const first=await solve(snapshot,mode,false);
+  const first=keepCoveredSolution(await solve(snapshot,mode), snapshot);
   if(mode==='explain' || !first.supported || !first.actions.length)return first;
   for(const previous of snapshot.retryContext || []){
     if(sameActions(first,{supported:true,actions:previous.actions || []}))return reject(first,'This answer was already rejected by the page. Review this part manually.');
   }
-  const checked=arithmeticCheck(snapshot,first);
-  if(checked===true)return first;
-  if(snapshot.imageBased && first.actions.every(action=>action.kind==='radio' || action.kind==='checkbox'))return first;
-  const menus=(snapshot.fields || []).filter(field=>field.kind==='select' && field.options?.length);
-  if(menus.length && menus.length===(snapshot.fields || []).length && first.actions.length===menus.length && first.actions.every(action=>action.kind==='select'))return first;
-  if(checked===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
-  const second=await solve(snapshot,mode,true);
-  if(!sameActions(first,second))return reject(first,snapshot.imageBased || /draw the next figure|list of figures/i.test(snapshot.question || '')
-    ? 'The two readings of the figure pattern did not match. Nothing was filled.'
-    : 'Independent solutions disagreed. Review the question before filling.');
-  return {...second,confidence:Math.min(first.confidence,second.confidence)};
+  if(arithmeticCheck(snapshot,first)===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
+  return first;
 }

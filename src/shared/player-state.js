@@ -6,8 +6,14 @@ export function questionStatus(label){
   if(/in progress|incomplete|attempted/i.test(label) && !/not attempted/i.test(label))return 'incomplete';
   return 'unanswered';
 }
+const buttonText=value=>clean(String(value||'').replace(/[\u200B-\u200D\uFEFF\uE000-\uF8FF]/g,'').replace(/\s*[›>»→]+\s*$/,''));
+const finalCheckText=text=>text.length<=80 && /\bfinal\s+check\b/i.test(text) && !/\b(?:assignment|homework|test|quiz|exam)\b/i.test(text);
 export function controlKind(labels,command='',extra={}){
-  const texts=labels.map(clean).filter(Boolean);
+  const texts=labels.map(buttonText).filter(Boolean);
+  const assignmentHandIn=texts.some(t=>/\b(?:submit|finish|turn in) (?:assignment|homework|test|quiz|exam)\b/i.test(t) || /^save best score$/i.test(t));
+  // "Final Check" is the last-part Check answer, even when another accessible
+  // name on that same control says Submit. A real assignment hand-in stays blocked.
+  if(texts.some(finalCheckText) && !assignmentHandIn)return 'submit';
   // Assignment-level controls are never a per-question answer check. Treat a
   // dangerous visible label as authoritative even when Pearson reuses command
   // metadata or another accessible label says "Check answer".
@@ -27,6 +33,14 @@ export function controlKind(labels,command='',extra={}){
   // command metadata. Continue, Next, and assignment Submit have labels.
   if(String(command).toLowerCase()==='checkanswer' && extra.nav && !extra.dialog)return 'submit';
   return null;
+}
+// The red footer control is either Check answer or Next. They advance the
+// same way. Assignment Submit is never one of them.
+export function footerAdvanceKind(label){
+  const text=buttonText(label);
+  if(/^(?:check(?:\s+my)?\s+answer|final\s+check)$/i.test(text) || finalCheckText(text))return 'check';
+  if(/^next(?:\s+(?:question|problem))?$/i.test(text))return 'next';
+  return '';
 }
 // Several Check answer buttons can be visible. Use the player control at the
 // lower right, and never a button inside a hand-in or feedback dialog.

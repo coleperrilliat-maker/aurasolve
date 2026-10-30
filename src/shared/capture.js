@@ -1,3 +1,10 @@
+// A Pearson player layout is mostly empty. Keep the diagram, prompt, and blanks.
+export function preferContentRect(full, tight) {
+  if (!tight || !(tight.width > 40) || !(tight.height > 40)) return full || null;
+  if (!full || !(full.width > 0) || !(full.height > 0)) return tight;
+  if (tight.width * tight.height < full.width * full.height * 0.6) return tight;
+  return full;
+}
 // Crop a visible-tab bitmap down to the question, including its picture choices.
 export function cropBox(bitmap, rect, dpr = 1) {
   if (!bitmap || !rect || !(rect.width > 40) || !(rect.height > 40)) return null;
