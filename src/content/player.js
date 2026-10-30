@@ -1,24 +1,5 @@
 import {controlKind,questionStatus} from '../shared/player-state.js';
 const clean=value=>String(value || '').replace(/\s+/g,' ').trim();
-const controlSelector='button,input[type="button"],input[type="submit"],[role="button"],a,[data-testid*="next" i],[data-testid*="check" i],[class*="next" i]';
-export function controlNodes(root){
-  const nodes=[];
-  const visit=node=>{
-    if(!node?.querySelectorAll)return;
-    nodes.push(...node.querySelectorAll(controlSelector));
-    for(const el of node.querySelectorAll('*'))if(el.shadowRoot)visit(el.shadowRoot);
-  };
-  visit(root);
-  return nodes;
-}
-function controlLabels(el){
-  return [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')];
-}
-export function matchedControls(doc,visible){
-  const kindOf=el=>controlKind(controlLabels(el),el.getAttribute('command') || '');
-  const matches=controlNodes(doc).filter(el=>visible(el) && ['submit','next','continue','similar'].includes(kindOf(el)));
-  return matches.filter(el=>!matches.some(other=>other!==el && el.contains(other) && kindOf(other)===kindOf(el)));
-}
 export function readPlayer(doc,visible){
   const headings=[...doc.querySelectorAll('[role="heading"],h2,h3')].filter(visible).map(e=>clean(e.innerText));
   const current=Number(headings.map(t=>t.match(/^Question\s+(\d+)(?:,|\s|$)/i)).find(Boolean)?.[1]) || null;
@@ -30,10 +11,13 @@ export function readPlayer(doc,visible){
     return {number:Number(label.match(/^Question\s+(\d+)/i)?.[1]),status:questionStatus(label)};
   }).filter(q=>q.number>0);
   const controls={submit:0,submitPresent:0,continue:0,next:0,similar:0};
-  for(const el of matchedControls(doc,visible)){
-    const kind=controlKind(controlLabels(el),el.getAttribute('command') || '');
+  for(const el of doc.querySelectorAll('button,input[type="button"],input[type="submit"],[role="button"],a.navButton,[command="checkanswer"],[command="continue"],[command="similarexercise"],[command="next"],[command="nextquestion"],[command="similarquestion"]')){
+    if(!visible(el))continue;
+    const nav=el.matches?.('button.navButton, a.navButton, .navButton');
+    const dialog=Boolean(el.closest?.('.xlDialogButtonContainer, [role="dialog"], [role="alertdialog"], .dijitDialog, .feedbackDialog'));
+    const kind=controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '',{nav,dialog});
     if(kind==='submit')controls.submitPresent++;
-    if(!el.disabled && el.getAttribute('aria-disabled')!=='true')controls[kind]++;
+    if(kind in controls && !el.disabled && el.getAttribute('aria-disabled')!=='true')controls[kind]++;
   }
   const dialogs=[...doc.querySelectorAll('[role="dialog"],[role="alertdialog"],.dijitDialog,.modal')].filter(visible);
   const incompleteWarning=dialogs.some(e=>/you have not completed this question/i.test(e.innerText) && /leave this question/i.test(e.innerText));

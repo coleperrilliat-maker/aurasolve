@@ -3,7 +3,7 @@ import http from "node:http";
 import {readFile, stat} from "node:fs/promises";
 import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
-import {solveWithOpenAI, DEFAULT_MODEL} from "./openai.js";
+import {solveWithOpenAI, pickModel} from "./openai.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 4_000_000;
@@ -133,7 +133,7 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       service: "aurasolve",
       version: BUILD_VERSION,
-      model: process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL,
+      model: pickModel(),
       keyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
     });
     return;

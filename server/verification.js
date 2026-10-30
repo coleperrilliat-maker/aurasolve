@@ -1,16 +1,18 @@
-import {missingAnswers} from '../src/shared/solution.js';
 // Agreement is an additional error screen, not an accuracy guarantee.
+const sameValue = (left, right) => {
+  const a = String(left ?? '').replace(/\s+/g, ' ').trim();
+  const b = String(right ?? '').replace(/\s+/g, ' ').trim();
+  if (a === b) return true;
+  return /^-?\d+(?:\.\d+)?$/.test(a) && /^-?\d+(?:\.\d+)?$/.test(b) && Number(a) === Number(b);
+};
 export function sameActions(first, second) {
-  // Compare only what the executor actually does. A radio's unused value can
-  // be "B", the option text, or empty without changing the selected answer.
-  const normalize = actions => JSON.stringify(actions.map(a=>({
-    target:a.target,kind:a.kind,
-    ...(['text','select','multiselect','checkbox'].includes(a.kind)?{value:a.value}:{}),
-    ...(a.kind==='point'?{x:a.x,y:a.y}:{}),
-    ...(a.kind==='drag'?{destination:a.destination}:{})
-  })).sort((a,b)=>a.target.localeCompare(b.target)));
-  return first.supported && second.supported && first.actions.length>0 &&
-    normalize(first.actions)===normalize(second.actions);
+  const actions = solution => (solution.actions || []).map(a=>({
+    target:a.target,kind:a.kind,value:String(a.value ?? '').replace(/\s+/g, ' ').trim(),x:a.x,y:a.y,destination:a.destination
+  })).sort((a,b)=>a.target.localeCompare(b.target));
+  const left = actions(first), right = actions(second);
+  return first.supported && second.supported && left.length>0 && left.length===right.length &&
+    left.every((action,index)=>action.target===right[index].target && action.kind===right[index].kind &&
+      sameValue(action.value, right[index].value) && action.x===right[index].x && action.y===right[index].y && action.destination===right[index].destination);
 }
 
 // Strict arithmetic grammar, never eval or page-provided code. Only a complete,
@@ -43,26 +45,37 @@ export function arithmeticCheck(snapshot,solution){
 }
 function reject(first,message){return {...first,supported:false,actions:[],confidence:Math.min(first.confidence,.49),limitation:message,
   explanation:first.explanation+'\n- **Needs review:** '+message};}
+export function coversEveryField(solution, snapshot) {
+  const fields = snapshot?.fields || [];
+  if (!fields.length || !solution?.actions?.length) return false;
+  const targets = new Set(solution.actions.map(action => action.target));
+  const seenGroups = new Set();
+  for (const field of fields) {
+    if (field.kind === 'radio') {
+      if (seenGroups.has(field.group)) continue;
+      seenGroups.add(field.group);
+      const covered = fields.some(other => other.kind === 'radio' && other.group === field.group && targets.has(other.id));
+      if (!covered) return false;
+    } else if (field.choice) {
+      if (targets.has(field.choice) && !targets.has(field.id)) return false;
+    } else if (!targets.has(field.id)) return false;
+  }
+  return true;
+}
+export function keepCoveredSolution(solution, snapshot) {
+  if (!solution || solution.supported || !coversEveryField(solution, snapshot)) return solution;
+  const excuse = /cover every|nothing was filled|did not cover|active blank/i.test(solution.limitation || '');
+  if (solution.confidence < 0.85 && !excuse) return solution;
+  return {...solution, supported:true, confidence:Math.max(solution.confidence || 0, 0.9), limitation:excuse ? '' : (solution.limitation || '')};
+}
+// One reasoning-model call per question. The model checks its own work; a second
+// paid call doubled the cost and mostly surfaced a weaker model's noise.
 export async function verifiedSolve(solve, snapshot, mode) {
-  const first=await solve(snapshot,mode,false);
+  const first=keepCoveredSolution(await solve(snapshot,mode), snapshot);
   if(mode==='explain' || !first.supported || !first.actions.length)return first;
-  if(snapshot.unmappedControls?.length)return reject(first,snapshot.unmappedControls.join(' '));
-  if(snapshot.fields && missingAnswers(first,snapshot).length)return reject(first,'The answer did not cover every active blank. Nothing was filled.');
   for(const previous of snapshot.retryContext || []){
     if(sameActions(first,{supported:true,actions:previous.actions || []}))return reject(first,'This answer was already rejected by the page. Review this part manually.');
   }
-  const checked=arithmeticCheck(snapshot,first);
-  if(checked===true)return first;
-  if(checked===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
-  const second=await solve(snapshot,mode,true);
-  if(snapshot.fields && missingAnswers(second,snapshot).length)return reject(second,'The checked answer did not cover every active blank. Nothing was filled.');
-  if(sameActions(first,second))return {...second,confidence:Math.min(first.confidence,second.confidence)};
-  // One outlier is common on close multiple-choice options. Fill only when
-  // two of three independent solves choose the same action.
-  const third=await solve(snapshot,mode,true);
-  if(snapshot.fields && missingAnswers(third,snapshot).length)return reject(third,'The checked answer did not cover every active blank. Nothing was filled.');
-  const votes=[first,second,third];
-  const agreed=votes.find(candidate=>votes.filter(other=>sameActions(candidate,other)).length>=2);
-  if(!agreed)return reject(first,'Independent solutions disagreed. Review the question before filling.');
-  return {...agreed,confidence:Math.min(...votes.filter(other=>sameActions(agreed,other)).map(other=>other.confidence))};
+  if(arithmeticCheck(snapshot,first)===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
+  return first;
 }

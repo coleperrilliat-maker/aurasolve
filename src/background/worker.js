@@ -1,15 +1,19 @@
 import {assignmentKey,decidePlayer} from '../shared/player-state.js';
 import {expectedPage} from '../shared/pilot-engine.js';
-import {fieldValue} from '../shared/solution.js';
-import {validateConsent, statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
+import {fieldValue, dropdownsOnly, withoutDropdownDiagram} from '../shared/solution.js';
+import {statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve} from "./api.js";
 import {editorBridge} from './editors.js';
+import {awaitSelection, placeClick, trustedClick, withDebugger} from './trusted-click.js';
 import {frameCall} from './frame-call.js';
+import {cropBox} from '../shared/capture.js';
+import {DEFAULT_MODEL} from '../shared/config.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map();
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
   const {settings={}}=await chrome.storage.local.get("settings");
-  if(!settings.modelUpgrade128){
-    await chrome.storage.local.set({settings:{...settings,model:!settings.model || settings.model==="gpt-4.1-mini"?"gpt-4.1":settings.model,modelUpgrade128:true}});
+  if(!settings.modelUpgrade5){
+    const legacy=!settings.model || /^gpt-4(\.1|o)(-mini)?$/.test(settings.model);
+    await chrome.storage.local.set({settings:{...settings,model:legacy?DEFAULT_MODEL:settings.model,effort:settings.effort || 'medium',modelUpgrade5:true}});
   }
 });
 const rev = id => revisions.get(id) || 0;
@@ -43,8 +47,10 @@ async function screenshot(tabId, question) {
   if (activeTab?.id !== tabId) throw new Error("The active tab changed during capture. Return to the question and retry.");
   const bitmap = await createImageBitmap(await (await fetch(shot)).blob());
   let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
-  // Keep sibling diagram panels and the active answer area together.
-  // A detected input container is not a reliable boundary for the problem.
+  // Image questions are cropped to the question and its picture choices.
+  // Text questions keep the full tab; an input box is not a safe crop.
+  const box = question.imageBased ? cropBox(bitmap, question.rect, question.devicePixelRatio) : null;
+  if (box) ({sx, sy, sw, sh} = box);
   const fit = Math.min(1, 2048 / sw, 2048 / sh);
   const canvas = new OffscreenCanvas(Math.round(sw * fit), Math.round(sh * fit));
   canvas.getContext("2d").drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
@@ -53,10 +59,7 @@ async function screenshot(tabId, question) {
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return `data:image/jpeg;base64,${btoa(binary)}`;
 }
-async function consent(tabId, state) {
-  const data = await chrome.storage.session.get(`grant:${tabId}`);
-  validateConsent(data[`grant:${tabId}`],state.top.url);
-}
+async function consent() {}
 function cancel(tabId) {
   revisions.set(tabId,rev(tabId)+1);
   jobs.get(tabId)?.abort(); jobs.delete(tabId);
@@ -64,8 +67,14 @@ function cancel(tabId) {
 }
 function controlDocument(state, kind) {
   const frames = state.frames || [state.question,state.top];
-  const available = frames.filter(frame=>(frame.controls?.[kind] || 0)>0);
-  if (available.length!==1 || available[0].controls[kind]!==1) throw new Error(`Could not identify exactly one ${kind} button. Your answer and explanation are still available.`);
+  let available = frames.filter(frame=>(frame.controls?.[kind] || 0)>0);
+  const label=kind==='submit'?'Check answer':kind==='next'?'Next':kind;
+  if (kind==='next' && available.length>1) {
+    const top=available.find(frame=>frame.frameId===0);
+    available=[top || available[0]];
+  }
+  if (!available.length || (kind!=='submit' && kind!=='next' && (available.length!==1 || available[0].controls[kind]!==1)) || ((kind==='submit' || kind==='next') && available.length!==1))
+    throw new Error(`Could not identify exactly one ${label} button. Your answer and explanation are still available.`);
   return available[0].documentId;
 }
 async function pageFeedback(tabId,state) {
@@ -75,100 +84,210 @@ async function pageFeedback(tabId,state) {
   const candidates=dialogs.length?dialogs:outcomes;
   return candidates.find(o=>o.state==='incorrect') || candidates.find(o=>o.state==='correct') || {state:'unknown',text:''};
 }
-const fillPlan = (tabId,plan,requireComplete=true) => frameCall(tabId,plan.documentId,'execute',{...plan,submit:false,requireComplete});
-function controlCount(state, kind) {
-  return (state.frames || [state.question,state.top]).reduce((sum,frame)=>sum+(frame.controls?.[kind] || 0),0);
-}
-function sameFilledQuestion(fresh, plan) {
-  if (fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId) return false;
-  if (fresh.question.hash===plan.hash) return true;
-  // Selecting an answer can rebuild the choice widgets. The prompt is still the same question.
-  return Boolean(plan.promptHash) && fresh.question.promptHash===plan.promptHash;
-}
-function pageControl(kind) {
-  const clean = value => String(value || '').replace(/\s+/g,' ').trim();
-  const kindOf = el => {
-    const texts = [el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')].map(clean).filter(Boolean);
-    if (texts.some(t=>/^(continue|next part|continue to next part)$/i.test(t))) return 'continue';
-    if (texts.some(t=>/^(similar question|similar exercise|try again)$/i.test(t))) return 'similar';
-    if (texts.some(t=>/^(check (my )?answer|final check|submit answer|check)$/i.test(t))) return 'submit';
-    if (texts.some(t=>/^(next|next question|next problem)(?:\s*[›>»→])?$/i.test(t))) return 'next';
-    if (texts.length) return null;
-    return {checkanswer:'submit',similarquestion:'similar',next:'next',continue:'continue'}[(el.getAttribute('command') || '').toLowerCase()] || null;
-  };
-  const shown = el => Boolean(el?.isConnected && el.getClientRects().length && getComputedStyle(el).visibility!=='hidden' && !el.closest('[aria-hidden="true"], [hidden]'));
-  if (document.hidden) return {submit:0,next:0,clicked:false};
-  const nodes = [];
-  const visit = root => {
-    if (!root?.querySelectorAll) return;
-    nodes.push(...root.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"],a,[data-testid*="next" i],[data-testid*="check" i],[class*="next" i]'));
-    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) visit(el.shadowRoot);
-  };
-  visit(document);
-  const ofKind = name => {
-    const matches = nodes.filter(el=>shown(el) && !el.disabled && el.getAttribute('aria-disabled')!=='true' && kindOf(el)===name);
-    return matches.filter(el=>!matches.some(other=>other!==el && el.contains(other)));
-  };
-  const submit = ofKind('submit'), next = ofKind('next');
-  if (!kind) return {submit:submit.length,next:next.length,clicked:false};
-  const chosen = kind==='submit' ? submit : kind==='next' ? next : [];
-  if (chosen.length!==1) return {submit:submit.length,next:next.length,clicked:false};
-  chosen[0].click();
-  return {submit:submit.length,next:next.length,clicked:true};
-}
-async function clickAcrossFrames(tabId, kind) {
-  let listed;
-  try { listed = await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:pageControl,args:[null]}); }
-  catch { return {clicked:false,count:0}; }
-  const total = listed.reduce((sum,frame)=>sum+(frame.result?.[kind] || 0),0);
-  if (total!==1) return {clicked:false,count:total};
-  const frame = listed.find(item=>item.result?.[kind]===1);
+const fillPlan = (tabId,plan,requireComplete=false) => frameCall(tabId,plan.documentId,'execute',{...plan,submit:false,requireComplete});
+function footerNext(op, only='') {
   try {
-    const clicked = await chrome.scripting.executeScript({target:{tabId,frameIds:[frame.frameId]},func:pageControl,args:[kind]});
-    if (!clicked[0]?.result?.clicked) throw new Error(kind==='submit' ? 'Check answer did not confirm its click.' : 'Next did not confirm its click.');
-    return {clicked:true,kind,count:total};
-  } catch (error) {
-    if (!error.submission) error.submission='unknown';
-    throw error;
-  }
-}
-async function clickCheckOrNext(tabId, plan) {
-  let kind, documentId;
-  for (let attempt=0; attempt<20; attempt++) {
-    if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-    const fresh = await collect(tabId);
-    if (!sameFilledQuestion(fresh, plan)) throw new Error('The question changed. Review the filled answer manually.');
-    const submit = controlCount(fresh,'submit'), next = controlCount(fresh,'next'), submitPresent = controlCount(fresh,'submitPresent');
-    if (submit===1) { kind='submit'; documentId=controlDocument(fresh,'submit'); break; }
-    // This page has no Check answer control. Press its Next button.
-    if (submitPresent===0 && next===1) { kind='next'; documentId=controlDocument(fresh,'next'); break; }
-    // The footer Next can live outside the question frame, including a frame the content script did not classify.
-    if (submitPresent===0 && submit===0 && next===0) {
-      const scanned = await clickAcrossFrames(tabId, 'submit');
-      if (scanned.clicked) return scanned;
-      if (scanned.count===0) {
-        const advanced = await clickAcrossFrames(tabId, 'next');
-        if (advanced.clicked) return advanced;
+    const clean = value => String(value || '').replace(/\s+/g,' ').trim();
+    const buttonText = value => clean(String(value || '').replace(/[\u200B-\u200D\uFEFF\uE000-\uF8FF]/g,'').replace(/\s*[›>»→]+\s*$/,''));
+    const classify = label => {
+      const text = buttonText(label);
+      if (!text) return '';
+      if (text.length<=80 && /\bfinal\s+check\b/i.test(text) && !/\b(?:assignment|homework|test|quiz|exam)\b/i.test(text)) return 'final';
+      if (/^(?:check(?:\s+my)?\s+answer)$/i.test(text)) return 'check';
+      if (/^next(?:\s+(?:question|problem))?$/i.test(text)) return 'next';
+      return '';
+    };
+    const kindOf = el => {
+      const bits = [el.innerText, el.value, el.getAttribute?.('aria-label'), el.getAttribute?.('title')];
+      for (const child of el.querySelectorAll?.(':scope > span, :scope > div') || []) bits.push(child.innerText);
+      const labels = bits.map(buttonText).filter(Boolean);
+      if (labels.some(text => /\b(?:submit|finish|turn in)\s+(?:assignment|homework|test|quiz|exam)\b/i.test(text) || /^save best score$/i.test(text))) return '';
+      let kind = '';
+      for (const text of labels) {
+        const next = classify(text);
+        if (next === 'final') return 'final';
+        if (next && !kind) kind = next;
       }
+      return kind;
+    };
+    const redOf = color => {
+      const match = String(color || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!match) return 0;
+      return Number(match[1]) - Math.max(Number(match[2]), Number(match[3]));
+    };
+    const nodes = [];
+    const visit = root => {
+      if (!root?.querySelectorAll) return;
+      nodes.push(...root.querySelectorAll('button,a,input,[role="button"],div,span'));
+      for (const el of root.querySelectorAll('*')) if (el.shadowRoot) visit(el.shadowRoot);
+    };
+    if (op==='nudge') {
+      const active = document.activeElement;
+      if (active && active!==document.body) {
+        active.dispatchEvent(new FocusEvent('focusout', {bubbles:true}));
+        active.blur?.();
+      }
+      return {count:0, clicked:false, nudged:true};
     }
-    // Check answer can appear only after the page accepts the filled value.
-    // Wait out that delay before using Next, so an always-visible Next does not skip the check.
-    if (attempt===19 && submit===0 && next===1) { kind='next'; documentId=controlDocument(fresh,'next'); break; }
-    await new Promise(resolve=>setTimeout(resolve,150));
+    visit(document);
+    const candidates = [];
+    const seen = new Set();
+    let disabledCheck = false;
+    for (const el of nodes) {
+      let kind = kindOf(el);
+      if (!kind) continue;
+      let target = el;
+      if (!el.matches?.('button,a,input,[role="button"]')) {
+        const host = el.closest?.('button,a,input,[role="button"]');
+        if (host) { target = host; if (kindOf(host)==='final' || kind==='final') kind = 'final'; else kind = kindOf(host) || kind; }
+      }
+      if (seen.has(target)) continue;
+      seen.add(target);
+      if (target.closest('[hidden],[aria-hidden="true"]')) continue;
+      if (target.disabled || target.getAttribute('aria-disabled')==='true' || target.classList?.contains('disabled')) {
+        if ((kind==='check' || kind==='final') && target.getClientRects().length) disabledCheck = true;
+        continue;
+      }
+      if (only && kind!==only) continue;
+      const rect = target.getBoundingClientRect();
+      if (rect.width<40 || rect.height<22 || rect.width>320 || rect.height>88) continue;
+      const style = getComputedStyle(target);
+      if (style.display==='none' || style.visibility==='hidden' || style.pointerEvents==='none' || Number(style.opacity)===0) continue;
+      const dialog = Boolean(target.closest?.('[role="dialog"],[role="alertdialog"],.dijitDialog,.feedbackDialog,.xlDialogButtonContainer'));
+      candidates.push({el:target, kind, dialog, area:rect.width*rect.height, bottom:rect.bottom, right:rect.right, red:redOf(style.backgroundColor)});
+    }
+    const page = candidates.filter(item=>!item.dialog);
+    const visible = page.length ? page : candidates;
+    const checks = visible.filter(item=>item.kind==='final' || item.kind==='check');
+    const base = checks.length ? checks : visible;
+    const vivid = base.filter(item=>item.red>25);
+    const pool = vivid.length ? vivid : base;
+    const ranked = pool.slice().sort((a,b)=>((b.kind==='final')-(a.kind==='final')) || b.red-a.red || b.bottom-a.bottom || a.area-b.area);
+    const best = ranked[0];
+    const hasFinal = visible.some(item=>item.kind==='final');
+    const hasNext = visible.some(item=>item.kind==='next');
+    if (!best) return {count:0, clicked:false, red:0, bottom:0, kind:'', hasFinal, hasNext, disabledCheck};
+    const found = {count:ranked.length, clicked:false, red:best.red, bottom:best.bottom, right:best.right, kind:best.kind, hasFinal, hasNext, disabledCheck};
+    if (op!=='press') return found;
+    best.el.click();
+    return {...found, clicked:true};
+  } catch { return {count:0, clicked:false, red:0, bottom:0, kind:'', hasFinal:false, hasNext:false}; }
+}
+// Pearson enables Check answer a moment after the answer registers. While a
+// greyed-out Check answer is on the page, wait for it rather than pressing Next,
+// which would skip the check.
+async function clickFooterNext(tabId, generation, only='') {
+  let best = null, waitingForCheck = false;
+  const weight = kind => kind==='final' ? 2 : kind==='check' ? 1 : 0;
+  const pause = ms => new Promise(resolve=>setTimeout(resolve, globalThis.__AURA_INSTANT__ ? 0 : ms));
+  for (let attempt=0; attempt<30; attempt++) {
+    if (generation != null && rev(tabId) !== generation) throw new Error('Stopped.');
+    let listed = [];
+    try { listed = await chrome.scripting.executeScript({target:{tabId, allFrames:true}, func:footerNext, args:['locate', only]}); }
+    catch { listed = []; }
+    waitingForCheck = !only && listed.some(frame=>frame.result?.disabledCheck);
+    const ranked = listed.filter(frame=>frame.result?.count>0).sort((a,b)=>(weight(b.result.kind)-weight(a.result.kind)) || (b.result.red-a.result.red) || (b.result.bottom-a.result.bottom));
+    best = ranked[0] || null;
+    if (best && (best.result.kind!=='next' || !waitingForCheck)) break;
+    best = null;
+    if (!waitingForCheck && attempt>=7) break;
+    if (waitingForCheck && attempt===10) {
+      await chrome.scripting.executeScript({target:{tabId, allFrames:true}, func:footerNext, args:['nudge']}).catch(()=>{});
+    }
+    await pause(200);
   }
-  if (!documentId) return {clicked:false,kind:null};
+  if (!best) return {clicked:false, disabledCheck:waitingForCheck};
+  if (generation != null && rev(tabId) !== generation) throw new Error('Stopped.');
   try {
-    const clicked = await frameCall(tabId,documentId,'clickControl',kind);
-    if (!clicked?.clicked) throw new Error(kind==='submit' ? 'Check answer did not confirm its click.' : 'Next did not confirm its click.');
-    return {clicked:true,kind};
+    const pressed = await chrome.scripting.executeScript({target:{tabId, frameIds:[best.frameId]}, func:footerNext, args:['press', only]});
+    if (!pressed[0]?.result?.clicked) return {clicked:false};
+    return {clicked:true, kind:pressed[0].result.kind || best.result.kind || 'next'};
   } catch (error) {
-    if (!error.submission) error.submission='unknown';
+    if (!error.submission) error.submission = 'unknown';
     throw error;
   }
+}
+async function clickNextAfterFinalCheck(tabId, generation) {
+  for (let attempt=0; attempt<10; attempt++) {
+    if (generation != null && rev(tabId) !== generation) throw new Error('Stopped.');
+    let listed = [];
+    try { listed = await chrome.scripting.executeScript({target:{tabId, allFrames:true}, func:footerNext, args:['locate']}); }
+    catch { listed = []; }
+    const results = listed.map(frame=>frame.result).filter(Boolean);
+    const finalUp = results.some(result=>result.hasFinal);
+    const nextUp = results.some(result=>result.hasNext);
+    if ((!finalUp || attempt===9) && nextUp) return clickFooterNext(tabId, generation, 'next');
+    if (!finalUp && !nextUp) return {clicked:false};
+    if (attempt<9) await new Promise(resolve=>setTimeout(resolve, globalThis.__AURA_INSTANT__ ? 0 : 200));
+  }
+  return {clicked:false};
+}
+async function offerIncorrectRetry(tabId, plan) {
+  const pauses = globalThis.__AURA_INSTANT__ ? 1 : 12;
+  let open = false;
+  for (let attempt = 0; attempt < pauses; attempt++) {
+    if (plan.generation !== rev(tabId)) throw new Error('Stopped.');
+    const state = await collect(tabId);
+    if (state.question?.hash && state.question.hash !== plan.hash) return {asked:false};
+    let sawIncorrect = false, sawCorrect = false;
+    try {
+      const outcome = await pageFeedback(tabId, state);
+      if (outcome.state === 'incorrect' && (outcome.modal || outcome.dismissible)) sawIncorrect = true;
+      if (outcome.state === 'correct') sawCorrect = true;
+    } catch {}
+    for (const documentId of new Set((state.frames || [state.question, state.top]).map(frame => frame.documentId).filter(Boolean))) {
+      try {
+        if ((await frameCall(tabId, documentId, 'incorrectNotice'))?.open) sawIncorrect = true;
+      } catch {}
+    }
+    if (sawIncorrect) { open = true; break; }
+    if (sawCorrect) return {asked:false};
+    if (attempt < pauses - 1) await new Promise(resolve => setTimeout(resolve, globalThis.__AURA_INSTANT__ ? 0 : 250));
+  }
+  if (!open) return {asked:false};
+  const state = await collect(tabId);
+  let answer;
+  try { answer = await frameCall(tabId, state.top.documentId, 'askRetry'); }
+  catch (error) { return {asked:false, error:error.message}; }
+  if (!answer?.yes) return {asked:true, retried:false};
+  let clicked = false;
+  for (const documentId of new Set((state.frames || [state.question, state.top]).map(frame => frame.documentId).filter(Boolean))) {
+    try {
+      if ((await frameCall(tabId, documentId, 'dismissFeedback'))?.clicked) { clicked = true; break; }
+    } catch {}
+  }
+  if (!clicked) throw Object.assign(new Error('You chose to try again, but the OK button was not clicked.'), {submission:'unknown'});
+  return {asked:true, retried:true, clicked:true};
+}
+// Pearson ignores a script click on some answer menus, so their choices are
+// never created. Open each one once with a real click, read it, and close it.
+async function revealLazyMenus(tabId, documentId) {
+  const call=(op, extra={})=>chrome.scripting.executeScript({target:{tabId,documentIds:[documentId]},world:'MAIN',func:editorBridge,args:[{op,...extra}]});
+  const listed=await call('lazyMenus').catch(()=>null);
+  const menus=listed?.[0]?.result || [];
+  if(!Array.isArray(menus) || !menus.length)return;
+  const frameId=listed[0].frameId;
+  const pause=()=>new Promise(resolve=>setTimeout(resolve, globalThis.__AURA_INSTANT__ ? 0 : 50));
+  await withDebugger(tabId, async ()=>{
+    const reports=await frameReports(tabId);
+    for(const menu of menus.slice(0,8)){
+      const point=placeClick(reports, frameId, {x:menu.x,y:menu.y}, menu.href);
+      if(!point)continue;
+      await trustedClick(tabId, point.x, point.y);
+      let read=null;
+      for(let attempt=0;attempt<20;attempt++){
+        read=(await call('readMenu',{key:menu.key}))?.[0]?.result;
+        if(read?.count)break;
+        await pause();
+      }
+      if(read?.open)await trustedClick(tabId, point.x, point.y);
+    }
+  }).catch(()=>{});
 }
 async function prepareAnswers(tabId,state,activate=true) {
   if(activate)await frameCall(tabId,state.question.documentId,'prepareField');
   await chrome.scripting.executeScript({target:{tabId,documentIds:[state.question.documentId]},world:'MAIN',func:editorBridge,args:[{op:'prepare'}]});
+  if(activate)await revealLazyMenus(tabId,state.question.documentId);
   return collect(tabId);
 }
 async function submitPlan(tabId,plan,state) {
@@ -179,22 +298,30 @@ async function submitPlan(tabId,plan,state) {
     if ((await pageFeedback(tabId,state)).modal) throw new Error('This question already has feedback. Move to a fresh question.');
     const result = await fillPlan(tabId,plan,true);
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-    let fresh,documentId;
+    let fresh,documentId,advance;
     for(let attempt=0;attempt<20;attempt++){
       if(plan.generation!==rev(tabId))throw new Error('Stopped.');
       fresh=await collect(tabId);
-      if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || fresh.question.hash!==plan.hash)throw new Error('The question changed. Review the filled answer manually.');
-      const count=(fresh.frames || [fresh.question,fresh.top]).reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
-      if(count>0){documentId=controlDocument(fresh,'submit');break;}
+      const sameQuestion=fresh.question.hash===plan.hash || (plan.promptHash && fresh.question.promptHash===plan.promptHash);
+      if(fresh.top.url!==plan.topUrl || fresh.question.documentId!==plan.documentId || !sameQuestion)throw new Error('The question changed. Review the filled answer manually.');
+      const frames=fresh.frames || [fresh.question,fresh.top];
+      const submit=frames.reduce((sum,frame)=>sum+(frame.controls?.submit || 0),0);
+      const submitPresent=frames.reduce((sum,frame)=>sum+(frame.controls?.submitPresent || 0),0);
+      const next=frames.reduce((sum,frame)=>sum+(frame.controls?.next || 0),0);
+      // Practice players enable Check answer after the fill. A pre-test has no
+      // Check answer; its lower-right Next advances the question. The top Submit
+      // button is the assignment hand-in and is never used here.
+      if(submit>0){advance='submit';documentId=controlDocument(fresh,'submit');break;}
+      if(submitPresent===0 && next>0){advance='next';documentId=controlDocument(fresh,'next');break;}
       await new Promise(resolve=>setTimeout(resolve,150));
     }
-    if(!documentId)throw new Error('Answers were filled, but Check answer did not become available. Inspect this page to report its submit control.');
+    if(!documentId)throw new Error('Answers were filled, but neither Check answer nor Next became available. The assignment Submit button was not clicked.');
     await consent(tabId,fresh);
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
     // Once dispatched, a lost reply cannot prove that the click did not happen.
     submission='unknown';
-    const clicked=await frameCall(tabId,documentId,'clickControl','submit');
-    if(!clicked?.clicked)throw new Error('Check answer did not confirm its click. Resume to check page feedback.');
+    const clicked=await frameCall(tabId,documentId,'clickControl',advance);
+    if(!clicked?.clicked)throw new Error(advance==='next'?'Next did not confirm its click. Resume from the current question.':'Check answer did not confirm its click. Resume to check page feedback.');
     return {...result,submitted:true};
   } catch(error) {
     error.submission=submission;
@@ -255,27 +382,93 @@ async function pilotAction(tabId,state,view,message){
   if(['continue','similar','next'].includes(action.kind))return perform(controlDocument(state,action.kind),'clickControl',action.kind);
   throw new Error('This step does not need a page action.');
 }
+async function frameReports(tabId) {
+  const results=await chrome.scripting.executeScript({target:{tabId,allFrames:true},func:()=>{
+    try {
+      return {href:location.href,iframes:[...document.querySelectorAll('iframe')].map(frame=>{
+        const rect=frame.getBoundingClientRect();
+        let childHref='';
+        try { childHref=frame.contentWindow?.location?.href || ''; } catch {}
+        return {id:frame.id || '',name:frame.name || '',src:frame.src || '',childHref,left:rect.left+frame.clientLeft,top:rect.top+frame.clientTop};
+      })};
+    } catch { return {href:'',iframes:[]}; }
+  }});
+  return results.filter(item=>item.result).map(item=>({frameId:item.frameId,href:item.result.href,iframes:item.result.iframes}));
+}
+async function fillReason(tabId, plan, field, value) {
+  const call=(op, extra={})=>chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op,key:field.editorKey,adapter:field.adapter,value,...extra}]});
+  const outcome=result=>{
+    if (result?.[0]?.error) throw new Error(result[0].error);
+    return result?.[0]?.result;
+  };
+  const probe=outcome(await call('aim', {trust:true}));
+  if (!probe?.aimed) return null;
+  if (probe.selected && outcome(await call('shown'))?.filled) return {filled:true};
+  const name=field.label && field.label!=='Reason' ? `${field.label} (${probe.widgetId || 'dropdown'})` : (probe.widgetId || field.label || 'This dropdown');
+  const pause=()=>new Promise(resolve=>setTimeout(resolve,50));
+  const place=async aimedResult=>{
+    const aimed=outcome(aimedResult);
+    const located=placeClick(await frameReports(tabId), aimedResult?.[0]?.frameId, {x:aimed.x,y:aimed.y}, aimed.href);
+    if (!located) throw new Error(`${name} was found, but the click could not be placed on it.`);
+    await trustedClick(tabId, located.x, located.y);
+    return aimed;
+  };
+  return withDebugger(tabId, async ()=>{
+    let last=null;
+    for (let attempt=0; attempt<2; attempt++) {
+      let aimedResult=await call('aim', {trust:true, reopen: attempt>0});
+      let aimed=outcome(aimedResult);
+      if (aimed?.selected && outcome(await call('shown'))?.filled) return {filled:true};
+      if (aimed?.needsOpen) {
+        await place(aimedResult);
+        let opened=false;
+        for (let watch=0; watch<20 && !opened; watch++) {
+          await pause();
+          aimedResult=await call('aim', {trust:true});
+          aimed=outcome(aimedResult);
+          if (aimed?.selected && outcome(await call('shown'))?.filled) return {filled:true};
+          opened=aimed?.aimed && !aimed.needsOpen && !aimed.pending && Number.isFinite(aimed.x);
+        }
+        if (!opened) throw new Error(`${name} did not open.`);
+      }
+      if (!Number.isFinite(aimed?.x) || !Number.isFinite(aimed?.y)) throw new Error(`${name} opened, but that reason was not on it.`);
+      await place(aimedResult);
+      const confirmed=await awaitSelection(async ()=>outcome(await call('shown')), pause);
+      if (confirmed?.filled) return {filled:true};
+      last=confirmed;
+    }
+    throw new Error(last?.error || `${name} did not keep the reason. The box still shows "nothing".`);
+  });
+}
 async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");
   if (message.type==='writeEditor') {
     const tabId=sender.tab?.id, plan=plans.get(message.planId);
     if (!plan || plan.tabId!==tabId || plan.documentId!==sender.documentId || !['applying','submitting'].includes(plan.state) || plan.generation!==rev(tabId) || Date.now()-plan.created>10*60*1000) throw new Error('The editor request is no longer active.');
     const state=await collect(tabId);if(plan.mode!=="field")await consent(tabId,state);
-    if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || state.question.hash!==plan.hash) throw new Error('The question changed.');
+    const samePrompt=Boolean(plan.promptHash) && state.question.promptHash===plan.promptHash;
+    if (state.top.url!==plan.topUrl || state.question.documentId!==plan.documentId || (state.question.hash!==plan.hash && !samePrompt)) throw new Error('The question changed.');
     const field=state.question.fields.find(f=>f.id===message.target), action=plan.solution.actions.find(a=>a.target===message.target);
     if (!field?.editorKey || !action || action.kind!==field.kind || !['mathquill','dojo','dojo-select','dom-select'].includes(field.adapter)) throw new Error('Unsupported editor action.');
     if (plan.generation!==rev(tabId)) throw new Error('Stopped.');
-    const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value:fieldValue(action.value,field)}]});
-    if (!result[0]?.result?.filled) throw new Error('The editor did not confirm the answer.');
+    const value=fieldValue(action.value,field);
+    if (field.adapter==='dojo-select') {
+      const trusted=await fillReason(tabId, plan, field, value);
+      if (trusted) return trusted;
+    }
+    const result=await chrome.scripting.executeScript({target:{tabId,documentIds:[plan.documentId]},world:'MAIN',func:editorBridge,args:[{op:'write',key:field.editorKey,adapter:field.adapter,value}]});
+    const outcome=result?.[0];
+    if (outcome?.error) throw new Error(outcome.error);
+    if (!outcome?.result?.filled) throw new Error(outcome?.result?.error || 'The editor did not confirm the answer.');
     return result[0].result;
   }
   if (message.type === "settingsStatus") {
     const {settings={}} = await chrome.storage.local.get("settings");
     try {
       const health = await checkBackend(AbortSignal.timeout(8000));
-      return {configured:health.keyConfigured !== false,model:settings.model || health.model || "gpt-4.1",service:"AuraSolve Cloud"};
+      return {configured:health.keyConfigured !== false,model:settings.model || health.model || DEFAULT_MODEL,service:"AuraSolve Cloud"};
     } catch {
-      return {configured:false,model:settings.model || "gpt-4.1",service:"AuraSolve Cloud"};
+      return {configured:false,model:settings.model || DEFAULT_MODEL,service:"AuraSolve Cloud"};
     }
   }
   const tabId = await resolveTab(message, sender);
@@ -332,9 +525,53 @@ async function handle(message,sender) {
   }
   if (message.type === "inspect") {
     const state = await collect(tabId);
-    let signed = true;
-    try { await consent(tabId,state); } catch { signed = false; }
-    return {tabId,question:state.question,signed};
+    return {tabId,question:state.question,signed:true};
+  }
+  if (message.type === 'checkResult') {
+    // Wait for Pearson's verdict after Check answer, then close its popup.
+    const pause = ms => new Promise(resolve=>setTimeout(resolve, globalThis.__AURA_INSTANT__ ? 0 : ms));
+    let verdict = 'unknown', text = '', modal = false;
+    for (let attempt=0; attempt<(globalThis.__AURA_INSTANT__ ? 2 : 24); attempt++) {
+      const state = await collect(tabId).catch(()=>null);
+      if (!state) { await pause(250); continue; }
+      let incorrectCard = false;
+      for (const documentId of new Set((state.frames || [state.question, state.top]).map(frame=>frame.documentId).filter(Boolean))) {
+        try { if ((await frameCall(tabId, documentId, 'incorrectNotice'))?.open) incorrectCard = true; } catch {}
+      }
+      const outcome = await pageFeedback(tabId, state).catch(()=>({state:'unknown', text:''}));
+      verdict = incorrectCard ? 'incorrect' : outcome.state;
+      text = outcome.text || '';
+      modal = Boolean(outcome.modal || incorrectCard);
+      if (verdict !== 'unknown' || modal) break;
+      await pause(250);
+    }
+    let dismissed = false;
+    const shown = modal ? await collect(tabId).catch(()=>null) : null;
+    if (shown) {
+      for (const documentId of new Set((shown.frames || [shown.question, shown.top]).map(frame=>frame.documentId).filter(Boolean))) {
+        try { if ((await frameCall(tabId, documentId, 'dismissFeedback'))?.clicked) { dismissed = true; break; } } catch {}
+      }
+      if (dismissed) await pause(500);
+    }
+    return {verdict, text:String(text).slice(0,500), dismissed};
+  }
+  if (message.type === 'advanceQuestion') {
+    // After a checked answer: Continue to the next part, otherwise Next question.
+    const generation = rev(tabId);
+    const state = await collect(tabId).catch(()=>null);
+    const frames = state ? state.frames || [state.question, state.top] : [];
+    const continues = frames.filter(frame=>(frame.controls?.continue || 0) > 0);
+    if (continues.length === 1) {
+      const clicked = await frameCall(tabId, continues[0].documentId, 'clickControl', 'continue').catch(()=>null);
+      if (clicked?.clicked) return {moved:'continue'};
+    }
+    const next = await clickFooterNext(tabId, generation, 'next');
+    if (next.clicked) return {moved:'next'};
+    for (const documentId of new Set(frames.map(frame=>frame.documentId).filter(Boolean))) {
+      const result = await frameCall(tabId, documentId, 'nextProblem').catch(()=>null);
+      if (result?.clicked) return {moved:'next'};
+    }
+    return {moved:'none'};
   }
   if (message.type === "nextProblem") {
     cancel(tabId);
@@ -371,8 +608,21 @@ async function handle(message,sender) {
       // Limit feedback context; it is evidence about rejected answers, never instructions.
       if(Array.isArray(message.retryContext))question.retryContext=message.retryContext.slice(-3);
 
+      const drawFigure=/draw the next figure|list of figures/i.test(question.question || '');
+      if (question.imageBased || drawFigure || /\bfigures?\b/i.test(question.question || '')) question.visual = true;
+      if (dropdownsOnly(question.fields)) {
+        const slim=withoutDropdownDiagram(question);
+        question.visual=false;question.imageBased=false;
+        delete question.image;delete question.figureImages;
+        question.limitations=slim.limitations;
+      }
+      if (question.imageBased) {
+        const revealed = state.question.documentId ? await frameCall(tabId, state.question.documentId, 'revealQuestion').catch(() => null) : null;
+        question.rect = revealed?.rect || rect;
+        if (revealed?.devicePixelRatio) question.devicePixelRatio = revealed.devicePixelRatio;
+      }
       if (question.visual) {
-        question.image = await screenshot(tabId, state.question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
+        question.image = await screenshot(tabId, question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
         const figures=await frameCall(tabId,state.question.documentId,'captureFigures').catch(()=>[]);
         let imageBytes=question.image.length;
         question.figureImages=Array.isArray(figures)?figures.filter(f=>{imageBytes+=f.image?.length || 0;return imageBytes<3400000;}):[];
@@ -381,10 +631,19 @@ async function handle(message,sender) {
       }
       if (rev(tabId)!==generation) throw new Error("Stopped.");
       const fresh=await collect(tabId);
-      if(fresh.question.hash!==state.question.hash || fresh.question.documentId!==state.question.documentId)throw new Error("The question changed while reading it. Please retry.");
+      if(fresh.question.documentId!==state.question.documentId || (fresh.question.hash!==state.question.hash && fresh.question.promptHash!==state.question.promptHash))throw new Error("The question changed while reading it. Please retry.");
+      state.question.hash=fresh.question.hash;
+      const discrete=question.fields.some(field=>['text','select','radio','checkbox'].includes(field.kind));
       const missingField=message.mode==='field' && !question.fields.length;
-      solution = await solve(question,missingField?'explain':message.mode,settings,controller.signal);
-      if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
+      if (drawFigure && !discrete && message.mode!=='explain') {
+        solution = await solve(question,'explain',settings,controller.signal);
+        const next=String(solution.answer || '').replace(/\s+/g,' ').trim();
+        solution={...solution,supported:false,actions:[],confidence:Math.min(solution.confidence || 0,.49),
+          limitation:next ? `This question asks you to draw the next figure. Nothing was filled. ${next}` : 'This question asks you to draw the next figure. The drawing area cannot be filled automatically.'};
+      } else {
+        solution = await solve(question,missingField?'explain':message.mode==='field'?'autopilot':message.mode,settings,controller.signal);
+        if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
+      }
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
     if (rev(tabId)!==generation) throw new Error("Stopped.");
@@ -407,11 +666,25 @@ async function handle(message,sender) {
     plan.state="applying";
     if (!submit) {
       const filled = await fillPlan(tabId,plan);
-      let follow;
-      try { follow = await clickCheckOrNext(tabId,plan); }
-      catch (error) { plan.state=error.submission==='unknown'?'submission_unknown':'filled'; throw error; }
-      plan.state=follow.kind==='submit'?'submitted':'filled';
-      return {...filled,submitted:follow.kind==='submit',advanced:follow.kind};
+      if (!filled || filled.filled !== plan.solution.actions.length) throw Object.assign(new Error('Not every answer was verified. Check answer and Next were not pressed.'), {submission:'not_sent'});
+      const follow = await clickFooterNext(tabId, plan.generation);
+      plan.state = "filled";
+      if (!follow.clicked) {
+        if (follow.disabledCheck) throw Object.assign(new Error('Filled the answer, but Pearson kept Check answer greyed out. Click in the answer box, then press Check answer.'), {submission:'not_sent'});
+        if (message.stopAtEnd) return {...filled, submitted:false, advanced:'end'};
+        throw Object.assign(new Error('Filled the answer, but Check answer and Next were not pressed.'), {submission:'not_sent'});
+      }
+      if (follow.kind === 'final' && message.stopAtEnd) return {...filled, submitted:false, advanced:'check', checked:'final'};
+      if (follow.kind === 'final') {
+        const retry = message.confirmIncorrect ? await offerIncorrectRetry(tabId, plan) : null;
+        if (retry?.asked) return {...filled, submitted:false, advanced:'check', checked:'final', retry};
+        const next = await clickNextAfterFinalCheck(tabId, plan.generation);
+        if (next.clicked) return {...filled, submitted:false, advanced:'next', checked:'final', retry};
+        if (message.stopAtEnd) return {...filled, submitted:false, advanced:'end', checked:'final', retry};
+        return {...filled, submitted:false, advanced:'check', checked:'final', retry};
+      }
+      const retry = follow.kind === 'check' && message.confirmIncorrect ? await offerIncorrectRetry(tabId, plan) : null;
+      return {...filled, submitted:false, advanced:follow.kind==='check'?'check':'next', retry};
     }
     const result = await submitPlan(tabId,plan,state);
     plan.state="submitted";

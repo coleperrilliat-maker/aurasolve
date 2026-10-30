@@ -53,7 +53,7 @@ No OpenAI setup in the browser. Usage is billed through your Railway server.
 
 ## Modes
 
-**AutoPilot:** Starts at the question and part currently visible. The default **All unfinished** run follows the Pearson question list, skips questions already marked correct, and returns to earlier incomplete questions after reaching the end. It uses Continue for another part, closes answer feedback with OK, and chooses No on the specific incomplete-question warning. Partial/incorrect completed questions use Similar question, up to five times, to try for full credit. It never clicks Save best score or final assignment Submit.
+**AutoPilot:** Starts at the question and part currently visible. The default **All unfinished** run follows the Pearson question list, skips questions already marked correct, and returns to earlier incomplete questions after reaching the end. It uses the explicitly labeled Check answer control for each part, then Continue or the question list to advance. It closes answer feedback with OK and chooses No on the specific incomplete-question warning. Partial/incorrect completed questions use Similar question, up to five times, to try for full credit. It never clicks Save best score or final assignment Submit; unlabeled command metadata is not enough to authorize an answer check.
 
 AutoPilot keeps a local checkpoint before submitting, so a reopened panel reads the live page before continuing. If a submission's result is uncertain, it waits and pauses instead of replaying it. Keep the question tab and panel open while running; reopen and start again to resume after closing them. A new run is bound to its original tab and invalidates older runs.
 
@@ -75,15 +75,17 @@ AutoPilot requires typing **This is not a graded homework assignment** and signi
 | --- | --- |
 | Text answers | Native text/number inputs, textareas, and plain contenteditable controls; focus, input/change, blur, and read-back checks |
 | Choices | Native radio buttons, checkboxes, single-select dropdowns |
+| Number lines | Horizontal ARIA sliders with numeric min/max/current values and an exposed step; every write is read back |
 | Graphs | One point on an explicit coordinate-grid adapter; not arbitrary graph canvases, lines, curves, or regions |
-| Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment |
+| Drag and drop | Explicit draggable/drop adapters with HTML5 drag events and confirmed containment; ARIA drop targets are recognized |
 | Pearson detection | Common question-container selectors, text, accessible math labels, and accessible matching frames |
 | Math editors | Capability-checked MathQuill API and Pearson-style Dojo widgets with a real value setter; unsupported proprietary editors remain manual. DOM detection inspected on a live MyLab player; automated writes verified on local fixtures. |
+| Fill-in menus | Native selects, Dojo widgets, ARIA comboboxes/listboxes, and older Pearson popups discovered after opening; exact options and the retained selection are verified |
 | Pearson graph widgets | Proprietary graph/drag controls still need dedicated adapters |
 | Images | Text/alt labels plus a question screenshot for visual problems when capture succeeds |
 | AutoPilot | Pearson multipart progress, per-question correctness, all-frame feedback, Continue, Similar question, and remaining-question navigation; ambiguous states pause |
 
-This is a working implementation with a local practice lab, not universal automation for every Pearson question. The live Pearson DOM was inspected read-only; the new submission flow was exercised on browser fixtures, not a complete live assignment. Detection prefers recognized question containers and falls back to a container around visible answer controls. If several questions are visible, click a field in the intended question to disambiguate.
+This is a working implementation with a local practice lab, not universal automation for every Pearson question. Pearson's help page describes user interactions, not the proprietary DOM/API contracts required to automate them. AuraSolve solves and explains visual questions from a screenshot, but only fills a graph, number line, menu, or drag control when the page exposes bounds/options/targets and the result can be read back. Calculator, data, and Show work are student helpers rather than answer types and are not automated. The live Pearson DOM was inspected read-only; the submission flow was exercised on browser fixtures, not a complete live assignment. Detection prefers recognized question containers and falls back to a container around visible answer controls. If several questions are visible, click a field in the intended question to disambiguate.
 
 ## Try the included practice lab
 

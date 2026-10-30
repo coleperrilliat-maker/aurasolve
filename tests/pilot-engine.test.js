@@ -26,6 +26,13 @@ function nextQuestion(v,number){
  v.progress={...v.progress,current:number,part:1,totalParts:1,status:'unanswered'};
  v.fields=[{id:'a1'}];v.controls={submitPresent:1};v.hash='q'+number;v.promptHash='q'+number;v.feedback={state:'unknown',modal:false};
 }
+test('a question with answer fields is filled before Check answer is enabled',async()=>{
+ const v=base();v.controls={next:1};
+ const f=fixture({view:v,apply:terminal,action:(v,a)=>{if(a.kind==='dismiss')v.feedback={state:'unknown',modal:false};}});
+ await f.run({limit:1});
+ assert.equal(f.calls.filter(m=>m.type==='solve').length,1);
+ assert.equal(f.calls.filter(m=>m.type==='apply').length,1);
+});
 test('resumes Part 3, closes OK, skips correct questions, finishes remaining list',async()=>{
  const f=fixture({apply:terminal,action:(v,a)=>{if(a.kind==='dismiss')v.feedback={state:'unknown',modal:false};if(a.kind==='question')nextQuestion(v,a.number);}});
  await f.run();assert.deepEqual(f.calls.filter(m=>m.type==='solve').map(m=>m.expected.current),[21,22]);
@@ -52,10 +59,13 @@ test('incomplete warning clicks No and continues current question',async()=>{
  await f.run({limit:1});assert.equal(f.calls.find(m=>m.type==='pilotAction').action.kind,'stay');
  assert.equal(f.calls.filter(m=>m.type==='solve').length,1);
 });
-test('resume after uncertain submit waits; it never submits or charges twice',async()=>{
- const f=fixture();await assert.rejects(f.run(),/did not reach/);
- assert.ok(f.saved.pending);const resume=fixture({saved:f.saved});await assert.rejects(resume.run(),/did not reach/);
- assert.equal(resume.calls.filter(m=>['solve','apply'].includes(m.type)).length,0);
+test('resume after a check that did not change the page fills again',async()=>{
+ const f=fixture();await assert.rejects(f.run(),/did not show/);
+ assert.ok(f.saved.pending);
+ const resume=fixture({saved:f.saved,apply:terminal,action:(v,a)=>{if(a.kind==='dismiss')v.feedback={state:'unknown',modal:false};}});
+ await resume.run({limit:1});
+ assert.equal(resume.calls.filter(m=>m.type==='solve').length,1);
+ assert.equal(resume.calls.filter(m=>m.type==='apply').length,1);
 });
 test('known fill failure clears pending submission and preserves the part attempt',async()=>{
  const f=fixture({apply:()=>{throw Object.assign(new Error('Field did not retain answer'),{submission:'not_sent'});}});
@@ -70,8 +80,9 @@ test('lost apply reply retains checkpoint and reports submission unconfirmed',as
  const f=fixture({apply:()=>{throw new Error('Lost reply');}});
  await assert.rejects(f.run(),/Lost reply/);
  assert.ok(f.saved.pending);assert.equal(f.events.at(-1).kind,'submissionUnknown');
- const resumed=fixture({saved:f.saved});await assert.rejects(resumed.run(),/did not reach/);
- assert.equal(resumed.calls.filter(m=>['solve','apply'].includes(m.type)).length,0);
+ const resumed=fixture({saved:f.saved,apply:terminal,action:(v,a)=>{if(a.kind==='dismiss')v.feedback={state:'unknown',modal:false};}});
+ await resumed.run({limit:1});
+ assert.equal(resumed.calls.filter(m=>m.type==='solve').length,1);
 });
 test('resume after completed submit reads feedback without another solve',async()=>{
  const f=fixture();await assert.rejects(f.run());const v=base();terminal(v);

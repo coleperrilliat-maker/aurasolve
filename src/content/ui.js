@@ -16,23 +16,27 @@ export function promptBox(root) {
 
 export function createUI() {
   const host=document.createElement('div');host.id='aurasolve-root';host.dataset.auraVersion=BUILD_VERSION;
-  host.style.cssText='display:block;float:right;position:relative;z-index:2147483646;margin:6px 10px 8px 12px;padding:0;background:transparent;box-sizing:border-box;max-width:calc(100% - 32px)';
+  host.style.cssText='display:block;float:right;position:relative;z-index:2147483646;margin:6px 10px 8px 12px;padding:4px;background:transparent;box-sizing:border-box;max-width:calc(100% - 32px)';
   const shadow=host.attachShadow({mode:'closed'});
+  const icon=chrome.runtime.getURL('icons/icon-128.png');
+  const face=text=>`<img class="mark" src="${icon}" alt=""><span>${text}</span>`;
   shadow.innerHTML=`<style>
     :host{font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     *{box-sizing:border-box}[hidden]{display:none!important}
-    button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-width:104px;height:30px;padding:0 12px;border:0;border-radius:7px;background:#0666f5;color:white;font:400 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:none;cursor:pointer;transition:background .15s}
-    button:hover{background:#0055d5}button:focus-visible{outline:3px solid #9fc5ff;outline-offset:3px}button:disabled{cursor:wait;background:#327fed}
-    .spinner{width:13px;height:13px;border:2px solid #ffffff60;border-top-color:white;border-radius:50%;animation:spin .8s linear infinite}
+    button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:148px;height:42px;padding:0 18px 0 12px;border:0;border-radius:12px;background:#fff;color:#0666f5;font:600 15px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.14);cursor:pointer;outline:none}
+    button:hover,button:focus,button:focus-visible,button:disabled{background:#fff;color:#0666f5;box-shadow:0 4px 12px rgba(0,0,0,.14);outline:none}
+    button:disabled{cursor:wait}
+    .mark{width:22px;height:22px;flex:none;display:block;object-fit:contain}
+    .spinner{width:16px;height:16px;border:2px solid #0666f533;border-top-color:#0666f5;border-radius:50%;animation:spin .8s linear infinite;flex:none}
     @keyframes spin{to{transform:rotate(360deg)}}
-    p{margin:8px 0 0;color:#475569;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:540px}
-  </style><button type="button" title="AuraSolve ${BUILD_VERSION}" aria-busy="false">Fill answers</button><p role="status" aria-live="polite" hidden></p>`;
+    p{margin:8px 0 0;color:#475569;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-weight:500;max-width:280px;text-align:right}
+  </style><button type="button" title="AuraSolve ${BUILD_VERSION}" aria-busy="false">${face('Fill answers')}</button><p role="status" aria-live="polite" hidden></p>`;
   const button=shadow.querySelector('button'),notice=shadow.querySelector('p');
   let running=false;
   function mount(){
     const root=questionRoot(), current=snapshot();
     const sara=current.fields.some(field=>field.adapter==='sara-choice');
-    const lazy=root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, [role="combobox"][widgetid], .mq-editable-field')].some(visible);
+    const lazy=root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, .xlFillin, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"], .mq-editable-field')].some(visible);
     const answering=Boolean(root && current.question && (sara || (!current.fallback && (current.fields.length || lazy))));
     if(!answering){if(host.isConnected)host.remove();return;}
     if(host.isConnected && root.contains(host))return;
@@ -51,16 +55,15 @@ export function createUI() {
   observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class','style','aria-hidden','disabled']});
   button.onclick=async()=>{
     if(running)return;
-    running=true;button.disabled=true;button.setAttribute('aria-busy','true');button.innerHTML='<span class="spinner" aria-hidden="true"></span>Filling…';notice.hidden=true;
+    running=true;button.disabled=true;button.setAttribute('aria-busy','true');button.innerHTML=`<span class="spinner" aria-hidden="true"></span><span>Filling…</span>`;notice.hidden=true;
     try{
       await sendExtension({type:'prepareField'});
       const result=await sendExtension({type:'solve',mode:'field'});
       if(!result.solution.supported || result.solution.confidence<.85 || !result.solution.actions.length)throw new Error(result.solution.limitation || 'Could not fill this answer. Open AuraSolve and choose Explain now.');
-      const applied=await sendExtension({type:'apply',planId:result.planId});
-      notice.textContent=applied.submitted?'Filled and checked.':applied.advanced==='next'?'Filled and moved to the next question.':'Filled. Check Answer or Next was not found.';
-      notice.hidden=false;
+      await sendExtension({type:'apply',planId:result.planId,confirmIncorrect:true});
+      notice.hidden=true;
     }catch(error){notice.textContent=error.message;notice.hidden=false;}
-    finally{running=false;button.disabled=false;button.setAttribute('aria-busy','false');button.textContent='Fill answers';}
+    finally{running=false;button.disabled=false;button.setAttribute('aria-busy','false');button.innerHTML=face('Fill answers');}
   };
   return {open:()=>button.focus(),veil:hidden=>{host.style.visibility=hidden?'hidden':'';}};
 }

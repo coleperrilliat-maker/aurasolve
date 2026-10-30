@@ -1,6 +1,5 @@
-import {runPilot} from '../shared/pilot-engine.js';
+import {runFillAssignment} from '../shared/pilot-engine.js';
 import {renderSolution} from "../shared/render.js";
-import {HONOR_STATEMENT, statementMatches} from "../shared/policy.js";
 import {BUILD_VERSION} from '../shared/version.js';
 import {sendExtension} from '../shared/messaging.js';
 const $ = id => document.getElementById(id);
@@ -82,7 +81,7 @@ function breakdown(){
 
 async function run(mode) {
   const mine=++token;runLog=[];paused=false;pauseUI();setBusy(true);
-  $('consent').hidden=true;$('pilot-progress').hidden=mode!=='autopilot';
+  $('pilot-progress').hidden=mode!=='autopilot';
   $('pace-status').textContent='';$('progress').value=0;
   const live=()=>{if(mine!==token)throw new Error('Stopped.');};
   const checkpoint=async()=>{live();while(paused){await sleep(100);live();}};
@@ -92,46 +91,39 @@ async function run(mode) {
     if(!settings.configured)throw new Error('AuraSolve Cloud is offline. Check Railway, then try again.');
     if(mode==='autopilot'){
       const limit=Number($('question-limit').value),budget=Number($('solve-budget').value);
-      let completed=0;
-      await runPilot({request:async message=>{
+      await runFillAssignment({request:async message=>{
         const response=await send(message);live();
-        if(message.type==='pilotOpen')pilotTabId=response.view.tabId;
         return response;
-      },checkpoint,delay,limit,budget,onEvent:async event=>{
-        live();const v=event.view,p=v.progress;
-        const label=p.current?`Question ${p.current}${p.part?`, Part ${p.part} of ${p.totalParts}`:''}`:'Current question';
-        if(event.kind==='start'){
-          const remaining=p.questions.filter(q=>q.status!=='correct').length;
-          $('progress').max=limit || remaining || 1;
-          status(`${event.resumed?'Resuming':'Starting'} at ${label.toLowerCase()}…`);
-        }
-        $('progress-label').textContent=label;
+      },checkpoint,delay,limit,budget,pace:async()=>{
+        const min=Number($('time-min').value),max=Number($('time-max').value);
+        const seconds=$('speed-run').checked?0:min+($('random-timing').checked?10*Math.floor(Math.random()*((max-min)/10+1)):0);
+        let left=seconds*1000;
+        while(left>0){$('pace-status').textContent=`Next question in ${Math.ceil(left/1000)}s`;const step=Math.min(250,left);await delay(step);left-=step;}
+      },onEvent:async event=>{
+        live();
         if(event.kind==='solve'){
-          status(`Solving ${label.toLowerCase()}…`);$('loader').hidden=false;
+          status(`Filling question ${event.spent}…`);$('loader').hidden=false;
           $('pace-status').textContent=`${event.spent} of ${budget} AI solves used`;
+          $('progress').max=limit || Math.max($('progress').max || 1, event.spent);
         }
         if(event.kind==='answer'){
           $('loader').hidden=true;
-          runLog.push({number:`${p.current || '?'}${p.part?' · Part '+p.part:''}`,result:event.result,outcome:'Not submitted',submitted:false});
+          runLog.push({number:String(runLog.length+1),result:event.result,outcome:'Filling',submitted:false});
         }
-        if(event.kind==='pace'){
-          const min=Number($('time-min').value),max=Number($('time-max').value);
-          const seconds=$('speed-run').checked?0:min+($('random-timing').checked?10*Math.floor(Math.random()*((max-min)/10+1)):0);
-          let left=Math.max(0,seconds*1000-(Date.now()-event.started));
-          while(left>0){$('pace-status').textContent=`Submitting in ${Math.ceil(left/1000)}s`;const step=Math.min(250,left);await delay(step);left-=step;}
+        if(event.kind==='retry'){
+          if(runLog.length)runLog.at(-1).outcome='Incorrect · trying again';
+          status('Pearson marked that incorrect. Trying once more with its feedback…');
         }
-        if(event.kind==='submit'){
-          status('Filling answers, then checking…');if(runLog.length)runLog.at(-1).outcome='Filling · submission pending';
+        if(event.kind==='filled' && runLog.length){
+          const pressed=event.applied?.checked==='final'?'Final Check':'Check answer';
+          runLog.at(-1).outcome=event.verdict==='correct'?'Correct':event.verdict==='incorrect'?'Incorrect':event.applied?.advanced==='check'?`Filled and pressed ${pressed}`:event.applied?.advanced==='next'?'Filled and pressed Next':'Filled the last question';
+          Object.assign(runLog.at(-1),{submitted:event.applied?.advanced==='check'});
+          $('progress').value=event.completed;
+          $('progress').max=limit || event.completed;
         }
-        if(event.kind==='submitted' && runLog.length)Object.assign(runLog.at(-1),{submitted:true,outcome:'Submitted · awaiting feedback'});
-        if(event.kind==='notSubmitted' && runLog.length)runLog.at(-1).outcome='Not submitted';
-        if(event.kind==='submissionUnknown' && runLog.length)runLog.at(-1).outcome='Submission unconfirmed';
-        if(event.kind==='feedback' && runLog.length)runLog.at(-1).outcome=event.outcome==='correct'?'Correct':event.outcome==='incorrect'?'Incorrect':'Step advanced · score pending';
-        if(event.kind==='complete'){$('progress').value=++completed;}
-        const labels={stay:'Choosing No and staying on the unfinished question…',dismiss:'Closing answer feedback…',continue:'Continuing the next part…',similar:'Starting a similar question to improve the score…',question:`Moving to question ${event.number}…`,next:'Moving to the next question…'};
-        if(labels[event.kind])status(labels[event.kind]);
+        if(event.kind==='next')status('Moving to the next question…');
         if(event.kind==='done'){
-          status(event.all?'All questions in the list are marked correct.':`${event.completed} question${event.completed===1?'':'s'} done.`);
+          status(event.all?`Finished ${event.completed} question${event.completed===1?'':'s'}. The assignment Submit button was not pressed.`:`Finished ${event.completed} question${event.completed===1?'':'s'}.`);
           $('pace-status').textContent=`${event.spent} of ${budget} AI solves used`;
         }
       }});
@@ -139,8 +131,8 @@ async function run(mode) {
       status('Reading the question…');$('loader').hidden=false;
       const result=await send({type:'solve',mode});await checkpoint();card(result,mode,1);
       if(mode==='field' && result.solution.supported && result.solution.actions.length && result.solution.confidence>=.85){
-        const applied=await send({type:'apply',planId:result.planId});live();
-        status(applied.submitted?'Filled and checked.':applied.advanced==='next'?'Filled and moved to the next question.':'Filled. Check Answer or Next was not found.');
+        const applied=await send({type:'apply',planId:result.planId,confirmIncorrect:true});live();
+        status(applied.retry?.retried?'That\'s incorrect. OK was pressed so you can try again.':applied.retry?.asked?'That\'s incorrect. The message was left open.':applied.checked==='final'?'Filled and pressed Final Check.':applied.advanced==='check'?'Filled and pressed Check answer.':applied.advanced==='next'?'Filled and pressed Next.':'Filled. Check answer and Next were not pressed.');
       }else if(mode==='explain')$('status').hidden=true;
       else status('Fill this one yourself using the explanation.');
     }
@@ -161,14 +153,8 @@ async function choose(mode) {
     if(mode==='field')await send({type:'prepareField'});
     const info = await send({type: "inspect"});
     if(mode==='autopilot')pilotTabId=info.tabId;
-    if (info.signed) { setBusy(false); return await run(mode); }
-    pending = mode;
-    $("consent").hidden = false;
-    $("statement").value = "";
-    $("statement").classList.remove("ok");
-    $("signature").value = "";
-    $("confirm").disabled = true;
-    status("Type the honor statement and sign to continue.");
+    setBusy(false);
+    return await run(mode);
   } catch (error) {
     status(error.message);
   } finally {
@@ -187,33 +173,9 @@ document.querySelectorAll("[data-mode]").forEach(button => {
   };
 });
 $('start-pilot').onclick=()=>choose('autopilot');
-$("phrase").textContent = HONOR_STATEMENT;
-$("statement").placeholder = HONOR_STATEMENT;
-const signed = () => statementMatches($("statement").value) && $("signature").value.trim().length >= 2;
-for (const id of ["statement", "signature"]) {
-  $(id).addEventListener("input", () => {
-    $("confirm").disabled = !signed();
-    $("statement").classList.toggle("ok", statementMatches($("statement").value));
-  });
-}
-$("confirm").onclick = async () => {
-  const mode = pending;
-  if (!mode || !signed()) return;
-  $("confirm").disabled = true;
-  try {
-    await send({type: "consent", statement: $("statement").value, signature: $("signature").value});
-    pending = null;
-    await run(mode);
-  } catch (error) {
-    status(error.message);
-  } finally {
-    $("confirm").disabled = !signed();
-  }
-};
 $("stop").onclick = async () => {
   token++;
   pending = null;
-  $("consent").hidden = true;
   setBusy(false);
   try { await send({type: "stop"}); } catch {}
   $("loader").hidden=true;status("Stopped. Progress is saved; start again to resume from this page.");

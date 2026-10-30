@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 let captureFails=false, captured=0, solveCalls=0, lastSnapshot;
-let listener, applied=0, nextButton=true, split=false, clickedDocument=null, verdict='unknown', staleAfterFill=false, enableOnFill=false;
-let prepared=0,fillFails=false,clickFails=false,clickedKind=null;const executed=[];
+let listener, applied=0, nextButton=true, split=false, clickedDocument=null, clickedKind=null, verdict='unknown', staleAfterFill=false, enableOnFill=false;
+let prepared=0,fillFails=false,clickFails=false;const executed=[];
 const local={settings:{model:'test-model'}},session={};
 const storage=data=>({setAccessLevel:async()=>{},get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>delete data[key]});
 const state={url:'https://example.com/practice',context:'Ungraded practice',question:'3x+7=22',fields:[{id:'a1',kind:'text'}],dropTargets:[],selected:'a1',hash:'q1',limitations:[],controls:{submit:1,next:1}};
@@ -12,6 +12,8 @@ globalThis.chrome={storage:{local:storage(local),session:storage(session)},runti
   const wrapped=data=>[{result:{ok:true,data}}];
   if(input.args?.[0]==='prepareField'){prepared++;return wrapped({ready:true});}
   if(input.args?.[0]==='dismissFeedback'){verdict='unknown';return wrapped({clicked:true});}
+  if(input.args?.[0]==='show')return [{frameId:0,result:{clicked:false,shown:true,count:1,bottom:700,right:900,red:90,kind:'check'}}];
+  if(input.args?.[0]==='footer-next' || input.args?.[0]==='locate' || input.args?.[0]==='press'){if(input.args[0]==='press'){clickedKind='next';if(clickFails)throw new Error('Lost click reply');return [{frameId:0,result:{clicked:true,count:1,bottom:700,right:900,red:90}}];}return [{frameId:0,result:{clicked:false,count:1,bottom:700,right:900,red:90}}];}
   if(input.args?.[0]==='clickControl'){clickedDocument=input.target.documentIds[0];clickedKind=input.args[1];if(clickFails)throw new Error('Lost click reply');return wrapped({clicked:true});}
   if(!input.args)return split ? [{frameId:0,documentId:'doc1',result:{...state,question:'',fields:[],selected:null,controls:{submit:1,next:1}}},{frameId:2,documentId:'question-frame',result:{...state,controls:{submit:0,next:0}}}] : [{frameId:0,documentId:'doc1',result:{...state}}];
   if(input.args[0]==='execute'){executed.push(input.args[1]);if(fillFails)return [{result:{ok:false,error:'The page did not retain the requested value.'}}];applied++;if(enableOnFill)state.controls.submit=1;if(staleAfterFill)state.hash='changed-after-fill';return wrapped({filled:1,submitted:input.args[1].submit && !input.args[1].deferSubmit});}
@@ -29,16 +31,13 @@ globalThis.fetch=async (url,options)=>{
   solveCalls++;lastSnapshot=JSON.parse(options.body).snapshot;
   return{ok:true,json:async()=>({solution})};
 };
+globalThis.__AURA_INSTANT__ = true;
 await import('../src/background/worker.js');
 const request=message=>new Promise(resolve=>listener(message,{id:'unit-test',tab:{id:1},frameId:0},resolve));
-test('worker enforces consent, applies once, and invalidates on stop',async()=>{
-  let result=await request({type:'solve',mode:'autopilot'});assert.equal(result.ok,false);assert.match(result.error,/sign/);
-  assert.equal((await request({type:'inspect'})).data.signed,false);
-  assert.equal((await request({type:'consent',statement:'yes',signature:'Student'})).ok,false);
-  assert.equal((await request({type:'consent',statement:'This is not a graded homework assignment',signature:''})).ok,false);
-  assert.equal((await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'})).ok,true);
+test('worker applies once and invalidates on stop',async()=>{
   assert.equal((await request({type:'inspect'})).data.signed,true);
-  result=await request({type:'solve',mode:'field'});assert.equal(result.ok,true);const planId=result.data.planId;
+  let result=await request({type:'solve',mode:'autopilot'});assert.equal(result.ok,true);
+  const planId=result.data.planId;
   assert.equal((await request({type:'apply',planId})).ok,true);assert.equal(applied,1);
   assert.equal((await request({type:'apply',planId})).ok,false);assert.equal(applied,1);
   const next=await request({type:'solve',mode:'field'});assert.equal(next.ok,true);
@@ -68,8 +67,9 @@ test('a reviewed field answer can be explicitly submitted once',async()=>{
   await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
   const before=applied;
   const result=await request({type:'solve',mode:'field'});assert.equal(result.ok,true);
-  assert.equal((await request({type:'apply',planId:result.data.planId})).data.submitted,true);
-  assert.equal(applied,before+1);
+  assert.equal((await request({type:'apply',planId:result.data.planId})).data.submitted,false);
+  assert.equal((await request({type:'submitField',planId:result.data.planId})).data.submitted,true);
+  assert.equal(applied,before+2);
   assert.equal((await request({type:'submitField',planId:result.data.planId})).ok,false);
 });
 test('AutoPilot fills a child frame and submits and reads feedback in the parent',async()=>{
@@ -118,8 +118,9 @@ test('Fill solves and applies without any signature',async()=>{
   clickedKind=null;
   const filled=await request({type:'apply',planId:result.data.planId});
   assert.equal(filled.ok,true);
-  assert.equal(filled.data.submitted,true);
-  assert.equal(clickedKind,'submit');
+  assert.equal(filled.data.submitted,false);
+  assert.equal(filled.data.advanced,'next');
+  assert.equal(clickedKind,'next');
   assert.equal(session['grant:1'],undefined);
 });
 test('a visual question never silently falls back to text when capture fails',async()=>{
@@ -131,6 +132,28 @@ test('a visual question never silently falls back to text when capture fails',as
   } finally {state.visual=false;captureFails=false;}
 });
 
+test('a proof made only of dropdowns does not send its diagram',async()=>{
+  const fields=state.fields, visual=state.visual, question=state.question, limitations=state.limitations;
+  state.fields=[
+    {id:'FL1',kind:'select',options:[{value:'FL1-0',label:'Given'}]},
+    {id:'FL2',kind:'select',options:[{value:'FL2-0',label:'Definition of midpoint'}]}
+  ];
+  state.visual=true;
+  state.question='Complete the proof. [figure 1]';
+  state.limitations=['A diagram needs a screenshot to read.'];
+  const before=solveCalls, shots=captured;
+  try {
+    const result=await request({type:'solve',mode:'field'});
+    assert.equal(result.ok,true);
+    assert.equal(captured,shots);
+    assert.equal(solveCalls,before+1);
+    assert.equal(lastSnapshot.visual,false);
+    assert.equal(lastSnapshot.image,undefined);
+    assert.deepEqual(lastSnapshot.limitations,[]);
+  } finally {
+    state.fields=fields;state.visual=visual;state.question=question;state.limitations=limitations;
+  }
+});
 test('text-only questions do not capture or send screenshots',async()=>{
   state.visual=false;
   const before=solveCalls, shots=captured;
@@ -138,6 +161,46 @@ test('text-only questions do not capture or send screenshots',async()=>{
   assert.equal(result.ok,true);
   assert.equal(solveCalls,before+1);assert.equal(captured,shots);
   assert.equal(lastSnapshot.image,undefined);
+});
+test('drawing the next figure is explained from a screenshot and is not filled',async()=>{
+  const calls=solveCalls,shots=captured;
+  state.question='Study the list of figures below. Use the pattern to draw the next figure in the list.';
+  state.fields=[];state.visual=false;
+  try {
+    await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+    const result=await request({type:'solve',mode:'autopilot'});
+    assert.equal(result.ok,true);
+    assert.equal(result.data.solution.supported,false);
+    assert.match(result.data.solution.limitation,/draw the next figure/);
+    assert.match(result.data.solution.limitation,/Nothing was filled/);
+    assert.equal(solveCalls,calls+1);assert.equal(captured,shots+1);
+  } finally {
+    state.question='3x+7=22';state.fields=[{id:'a1',kind:'text'}];state.visual=false;
+  }
+});
+test('an image-based question sends one screenshot of the question and its choices',async()=>{
+  let drawn;
+  const Original=globalThis.OffscreenCanvas;
+  globalThis.OffscreenCanvas=class {constructor(w,h){this.width=w;this.height=h;}getContext(){return {drawImage(...args){drawn=args;}};}async convertToBlob(){return new Blob(['fixture']);}};
+  const fields=state.fields, question=state.question;
+  state.imageBased=true;state.visual=false;
+  state.rect={x:100,y:40,width:500,height:360};state.devicePixelRatio=2;
+  state.fields=[{id:'a',kind:'radio',label:'A.'},{id:'b',kind:'radio',label:'B.'}];
+  state.question='Study the list of figures below. Use the pattern to draw the next figure in the list.';
+  const shots=captured;
+  try {
+    const result=await request({type:'solve',mode:'field'});
+    assert.equal(result.ok,true);
+    assert.equal(result.data.solution.supported,true);
+    assert.equal(lastSnapshot.imageBased,true);
+    assert.match(lastSnapshot.image,/^data:image\/jpeg;base64,/);
+    assert.equal(captured,shots+1);
+    assert.deepEqual(drawn.slice(1,5),[168,48,1064,784]);
+  } finally {
+    globalThis.OffscreenCanvas=Original;
+    state.imageBased=false;state.visual=false;state.rect=undefined;state.devicePixelRatio=undefined;
+    state.fields=fields;state.question=question;
+  }
 });
 test('visual questions include a screenshot in the same single solve call',async()=>{
   state.visual=true;
@@ -162,13 +225,24 @@ test('AutoPilot fills before resolving a submit button disabled until input',asy
  }finally{enableOnFill=false;state.controls.submit=1;}
 });
 
+test('a pre-test with Next and no Check answer advances with Next',async()=>{
+ await request({type:'consent',statement:'This is not a graded homework assignment',signature:'Student'});
+ const controls=state.controls;
+ state.controls={submit:0,submitPresent:0,next:1};clickedKind=null;
+ try{
+  const result=await request({type:'solve',mode:'autopilot'});
+  const response=await request({type:'apply',planId:result.data.planId});
+  assert.equal(response.ok,true);assert.equal(response.data.submitted,true);
+  assert.equal(clickedKind,'next');
+ }finally{state.controls=controls;}
+});
 test('Fill and AutoPilot prepare and fill through the same non-submitting executor',async()=>{
  const before=prepared;
  for(const mode of ['field','autopilot']){
   const result=await request({type:'solve',mode});assert.equal(result.ok,true);
   assert.equal((await request({type:'apply',planId:result.data.planId})).ok,true);
   assert.equal(executed.at(-1).submit,false);
-  assert.equal(executed.at(-1).requireComplete,true);
+  assert.equal(executed.at(-1).requireComplete,mode==='autopilot');
  }
  assert.equal(prepared,before+2);
 });
@@ -182,30 +256,14 @@ test('failed fill reports no submission and never clicks Check answer',async()=>
 });
 test('lost submit reply stays unknown and prevents replaying a reviewed field',async()=>{
  const result=await request({type:'solve',mode:'field'}),planId=result.data.planId;
- clickFails=true;clickedDocument=null;
+ await request({type:'apply',planId});clickFails=true;
  try{
-  const response=await request({type:'apply',planId});
+  const response=await request({type:'submitField',planId});
   assert.equal(response.ok,false);assert.equal(response.submission,'unknown');
  }finally{clickFails=false;}
  clickedDocument=null;
  assert.equal((await request({type:'submitField',planId})).ok,false);
  assert.equal(clickedDocument,null);
-});
-test('Fill still clicks after the filled answer changes only the field hash',async()=>{
- state.promptHash='same-prompt';staleAfterFill=true;clickedKind=null;
- try{
-  const result=await request({type:'solve',mode:'field'});
-  const filled=await request({type:'apply',planId:result.data.planId});
-  assert.equal(filled.ok,true);assert.equal(clickedKind,'submit');
- }finally{staleAfterFill=false;state.hash='q1';delete state.promptHash;}
-});
-test('Fill clicks Next when Check answer is absent',async()=>{
- const saved=state.controls;state.controls={submit:0,next:1};clickedKind=null;
- try{
-  const result=await request({type:'solve',mode:'field'});
-  const filled=await request({type:'apply',planId:result.data.planId});
-  assert.equal(filled.ok,true);assert.equal(filled.data.submitted,false);assert.equal(clickedKind,'next');
- }finally{state.controls=saved;}
 });
 
 test('correct popup acknowledgement preserves permission to advance',async()=>{

@@ -1,3 +1,14 @@
+// Every answer is a dropdown whose choices are already in the request.
+export function dropdownsOnly(fields) {
+  return Array.isArray(fields) && fields.length > 0 && fields.every(field => field?.kind === 'select' && Array.isArray(field.options) && field.options.length > 0);
+}
+const diagramLimitation = /diagram needs a screenshot|Canvas\/SVG|image has no description/i;
+export function withoutDropdownDiagram(snapshot) {
+  if (!dropdownsOnly(snapshot?.fields)) return snapshot;
+  const {image, figureImages, ...rest} = snapshot;
+  return {...rest, visual:false, imageBased:false, limitations:(snapshot.limitations || []).filter(item => !diagramLimitation.test(item))};
+}
+
 // Plain answer boxes need slash fractions; math-editor APIs retain LaTeX.
 export function fieldValue(value, field) {
   if (field.kind !== 'text' || field.format === 'latex') return value;
@@ -19,7 +30,7 @@ export const solutionSchema = {
     confidence: {type:"number"}, supported: {type:"boolean"},
     limitation: {type:"string"},
     actions: {type:"array",items:{type:"object",additionalProperties:false,properties:{
-      kind:{type:"string",enum:["text","select","multiselect","radio","checkbox","point","drag"]},
+      kind:{type:"string",enum:["text","select","radio","checkbox","point","drag"]},
       target:{type:"string"}, value:{type:"string"}, destination:{type:"string"},
       x:{type:["number","null"]}, y:{type:["number","null"]}
     },required:["kind","target","value","destination","x","y"]}}
@@ -38,56 +49,84 @@ export function validateSolution(solution, snapshot, mode) {
   if (!Array.isArray(solution.choices) || solution.choices.length > 12 || solution.choices.some(c => typeof c !== "string" || c.length > 500))
     throw new Error("The model returned invalid answer choices.");
   if (solution.actions.length > 24) throw new Error("Too many actions in the response.");
-  if (mode === "explain") solution.actions = [];
-  const ids = new Map(snapshot.fields.map(f => [f.id, f]));
-  const seen = new Set(), radioGroups = new Set();
-  const fieldFor=a=>{
-    const direct=ids.get(a.target);
-    if(direct)return direct;
-    const letter=String(a.target || "").trim().toUpperCase().replace(/^\((.*)\)$/,"$1");
-    if(!/^[A-E]$/.test(letter))return null;
-    const matches=(snapshot.fields || []).filter(field=>field.kind==="radio" && String(field.label || "").trim().toUpperCase()===letter);
-    if(matches.length!==1)return null;
-    a.target=matches[0].id;
-    a.kind=matches[0].kind;
-    return matches[0];
-  };
+  if (mode === "explain") {
+    solution.actions = [];
+    return solution;
+  }
+  const seen = new Set();
+  const radioPicks = new Map();
   for (const a of solution.actions) {
-    const f = fieldFor(a);
+    const f = fieldForAction(a.target, snapshot.fields);
+    if (f && a.target !== f.id) {
+      a.target = f.id;
+      if (f.kind === "radio") a.kind = "radio";
+      if (!a.value) a.value = f.adapter === "sara-choice" ? f.label : (optionLetter(f.label) || f.label);
+    }
     if (!f || a.kind !== f.kind || typeof a.value !== "string" || a.value.length > 4000) throw new Error("The solution references an unsupported field.");
     a.value = fieldValue(a.value, f);
     if (seen.has(a.target)) throw new Error("Duplicate field actions are not supported.");
     seen.add(a.target);
-    if (a.kind === 'radio') {
-      if (radioGroups.has(f.group)) throw new Error('The solution selected more than one answer in a radio group.');
-      radioGroups.add(f.group);
-    }
-    if (a.kind === "select" || a.kind === 'multiselect') {
-      // Prefer the actual value. Accept an exact, unique displayed label when
-      // a model returns the visible answer instead of an opaque option ID.
-      const optionValue=value=>{
-        let matches=f.options.filter(o=>o.value===value && !o.disabled);
-        if(!matches.length)matches=f.options.filter(o=>o.label===value && !o.disabled);
-        if(matches.length!==1)throw new Error('The selected option is unavailable or ambiguous.');
-        return matches[0].value;
-      };
-      if(a.kind==='select')a.value=optionValue(a.value);
-      else {
-        let values;try{values=JSON.parse(a.value);}catch{throw new Error('Multiple selections must be a JSON list of option values.');}
-        if(!Array.isArray(values) || values.some(v=>typeof v!=='string'))throw new Error('Invalid multiple selections.');
-        a.value=JSON.stringify([...new Set(values.map(optionValue))].sort());
-      }
+    if (a.kind === "select" && !f.options.some(o => o.value === a.value && !o.disabled)) {
+      const key = text => String(text ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+      const named = f.options.filter(o => key(o.label) === key(a.value));
+      if (named.length > 1) throw new Error("The selected option is ambiguous.");
+      if (named.length !== 1 || named[0].disabled) throw new Error("The selected option is unavailable.");
+      a.value = named[0].value;
     }
     if (a.kind === "checkbox" && !["true","false"].includes(a.value)) throw new Error("Invalid checkbox state.");
     if (a.kind === "point" && (!Number.isFinite(a.x) || !Number.isFinite(a.y) || a.x < f.bounds.xMin || a.x > f.bounds.xMax || a.y < f.bounds.yMin || a.y > f.bounds.yMax)) throw new Error("The graph point is outside the supported grid.");
+    if (a.kind === "point" && f.adapter === "aria-number-line" &&
+      (a.y !== 0 || Math.abs((a.x-f.bounds.xMin)/f.step-Math.round((a.x-f.bounds.xMin)/f.step)) > 1e-8))
+      throw new Error("The number-line point does not match an available tick.");
     if (a.kind === "drag" && !snapshot.dropTargets.some(d => d.id === a.destination)) throw new Error("Unknown drop target.");
+    if (a.kind === "radio" && f.adapter !== "sara-choice" && f.group) {
+      if (radioPicks.has(f.group)) throw new Error("The solution selected more than one answer in a radio group.");
+      radioPicks.set(f.group, a.target);
+    }
+  }
+  if (mode !== "explain" && radioPicks.size) {
+    const groups = [...new Set((snapshot.fields || []).filter(field => field.kind === "radio" && field.adapter !== "sara-choice" && field.group).map(field => field.group))];
+    if (groups.length > 1 && groups.some(group => !radioPicks.has(group))) throw new Error("Each part of this question needs its own answer.");
   }
   return solution;
 }
-
-export function missingAnswers(solution, snapshot) {
-  const targets=new Set(solution.actions.map(a=>a.target));
-  const groups=new Set(snapshot.fields.filter(f=>f.kind==='radio' && targets.has(f.id)).map(f=>f.group));
-  return snapshot.fields.filter(f=>f.kind==='radio'?!groups.has(f.group):!targets.has(f.id));
+export function radioPartGroups(rows) {
+  const ids = new Map(), out = new Map();
+  for (const row of rows) {
+    const key = row.anchor ?? (row.name ? `name:${row.name}` : row.id);
+    if (!ids.has(key)) ids.set(key, `part-${ids.size + 1}`);
+    out.set(row.id, ids.get(key));
+  }
+  return out;
+}
+function optionLetter(label) {
+  const text = String(label || "").trim();
+  const wrapped = text.match(/^\(([A-H])\)\s*(?:[.)]\s*)?/i);
+  if (wrapped) return wrapped[1].toUpperCase();
+  const plain = text.match(/^([A-H])[.)](?:\s|$)/i);
+  if (plain) return plain[1].toUpperCase();
+  const only = text.match(/^([A-H])$/i);
+  return only ? only[1].toUpperCase() : null;
+}
+function fieldForAction(target, fields) {
+  const known = fields.find(field => field.id === target);
+  if (known) return known;
+  const text = String(target || "").trim();
+  const scoped = text.match(/^(part-\d+)\s*[:/#]\s*\(?([A-H])\)?$/i);
+  if (scoped) {
+    const group = scoped[1].toLowerCase();
+    const letter = scoped[2].toUpperCase();
+    const scopedMatches = fields.filter(field => field.kind === "radio" && String(field.group || "").toLowerCase() === group && optionLetter(field.label) === letter);
+    if (scopedMatches.length === 1) return scopedMatches[0];
+  }
+  const letter = text.match(/^\(?([A-E])\)?[.):]?$/i)?.[1]?.toUpperCase();
+  if (letter) {
+    const sara = fields.filter(field => field.adapter === "sara-choice" && String(field.label || "").trim().toUpperCase() === letter);
+    if (sara.length === 1) return sara[0];
+    const labeled = fields.filter(field => field.kind === "radio" && optionLetter(field.label) === letter);
+    if (labeled.length === 1) return labeled[0];
+  }
+  const byLabel = fields.filter(field => field.kind === "radio" && String(field.label || "").trim().toLowerCase() === text.toLowerCase());
+  return byLabel.length === 1 ? byLabel[0] : null;
 }
 
