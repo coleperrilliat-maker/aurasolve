@@ -45,7 +45,7 @@ test('after Check answer the popup is closed and Next is pressed',async()=>{
   assert.ok(calls.indexOf('checkResult')<calls.indexOf('advanceQuestion'));
 });
 
-test('a wrong answer is retried once with Pearson feedback, then AutoPilot moves on',async()=>{
+test('a wrong answer is retried twice with every earlier Pearson feedback, then AutoPilot moves on',async()=>{
   let hash='q1';const solves=[];
   const result=await runFillAssignment({
     delay:async()=>{},limit:1,
@@ -59,9 +59,10 @@ test('a wrong answer is retried once with Pearson feedback, then AutoPilot moves
     }
   });
   assert.equal(result.completed,1);
-  assert.equal(solves.length,2);
+  assert.equal(solves.length,3);
   assert.equal(solves[0],null);
   assert.match(solves[1][0].feedback,/incorrect/);
+  assert.equal(solves[2].length,2);
 });
 
 test('a page with no answer boxes never pays for a solve',async()=>{

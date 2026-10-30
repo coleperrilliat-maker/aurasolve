@@ -27,7 +27,7 @@ test('a geometry diagram tells the model to read the figure and fill the blank',
     assert.match(body.instructions,/only has an x blank, answer x/);
     assert.doesNotMatch(body.instructions,/every answer choice/);
     assert.equal(JSON.parse(body.input[0].content[0].text).screenshotAttached,true);
-    const solution={answer:'30',choices:[],explanation:'The angle is 30 degrees.',confidence:.9,supported:true,limitation:'',actions:[{kind:'text',target:'x',value:'30',destination:'',x:null,y:null}]};
+    const solution={answer:'30',choices:[],explanation:'The angle is 30 degrees.',confidence:.9,supported:true,limitation:'',answers:{blank_1:'30'}};
     return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(solution)}]}]})};
   };
   try{await solveWithOpenAI({question:'Find the values of x and y. [figure 1]',fields:[{id:'x',kind:'text',label:'x'}],dropTargets:[],limitations:[],image,imageBased:true},'field');}
@@ -44,10 +44,11 @@ test('a dropdown proof drops the diagram before the model call',async()=>{
     const payload=JSON.parse(body.input);
     assert.equal(payload.screenshotAttached,false);
     assert.deepEqual(payload.limitations,[]);
-    return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({answer:'Given',choices:[],explanation:'The first statement is given.',confidence:.9,supported:true,limitation:'',actions:[{kind:'select',target:'FL1',value:'FL1-0',destination:'',x:null,y:null},{kind:'select',target:'FL2',value:'FL2-0',destination:'',x:null,y:null}]})}]}]})};
+    assert.deepEqual(body.text.format.schema.properties.answers.properties.blank_2.enum,['1) Definition of midpoint']);
+    return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({answer:'Given',choices:[],explanation:'The first statement is given.',confidence:.9,supported:true,limitation:'',answers:{blank_1:'1) Given',blank_2:'1) Definition of midpoint'}})}]}]})};
   };
   try {
-    await solveWithOpenAI({
+    const solution=await solveWithOpenAI({
       question:'Complete the proof. [figure 1]',visual:true,image:'data:image/png;base64,fixture',
       figureImages:[{label:'triangle',image:'data:image/png;base64,figure'}],
       limitations:['A diagram needs a screenshot to read.'],dropTargets:[],
@@ -57,6 +58,7 @@ test('a dropdown proof drops the diagram before the model call',async()=>{
       ]
     },'field');
     assert.equal(calls,1);
+    assert.deepEqual(solution.actions.map(a=>[a.target,a.value]),[['FL1','FL1-0'],['FL2','FL2-0']]);
   } finally {globalThis.fetch=original;if(previous===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous;}
 });
 test('a mixed congruence question tells the model to answer every radio, box, and checkbox',async()=>{

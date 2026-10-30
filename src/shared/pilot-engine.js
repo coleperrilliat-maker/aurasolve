@@ -146,8 +146,8 @@ export async function runPilot({request,checkpoint=async()=>{},delay,onEvent=()=
 // Repeats Fill answers: fill this question, press Check answer or the red Next
 // button, and continue until the last question is filled. Never clicks assignment Submit.
 // After Check answer: read Pearson's verdict, close its popup, retry a wrong
-// answer once with that feedback, then Continue to the next part or press Next.
-export async function runFillAssignment({request, checkpoint=async()=>{}, delay, onEvent=()=>{}, limit=0, budget=200, pace=async()=>{}, retries=1}) {
+// answer up to twice with that feedback, then Continue to the next part or press Next.
+export async function runFillAssignment({request, checkpoint=async()=>{}, delay, onEvent=()=>{}, limit=0, budget=200, pace=async()=>{}, retries=2}) {
   let completed=0, spent=0, retryContext=null, attempts=0;
   const finish=async all=>{await onEvent({kind:'done', completed, all, spent});return {completed, spent};};
   const answerBoxes=async()=>{
@@ -181,7 +181,7 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
         const again=await answerBoxes();
         if(again?.question?.fields?.length){
           attempts++;
-          retryContext=[{actions:result.solution.actions, feedback:checked.text || 'Pearson marked this answer incorrect.'}];
+          retryContext=[...(retryContext || []), {actions:result.solution.actions, feedback:checked.text || 'Pearson marked this answer incorrect.'}];
           await onEvent({kind:'retry', result, applied, verdict, spent});
           continue;
         }
