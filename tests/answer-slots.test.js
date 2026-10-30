@@ -48,32 +48,41 @@ const question={question:'Why are the triangles congruent?',dropTargets:[],limit
   {id:'FL1',kind:'select',options:[{value:'FL1-0',label:'Given'},{value:'FL1-1',label:'SAS Postulate'}]}
 ]};
 
-test('a confident cheap answer is used without calling the strong model',async()=>{
+test('a non-congruence question uses the cheap model when confident',async()=>{
   const models=[];
-  const solution=await withFetch(body=>{models.push(body.model);return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});},
-    ()=>solveWithOpenAI(question,'field'));
+  const simple={question:'Solve 2x = 10',dropTargets:[],limitations:[],fields:[{id:'x',kind:'text',label:'x'}]};
+  const solution=await withFetch(body=>{models.push(body.model);return reply({answer:'5',confidence:.95,supported:true,answers:{blank_1:'5'}});},
+    ()=>solveWithOpenAI(simple,'field'));
   assert.deepEqual(models,['gpt-5-mini']);
+  assert.equal(solution.actions[0].value,'5');
+});
+
+test('congruence questions go straight to the strong model with the ASA/AAS checklist',async()=>{
+  const models=[];
+  let instructions='';
+  const solution=await withFetch(body=>{
+    models.push(body.model);
+    instructions=body.instructions;
+    assert.equal(body.reasoning.effort,'high');
+    return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
+  },()=>solveWithOpenAI(question,'field'));
+  assert.deepEqual(models,['gpt-5']);
+  assert.match(instructions,/ASA vs AAS trap/);
+  assert.match(instructions,/INCLUD/);
   assert.deepEqual(solution.actions.map(a=>a.target),['a','FL1']);
 });
 
-test('an unsure or unusable cheap answer is re-solved once by the strong model',async()=>{
+test('an unsure non-congruence answer is re-solved once by the strong model',async()=>{
   const models=[];
+  const simple={question:'Find x',dropTargets:[],limitations:[],fields:[{id:'x',kind:'text',label:'x'}]};
   const solution=await withFetch(body=>{
     models.push(body.model);
     return body.model==='gpt-5-mini'
-      ? reply({answer:'?',confidence:.4,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'1) Given'}})
-      : reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
-  },()=>solveWithOpenAI(question,'field'));
+      ? reply({answer:'?',confidence:.4,supported:true,answers:{blank_1:'3'}})
+      : reply({answer:'5',confidence:.95,supported:true,answers:{blank_1:'5'}});
+  },()=>solveWithOpenAI(simple,'field'));
   assert.deepEqual(models,['gpt-5-mini','gpt-5']);
-  assert.equal(solution.actions[1].value,'FL1-1');
-
-  models.length=0;
-  await withFetch(body=>{
-    models.push(body.model);
-    if(body.model==='gpt-5-mini')return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:'not json'}]}]})};
-    return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
-  },()=>solveWithOpenAI(question,'field'));
-  assert.deepEqual(models,['gpt-5-mini','gpt-5']);
+  assert.equal(solution.actions[0].value,'5');
 });
 
 test('a retry after Pearson marked it wrong goes straight to the strong model',async()=>{

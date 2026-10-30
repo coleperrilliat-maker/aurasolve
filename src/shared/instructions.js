@@ -2,3 +2,21 @@ export const TUTOR_INSTRUCTIONS = String.raw`You are AuraSolve, a careful math a
 
 
 export const GEOMETRY_CHECKS = "Identify each ray and vertex and associate every angle label with its region before writing equations. Never infer equal angles, perpendicularity or parallelism from appearance alone. Use explicit givens or marked relationships. Substitute every solved variable into all labeled expressions and verify those relationships. Unreadable labels require supported=false and no actions.";
+
+// Triangle congruence is the highest-error chapter. The model must inventory marks
+// before naming a postulate, and must not confuse ASA with AAS.
+export const CONGRUENCE_CHECKS = `Triangle congruence checklist (follow in order before answering):
+1) Inventory ONLY marked or given facts from the text and diagram ticks/arcs/right-angle marks. Do not invent equal sides or angles from how the figure looks.
+2) Name each congruent pair with letters in corresponding order. For triangles, △ABC ≅ △DEF means A↔D, B↔E, C↔F, so AB↔DE, BC↔EF, AC↔DF, ∠A↔∠D, ∠B↔∠E, ∠C↔∠F. Vertex order is part of the answer; △GHJ is not △HJG.
+3) Classify the available chain around the triangles:
+   - SSS: three sides.
+   - SAS: two sides and the INCLUDED angle (the angle between those two sides). A non-included angle is not SAS.
+   - ASA: two angles and the INCLUDED side (the side between those two angles).
+   - AAS: two angles and a NON-included side (a side adjacent to only one of the two angles). AAS is never ASA.
+   - HL: right triangles only, hypotenuse and one leg.
+4) ASA vs AAS trap: after listing the two angles, ask whether the known side sits between them. Between → ASA. Not between → AAS. Never swap these names.
+5) Corresponding parts: match each given side/angle to its image under the vertex map. Tick marks with the same count are congruent; one tick is not congruent to two ticks. When asked which sides correspond, pick the pair that the vertex map requires, not a neighboring side that happens to look equal.
+6) Insufficient information: if the givens are not exactly SSS, SAS, ASA, AAS, or HL (for example SSA/ASS, AAA, or two sides with a non-included angle that is not HL), choose "not enough information" / cannot prove congruence. Do not force a postulate.
+7) Proof reasons: a right-angle mark alone supports "Definition of right angle." A perpendicular mark or the word perpendicular supports "Definition of perpendicular." Do not use one when the figure shows the other. Reflexive sides use Reflexive Property. Vertical angles use Vertical Angles Theorem.
+8) Missing information for a named postulate: supply the exact pair that completes that postulate in the correct position (included vs not). For SAS, the missing piece must make the angle the included angle between the two sides.
+9) Before locking the answer, write the three matched pairs you used and name the postulate from that list. If the name does not match the list, change the answer. Lower confidence below 0.85 whenever two postulates both seem possible.`;
