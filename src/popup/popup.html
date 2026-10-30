@@ -5,46 +5,190 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AuraSolve</title>
   <link rel="stylesheet" href="../vendor/katex/katex.min.css">
-  <link rel="stylesheet" href="../shared/loader.css">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <header class="app-header">
-    <div class="brand">
-      <img src="../../icons/icon-48.png" alt="" width="34" height="34">
-      <div class="brand-copy">
-        <strong>AuraSolve</strong>
-        <small id="cloud">Checking cloud…</small>
+<div class="app">
+  <main class="main">
+    <header class="top">
+      <div class="brand">
+        <img src="../../icons/icon-48.png" alt="" width="30" height="30">
+        <div class="brand-copy">
+          <strong>AuraSolve</strong>
+          <small id="cloud">Connecting…</small>
+        </div>
       </div>
-    </div>
-    <button id="close" type="button" aria-label="Close AuraSolve" title="Close">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      <button id="new-chat" class="ghost-btn" type="button" title="Start over">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New
+      </button>
+    </header>
+
+    <section class="view" data-view="home">
+      <div class="actions" role="group" aria-label="Quick actions">
+        <button class="action" data-action="screenshot" type="button">
+          <span class="action-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg></span>
+          <strong>Screenshot</strong>
+          <small>Solve what's on screen</small>
+        </button>
+        <button class="action" data-action="autopilot" type="button">
+          <span class="action-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
+          <strong>AutoPilot</strong>
+          <small>Do the whole set</small>
+        </button>
+        <button class="action action-main" data-action="solve" type="button">
+          <span class="action-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 1.9 1.9.8-1.9.8L19 20.4l-.8-1.9-1.9-.8 1.9-.8z"/></svg></span>
+          <strong>Help me solve</strong>
+          <small>This question</small>
+        </button>
+      </div>
+
+      <div class="feed" id="feed">
+        <div class="empty" id="empty">
+          <div class="empty-orb"><img src="../../icons/icon-128.png" alt=""></div>
+          <h1>What are we solving?</h1>
+          <p>Pick an action above, or ask anything below.</p>
+          <div class="chips">
+            <button type="button" class="chip" data-prompt="Explain the question on my screen step by step." data-attach>Explain my screen</button>
+            <button type="button" class="chip" data-prompt="Give me a hint for the question on my screen, not the answer." data-attach>Give me a hint</button>
+            <button type="button" class="chip" data-prompt="Check my work on the question on my screen. Tell me if my answer is right." data-attach>Check my answer</button>
+          </div>
+        </div>
+
+        <section id="autopilot-panel" class="pilot" hidden>
+          <div class="pilot-head">
+            <div><h2>AutoPilot</h2><p id="pace-summary">Starts at the current question.</p></div>
+            <button type="button" class="link-btn" data-goto="settings">Pace &amp; limits</button>
+          </div>
+          <button id="start-pilot" class="primary" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>Start AutoPilot
+          </button>
+          <div id="pilot-progress" hidden>
+            <div class="progress-head">
+              <span id="progress-label">Working…</span>
+              <button id="pause" type="button" aria-label="Pause AutoPilot" title="Pause AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button>
+            </div>
+            <progress id="progress" max="5" value="0"></progress>
+            <p id="pace-status" class="hint" aria-live="polite"></p>
+          </div>
+          <p class="hint">Keep this tab open. AutoPilot presses Check answer and Next, never Submit assignment.</p>
+        </section>
+
+        <div id="results" class="thread" aria-live="polite"></div>
+
+        <div class="working" id="loader" hidden>
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span id="status" role="status"></span>
+          <button id="stop" type="button" class="stop" hidden>Stop</button>
+        </div>
+      </div>
+
+      <form class="composer" id="composer">
+        <div class="attached" id="attached" hidden>
+          <img id="attached-img" alt="Screenshot that will be sent">
+          <span>Screenshot attached</span>
+          <button type="button" id="attached-remove" aria-label="Remove screenshot" title="Remove">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <textarea id="prompt" rows="1" placeholder="Ask AuraSolve anything…" aria-label="Ask AuraSolve anything"></textarea>
+        <div class="composer-bar">
+          <button type="button" id="attach" class="icon-btn" aria-pressed="false" title="Attach a screenshot of this page">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.2"/></svg>
+            <span>Screen</span>
+          </button>
+          <span class="kbd">Enter to send</span>
+          <button type="submit" id="send" class="send" aria-label="Send" title="Send">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section class="view page" data-view="history" hidden>
+      <div class="page-head"><h2>History</h2><button type="button" class="link-btn" id="clear-history">Clear</button></div>
+      <div id="history-list" class="history"></div>
+      <p id="history-empty" class="muted">Your solved questions and chats show up here.</p>
+    </section>
+
+    <section class="view page" data-view="settings" hidden>
+      <div class="page-head"><h2>Settings</h2></div>
+      <div class="group" id="autopilot-settings">
+        <h3>AutoPilot</h3>
+        <label class="row" for="speed-run"><span><strong>Speed run</strong><small>No extra wait between questions</small></span><input id="speed-run" class="switch" type="checkbox" role="switch"></label>
+        <div id="timing-settings">
+          <label class="row" for="random-timing"><span><strong>Randomize timing</strong><small>Vary the wait between questions</small></span><input id="random-timing" class="switch" type="checkbox" role="switch" checked></label>
+          <div class="two"><label>Minimum<select id="time-min"></select></label><label id="max-label">Maximum<select id="time-max"></select></label></div>
+        </div>
+        <label class="row" for="question-limit"><span><strong>Questions per run</strong></span><select id="question-limit"><option value="0" selected>All unfinished</option><option>1</option><option>5</option><option>10</option><option>20</option></select></label>
+        <label class="row" for="solve-budget"><span><strong>AI solves per assignment</strong><small>Stops AutoPilot at this limit</small></span><select id="solve-budget"><option>50</option><option selected>200</option><option>500</option></select></label>
+      </div>
+      <div class="group">
+        <h3>Chat</h3>
+        <label class="row" for="attach-default"><span><strong>Always attach my screen</strong><small>Send a screenshot with every question you ask</small></span><input id="attach-default" class="switch" type="checkbox" role="switch"></label>
+        <label class="row" for="keep-history"><span><strong>Save history</strong><small>Keep past answers on this computer</small></span><input id="keep-history" class="switch" type="checkbox" role="switch" checked></label>
+      </div>
+    </section>
+
+    <section class="view page" data-view="troubleshoot" hidden>
+      <div class="page-head"><h2>Troubleshoot</h2></div>
+      <div class="group">
+        <h3>Check this page</h3>
+        <p class="muted">See which answer boxes, dropdowns, and buttons AuraSolve can find on the current tab. Nothing on the page is changed.</p>
+        <button id="inspect-page" class="secondary" type="button">Inspect page</button>
+        <pre id="inspection-summary" hidden></pre>
+        <button id="save-inspection" class="secondary" type="button" hidden>Download report</button>
+      </div>
+      <div class="group">
+        <h3>Common fixes</h3>
+        <ul class="tips">
+          <li><strong>Panel says disconnected?</strong> Refresh the MyLab tab.</li>
+          <li><strong>Help me solve can't find the question?</strong> Use Screenshot instead. It works on any page.</li>
+          <li><strong>Diagram cut off?</strong> Scroll so the whole question is visible, then try again.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="view page" data-view="help" hidden>
+      <div class="page-head"><h2>How to use</h2></div>
+      <div class="group">
+        <ul class="howto">
+          <li><span class="howto-ic">1</span><div><strong>Screenshot</strong><small>Solves whatever is visible in your tab, on any website.</small></div></li>
+          <li><span class="howto-ic">2</span><div><strong>Help me solve</strong><small>Reads the current MyLab question, explains it, and can fill in the answer.</small></div></li>
+          <li><span class="howto-ic">3</span><div><strong>AutoPilot</strong><small>Works through the practice set, pressing Check answer and Next. Never Submit assignment.</small></div></li>
+          <li><span class="howto-ic">4</span><div><strong>Ask anything</strong><small>Type a question. Tap Screen to include what's on your page.</small></div></li>
+        </ul>
+      </div>
+      <div class="group links">
+        <a href="https://aurasolve-production.up.railway.app/install.html" target="_blank" rel="noopener">Install &amp; update guide</a>
+        <a href="https://aurasolve-production.up.railway.app/" target="_blank" rel="noopener">AuraSolve website</a>
+        <a href="https://aurasolve-production.up.railway.app/privacy.html" target="_blank" rel="noopener">Privacy</a>
+      </div>
+      <p class="muted center" id="version"></p>
+    </section>
+  </main>
+
+  <nav class="rail" aria-label="AuraSolve menu">
+    <button class="rail-btn active" data-goto="home" type="button" aria-label="Home" data-tip="Home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
     </button>
-  </header>
-  <div class="modes">
-    <button data-mode="autopilot" type="button">AutoPilot</button>
-    <button data-mode="explain" type="button">Explain now</button>
-  </div>
-  <section id="autopilot-settings" class="pilot-panel" hidden>
-    <div class="pilot-heading"><div><h2>AutoPilot</h2><p>Resume at the current question and part.</p></div><span class="pilot-badge">Practice</span></div>
-    <label class="setting-row" for="speed-run"><span><strong>Speed run</strong><small>No extra wait between questions</small></span><input id="speed-run" type="checkbox" role="switch"></label>
-    <div id="timing-settings">
-      <label class="setting-row" for="random-timing"><span>Randomize timing</span><input id="random-timing" type="checkbox" checked></label>
-      <div class="timing-grid"><label>Minimum<select id="time-min"></select></label><label id="max-label">Maximum<select id="time-max"></select></label></div>
-      <p class="setting-hint">Time per question in 10-second steps. Solving may take longer.</p>
-    </div>
-    <label class="setting-row" for="question-limit"><span>Questions per run</span><select id="question-limit"><option value="0" selected>All unfinished</option><option>1</option><option>5</option><option>10</option><option>20</option></select></label>
-    <label class="setting-row" for="solve-budget"><span>AI solves per assignment</span><select id="solve-budget"><option>50</option><option selected>200</option><option>500</option></select></label>
-    <p class="setting-hint">Keep this tab and panel open. Progress and spending limits are saved for resuming. Up to two model calls per solve; basic arithmetic can be checked locally.</p>
-    <button id="start-pilot" class="primary" type="button">Start AutoPilot</button>
-    <div id="pilot-progress" hidden><div class="progress-heading"><span id="progress-label">Ready</span><button id="pause" type="button" aria-label="Pause AutoPilot" title="Pause AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button></div><progress id="progress" max="5" value="0"></progress><p id="pace-status" class="setting-hint" aria-live="polite"></p></div>
-  </section>
-  <p id="status" role="status">Open a practice question, then choose a mode.</p>
-  <div class="loader-wrap" id="loader" hidden aria-hidden="true"><div class="spinner"></div></div>
-  <button id="stop" type="button" class="stop" hidden>Stop</button>
-  <div id="results"></div>
-  <details class="inspection"><summary>Troubleshoot this page</summary><p>Inspect the question’s dropdowns, graph controls, and buttons without changing any answers.</p><button id="inspect-page" type="button">Inspect page</button><pre id="inspection-summary" hidden></pre><button id="save-inspection" type="button" hidden>Download inspection report</button></details>
-  <script type="module" src="popup.js"></script>
+    <button class="rail-btn" data-goto="history" type="button" aria-label="History" data-tip="History">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/><path d="M12 8v4.5l3 2"/></svg>
+    </button>
+    <button class="rail-btn" data-goto="settings" type="button" aria-label="Settings" data-tip="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h9M18 7h1M5 17h3M12 17h7"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+    </button>
+    <button class="rail-btn" data-goto="troubleshoot" type="button" aria-label="Troubleshoot" data-tip="Troubleshoot">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17v3h3l5.2-5.2a4 4 0 0 0 5.3-5.3l-2.3 2.3-2.4-.6-.6-2.4z"/></svg>
+    </button>
+    <button class="rail-btn" data-goto="help" type="button" aria-label="Help" data-tip="Help">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8v.1"/></svg>
+    </button>
+    <span class="rail-space"></span>
+    <button class="rail-btn" id="close" type="button" aria-label="Close" data-tip="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>
+    </button>
+  </nav>
+</div>
+<script type="module" src="popup.js"></script>
 </body>
 </html>
-

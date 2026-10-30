@@ -1,6 +1,6 @@
 import {verifiedSolve, sameActions} from "./verification.js";
 import {solutionSchema, validateSolution} from "../src/shared/solution.js";
-import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS, PAGE_CLUES, CONGRUENCE_CHECKS} from "../src/shared/instructions.js";
+import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS, PAGE_CLUES, CONGRUENCE_CHECKS, ASK_INSTRUCTIONS} from "../src/shared/instructions.js";
 import {answerSlots, slotSolutionSchema, slotsToActions} from "../src/shared/answer-slots.js";
 
 export const DEFAULT_MODEL = "gpt-5-mini";
@@ -198,4 +198,44 @@ export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,reques
   if(fallback)return fallback;
   throw error;
  }
+}
+
+const IMAGE_URL = /^data:image\/(jpeg|png);base64,/;
+// Free-form chat and screenshot solves. Plain text out, rendered with the tutor's
+// LaTeX and bullet conventions in the panel.
+export async function askOpenAI({messages, image, solve}, signal) {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("Server is missing OPENAI_API_KEY.");
+  const history = (Array.isArray(messages) ? messages : []).slice(-12)
+    .map(message => ({role: message?.role === "assistant" ? "assistant" : "user", content: String(message?.content ?? "").slice(0, 4000)}))
+    .filter(message => message.content.trim());
+  if (!history.length || history.at(-1).role !== "user") throw new Error("Ask a question first.");
+  const picture = typeof image === "string" && image.length < 3_500_000 && IMAGE_URL.test(image) ? image : null;
+  if (image && !picture) throw new Error("The screenshot is invalid or too large. Make the browser window smaller and try again.");
+  const input = history.map((message, index) => index === history.length - 1 && picture
+    ? {role: "user", content: [{type: "input_text", text: message.content}, {type: "input_image", image_url: picture, detail: "high"}]}
+    : message);
+  let last;
+  for (const model of modelChain(pickModel(), FALLBACK_MODEL)) {
+    const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort: solve || picture ? "medium" : "low"}} : {};
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      signal,
+      headers: {"Content-Type": "application/json", Authorization: `Bearer ${apiKey}`},
+      body: JSON.stringify({model, ...reasoning, store: false, instructions: ASK_INSTRUCTIONS, input, max_output_tokens: reasoning.reasoning ? 8000 : 2000}),
+    });
+    if (!response.ok) {
+      const code = response.status;
+      const detail = await response.text().catch(() => "");
+      if ([400, 403, 404].includes(code) && model !== FALLBACK_MODEL && /model/i.test(detail)) { last = new Error(`Model ${model} is unavailable.`); continue; }
+      throw new Error(code === 401 ? "OpenAI rejected the server API key." : code === 429 ? "OpenAI rate limit or credit limit reached." : `OpenAI request failed (${code}).`);
+    }
+    const data = await response.json();
+    const output = data.output?.flatMap(item => item.content || []) || [];
+    if (output.some(item => item.type === "refusal")) throw new Error("The model declined this question.");
+    const reply = output.filter(item => item.type === "output_text").map(item => item.text).join("").trim();
+    if (!reply) throw new Error(data.status === "completed" ? "The model returned an empty reply." : "OpenAI did not finish the reply.");
+    return reply;
+  }
+  throw last || new Error("No OpenAI model is available.");
 }

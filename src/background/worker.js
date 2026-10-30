@@ -2,7 +2,7 @@ import {assignmentKey,decidePlayer} from '../shared/player-state.js';
 import {expectedPage} from '../shared/pilot-engine.js';
 import {fieldValue} from '../shared/solution.js';
 import {statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
-import {checkBackend, solve} from "./api.js";
+import {checkBackend, solve, ask} from "./api.js";
 import {editorBridge} from './editors.js';
 import {awaitSelection, placeClick, trustedClick, withDebugger} from './trusted-click.js';
 import {frameCall} from './frame-call.js';
@@ -486,6 +486,20 @@ async function handle(message,sender) {
     } catch {
       return {configured:false,model:settings.model || DEFAULT_MODEL,service:"AuraSolve Cloud"};
     }
+  }
+  // Screenshot and chat work on any page, so they skip the practice-page setup.
+  if (message.type === "captureScreen") {
+    if (sender.tab) throw new Error("Use the AuraSolve panel to take a screenshot.");
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error("Open the page you want solved first.");
+    if (/^(chrome|edge|about|chrome-extension):/i.test(tab.url || "")) throw new Error("Chrome doesn't allow screenshots of this page. Open the question's tab and try again.");
+    try { return {image:await screenshot(tab.id,{})}; }
+    catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
+  }
+  if (message.type === "ask") {
+    if (sender.tab) throw new Error("Ask from the AuraSolve panel.");
+    if (!Array.isArray(message.messages) || !message.messages.length) throw new Error("Ask a question first.");
+    return {reply:await ask(message.messages.slice(-12),message.image,message.solve,AbortSignal.timeout(120000))};
   }
   const tabId = await resolveTab(message, sender);
   if(message.pilotRunId){

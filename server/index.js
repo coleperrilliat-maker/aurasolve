@@ -3,7 +3,7 @@ import http from "node:http";
 import {readFile, stat} from "node:fs/promises";
 import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
-import {solveWithOpenAI, pickModel} from "./openai.js";
+import {solveWithOpenAI, pickModel, askOpenAI} from "./openai.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 4_000_000;
@@ -171,6 +171,36 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       const message = error.name === "AbortError" ? "Request timed out." : error.message;
       sendJson(res, 502, {error: message});
+    } finally {
+      clearTimeout(timeout);
+    }
+    return;
+  }
+
+  if (path === "/api/v1/ask" && req.method === "POST") {
+    if (!rateLimit(clientIp(req))) {
+      sendJson(res, 429, {error: "Too many requests. Try again in a minute."});
+      return;
+    }
+    let payload;
+    try {
+      payload = JSON.parse(await readBody(req));
+    } catch {
+      sendJson(res, 400, {error: "Invalid JSON body."});
+      return;
+    }
+    if (!Array.isArray(payload?.messages) || !payload.messages.length || payload.messages.length > 40) {
+      sendJson(res, 400, {error: "Missing messages."});
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+    try {
+      const reply = await askOpenAI({messages: payload.messages, image: payload.image, solve: payload.solve === true}, controller.signal);
+      sendJson(res, 200, {reply});
+    } catch (error) {
+      sendJson(res, 502, {error: error.name === "AbortError" ? "Request timed out." : error.message});
     } finally {
       clearTimeout(timeout);
     }

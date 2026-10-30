@@ -88,6 +88,25 @@ export function answerLines(solution, question) {
   });
 }
 
+// Chat replies: "- " lines become a list, other lines become paragraphs.
+export function renderRich(text) {
+  const box = el("div", "rich");
+  let list = null;
+  for (const raw of String(text || "").split(/\n+/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const item = line.match(/^(?:[-•*]|\d+[.)])\s+(.*)$/);
+    if (item) {
+      if (!list) { list = el("ul", "steps"); box.append(list); }
+      list.append(rich(el("li"), item[1]));
+    } else {
+      list = null;
+      box.append(rich(el("p"), line));
+    }
+  }
+  return box;
+}
+
 export function renderSolution(result, label) {
   const card = el("article", "answer-card");
   if (label) { const tag = el("div", "tag"); tag.textContent = label; card.append(tag); }
