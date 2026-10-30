@@ -178,30 +178,39 @@ export function strongModel() {
   return process.env.OPENAI_STRONG_MODEL?.trim() || STRONG_MODEL;
 }
 const unsure = (solution, snapshot, mode) => mode !== "explain" && (snapshot.fields || []).length > 0 && (!solution.supported || solution.confidence < 0.92);
+function modelChain(...names) {
+  const seen = new Set();
+  return names.filter(name => name && !seen.has(name) && seen.add(name));
+}
+async function solveOnceAvailable(models, question, runMode, signal, effort) {
+  let last;
+  for (const name of models) {
+    try { return await solveOnce(question, runMode, name, signal, effort); }
+    catch (error) {
+      if (!error.modelUnavailable) throw error;
+      last = error;
+    }
+  }
+  throw last || new Error("No OpenAI model is available for this question.");
+}
 
 export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,requestedEffort){
  const cheap=pickModel(requestedModel), strong=strongModel();
  const hard=hardQuestion(snapshot);
- // Anything with a diagram, mixed blanks, choices, or a prior miss uses the
+ // Anything with a diagram, mixed blanks, choices, or a prior miss prefers the
  // strong model. Mini only keeps lone plain-text blanks, and even those get
- // rechecked when confidence is under 0.92.
- const first=hard ? strong : cheap;
+ // rechecked when confidence is under 0.92. Always keep gpt-4.1 as the last seat.
+ const preferred=hard ? strong : cheap;
  const effort=hard && !EFFORTS.includes(requestedEffort) ? "high" : requestedEffort;
- const solveWith=name=>verifiedSolve(async(question,runMode)=>{
-  try { return await solveOnce(question,runMode,name,signal,effort); }
-  catch(error){
-   if(!error.modelUnavailable)throw error;
-   if(name===strong && strong!==cheap)return solveOnce(question,runMode,cheap,signal,"high");
-   return solveOnce(question,runMode,FALLBACK_MODEL,signal,effort);
-  }
- },snapshot,mode);
+ const chain=hard ? modelChain(strong, cheap, FALLBACK_MODEL) : modelChain(cheap, FALLBACK_MODEL);
+ const solveWith=models=>verifiedSolve((question,runMode)=>solveOnceAvailable(models,question,runMode,signal,effort),snapshot,mode);
  let solution, failure;
- try { solution=await solveWith(first); }
+ try { solution=await solveWith(chain); }
  catch(error){ failure=error; }
  if(solution && !unsure(solution,snapshot,mode))return solution;
- if(first===strong || signal?.aborted){ if(solution)return solution; throw failure; }
+ if(preferred===strong || signal?.aborted){ if(solution)return solution; throw failure; }
  try {
-  const second=await solveWith(strong);
+  const second=await solveWith(modelChain(strong, FALLBACK_MODEL));
   if(!solution || second.supported && (second.confidence>=solution.confidence || !solution.supported))return second;
  } catch(error){ if(!solution)throw failure; }
  return solution;

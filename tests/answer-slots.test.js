@@ -107,3 +107,15 @@ test('a retry after Pearson marked it wrong goes straight to the strong model',a
     ()=>solveWithOpenAI({...question,retryContext:[{actions:[{kind:'radio',target:'a',value:'A'}],feedback:'Incorrect.'}]},'field'));
   assert.deepEqual(models,['gpt-5']);
 });
+
+test('an unavailable strong model falls through mini to gpt-4.1 instead of dying',async()=>{
+  const models=[];
+  const solution=await withFetch(body=>{
+    models.push(body.model);
+    if(body.model==='gpt-5' || body.model==='gpt-5-mini')
+      return {ok:false,status:404,text:async()=>'{"error":{"code":"model_not_found","message":"The model does not exist"}}'};
+    return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
+  },()=>solveWithOpenAI(question,'field'));
+  assert.deepEqual(models,['gpt-5','gpt-5-mini','gpt-4.1']);
+  assert.equal(solution.actions[0].target,'a');
+});
