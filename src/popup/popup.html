@@ -18,8 +18,8 @@
           <small id="cloud">Connecting…</small>
         </div>
       </div>
-      <button id="new-chat" class="ghost-btn" type="button" title="Start over">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New
+      <button id="new-chat" class="ghost-btn" type="button" title="New chat" aria-label="New chat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h8M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
       </button>
     </header>
 
@@ -28,17 +28,14 @@
         <button class="action" data-action="screenshot" type="button">
           <span class="action-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg></span>
           <strong>Screenshot</strong>
-          <small>Solve what's on screen</small>
         </button>
         <button class="action" data-action="autopilot" type="button">
           <span class="action-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
           <strong>AutoPilot</strong>
-          <small>Do the whole set</small>
         </button>
         <button class="action action-main" data-action="solve" type="button">
           <span class="action-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 1.9 1.9.8-1.9.8L19 20.4l-.8-1.9-1.9-.8 1.9-.8z"/></svg></span>
           <strong>Help me solve</strong>
-          <small>This question</small>
         </button>
       </div>
 
@@ -53,25 +50,6 @@
             <button type="button" class="chip" data-prompt="Check my work on the question on my screen. Tell me if my answer is right." data-attach>Check my answer</button>
           </div>
         </div>
-
-        <section id="autopilot-panel" class="pilot" hidden>
-          <div class="pilot-head">
-            <div><h2>AutoPilot</h2><p id="pace-summary">Starts at the current question.</p></div>
-            <button type="button" class="link-btn" data-goto="settings">Pace &amp; limits</button>
-          </div>
-          <button id="start-pilot" class="primary" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>Start AutoPilot
-          </button>
-          <div id="pilot-progress" hidden>
-            <div class="progress-head">
-              <span id="progress-label">Working…</span>
-              <button id="pause" type="button" aria-label="Pause AutoPilot" title="Pause AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button>
-            </div>
-            <progress id="progress" max="5" value="0"></progress>
-            <p id="pace-status" class="hint" aria-live="polite"></p>
-          </div>
-          <p class="hint">Keep this tab open. AutoPilot presses Check answer and Next, never Submit assignment.</p>
-        </section>
 
         <div id="results" class="thread" aria-live="polite"></div>
 
@@ -96,12 +74,52 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.2"/></svg>
             <span>Screen</span>
           </button>
-          <span class="kbd">Enter to send</span>
+          <span class="kbd"></span>
           <button type="submit" id="send" class="send" aria-label="Send" title="Send">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
           </button>
         </div>
       </form>
+    </section>
+
+    <section class="view page" data-view="autopilot" hidden>
+      <div class="page-head"><h2>AutoPilot</h2><span class="pill" id="pilot-state">Ready</span></div>
+      <div class="pilot">
+        <div class="pilot-hero">
+          <span class="pilot-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
+          <div><strong>Do the whole set</strong><small id="pace-summary">Starts at the current question.</small></div>
+        </div>
+        <button id="start-pilot" class="primary" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>Start AutoPilot
+        </button>
+        <div id="pilot-progress" hidden>
+          <div class="progress-head">
+            <span id="progress-label">Starting…</span>
+            <div class="pilot-ctrls">
+              <button id="pause" type="button" aria-label="Pause AutoPilot" title="Pause AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button>
+              <button id="stop-pilot" type="button" aria-label="Stop AutoPilot" title="Stop AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+            </div>
+          </div>
+          <progress id="progress" max="5" value="0"></progress>
+          <p id="pace-status" class="hint" aria-live="polite"></p>
+        </div>
+        <p id="pilot-error" class="pilot-error" hidden></p>
+      </div>
+      <div class="group" id="autopilot-settings">
+        <h3>Pace &amp; limits</h3>
+        <label class="row" for="speed-run"><span><strong>Speed run</strong><small>No extra wait between questions</small></span><input id="speed-run" class="switch" type="checkbox" role="switch"></label>
+        <div id="timing-settings">
+          <label class="row" for="random-timing"><span><strong>Randomize timing</strong><small>Vary the wait between questions</small></span><input id="random-timing" class="switch" type="checkbox" role="switch" checked></label>
+          <div class="two"><label>Minimum<select id="time-min"></select></label><label id="max-label">Maximum<select id="time-max"></select></label></div>
+        </div>
+        <label class="row" for="question-limit"><span><strong>Questions per run</strong></span><select id="question-limit"><option value="0" selected>All unfinished</option><option>1</option><option>5</option><option>10</option><option>20</option></select></label>
+        <label class="row" for="solve-budget"><span><strong>AI solves per assignment</strong><small>Stops AutoPilot at this limit</small></span><select id="solve-budget"><option>50</option><option selected>200</option><option>500</option></select></label>
+      </div>
+      <div class="group" id="pilot-log-group" hidden>
+        <h3>Last run</h3>
+        <div id="pilot-log"></div>
+      </div>
+      <p class="hint center">Keep the assignment tab open. AutoPilot presses Check answer and Next, never Submit assignment.</p>
     </section>
 
     <section class="view page" data-view="history" hidden>
@@ -112,15 +130,9 @@
 
     <section class="view page" data-view="settings" hidden>
       <div class="page-head"><h2>Settings</h2></div>
-      <div class="group" id="autopilot-settings">
+      <div class="group">
         <h3>AutoPilot</h3>
-        <label class="row" for="speed-run"><span><strong>Speed run</strong><small>No extra wait between questions</small></span><input id="speed-run" class="switch" type="checkbox" role="switch"></label>
-        <div id="timing-settings">
-          <label class="row" for="random-timing"><span><strong>Randomize timing</strong><small>Vary the wait between questions</small></span><input id="random-timing" class="switch" type="checkbox" role="switch" checked></label>
-          <div class="two"><label>Minimum<select id="time-min"></select></label><label id="max-label">Maximum<select id="time-max"></select></label></div>
-        </div>
-        <label class="row" for="question-limit"><span><strong>Questions per run</strong></span><select id="question-limit"><option value="0" selected>All unfinished</option><option>1</option><option>5</option><option>10</option><option>20</option></select></label>
-        <label class="row" for="solve-budget"><span><strong>AI solves per assignment</strong><small>Stops AutoPilot at this limit</small></span><select id="solve-budget"><option>50</option><option selected>200</option><option>500</option></select></label>
+        <button class="row" type="button" data-goto="autopilot"><span><strong>Pace &amp; limits</strong><small>Timing, questions per run, and AI solve limit</small></span><span class="row-arrow">→</span></button>
       </div>
       <div class="group">
         <h3>Chat</h3>
@@ -170,6 +182,9 @@
   <nav class="rail" aria-label="AuraSolve menu">
     <button class="rail-btn active" data-goto="home" type="button" aria-label="Home" data-tip="Home">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
+    </button>
+    <button class="rail-btn" data-goto="autopilot" type="button" aria-label="AutoPilot" data-tip="AutoPilot">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
     </button>
     <button class="rail-btn" data-goto="history" type="button" aria-label="History" data-tip="History">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/><path d="M12 8v4.5l3 2"/></svg>

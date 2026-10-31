@@ -34,7 +34,7 @@ $('time-min').value = '20'; $('time-max').value = '40';
 function paceSummary() {
   const limit = $('question-limit').value === '0' ? 'every unfinished question' : `${$('question-limit').value} question${$('question-limit').value === '1' ? '' : 's'}`;
   const pace = $('speed-run').checked ? 'no wait' : $('random-timing').checked ? `${$('time-min').value}–${$('time-max').value}s per question` : `${$('time-min').value}s per question`;
-  $('pace-summary').textContent = `Does ${limit}, ${pace}.`;
+  $('pace-summary').textContent = `Answers ${limit}, ${pace}.`;
 }
 function updateTiming() {
   $('timing-settings').hidden = $('speed-run').checked;
@@ -147,6 +147,7 @@ function firstLine(text) {
   const line = String(text || '').split('\n').map(part => part.replace(/\*\*|\\\(|\\\)/g, '').replace(/^answer:\s*/i, '').trim()).find(Boolean) || '';
   return line.length > 80 ? line.slice(0, 77) + '…' : line;
 }
+function pilotState(text) { $('pilot-state').textContent = text; $('pilot-state').dataset.state = text.toLowerCase(); }
 function setActive(action) {
   document.querySelectorAll('[data-action]').forEach(button => button.classList.toggle('active', button.dataset.action === action));
 }
@@ -241,7 +242,7 @@ function pauseUI() {
   $('pause').innerHTML = paused ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 9 6-9 6Z"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg>';
 }
 $('pause').onclick = () => {
-  paused = !paused; pauseUI();
+  paused = !paused; pauseUI(); pilotState(paused ? 'Paused' : 'Running');
   $('pace-status').textContent = paused ? 'Paused. An action already sent may finish first.' : 'Resuming…';
 };
 function breakdown() {
@@ -255,25 +256,22 @@ function breakdown() {
     details.append(el('summary', '', `Question ${item.number} · ${item.outcome}`), renderSolution(item.result, ''));
     box.append(details);
   }
-  addReply('AutoPilot', box);
+  $('pilot-log').replaceChildren(box);
+  $('pilot-log-group').hidden = false;
   saveHistory({kind: 'AutoPilot', title: `${runLog.length} question${runLog.length === 1 ? '' : 's'} · ${correct} correct`, text: runLog.map(item => `- Question ${item.number}: ${item.outcome}`).join('\n')});
-}
-function openPilot() {
-  setActive('autopilot');
-  hideEmpty();
-  $('autopilot-panel').hidden = false;
-  $('feed').scrollTop = 0;
 }
 async function startPilot() {
   const live = begin();
   runLog = []; paused = false; pauseUI();
   const checkpoint = async () => { live(); while (paused) { await sleep(100); live(); } };
   const delay = async ms => { let left = ms; while (left > 0) { await checkpoint(); const step = Math.min(100, left); await sleep(step); live(); if (!paused) left -= step; } await checkpoint(); };
-  $('pilot-progress').hidden = false; $('start-pilot').hidden = true;
+  $('pilot-progress').hidden = false; $('start-pilot').hidden = true; $('pilot-error').hidden = true;
   $('pace-status').textContent = ''; $('progress').value = 0;
+  const progress = text => { $('progress-label').textContent = text; };
+  pilotState('Running');
   const limit = Number($('question-limit').value), budget = Number($('solve-budget').value);
   try {
-    working('Checking this page…');
+    progress('Checking this page…');
     pilotTabId = null;
     const settings = await send({type: 'settingsStatus'}); live();
     if (!settings.configured) throw new Error('AuraSolve Cloud is offline. Try again in a minute.');
@@ -291,15 +289,14 @@ async function startPilot() {
       onEvent: async event => {
         live();
         if (event.kind === 'solve') {
-          working(`Solving question ${runLog.length + 1}…`);
-          $('progress-label').textContent = `Question ${runLog.length + 1}`;
+          progress(`Solving question ${runLog.length + 1}…`);
           $('pace-status').textContent = `${event.spent} of ${budget} AI solves used`;
           $('progress').max = limit || Math.max($('progress').max || 1, runLog.length + 1);
         }
         if (event.kind === 'answer') runLog.push({number: String(runLog.length + 1), result: event.result, outcome: 'Filling', submitted: false});
         if (event.kind === 'retry') {
           if (runLog.length) runLog.at(-1).outcome = 'Incorrect · trying again';
-          working('Pearson marked that incorrect. Trying again with its feedback…');
+          progress('Marked incorrect. Trying again with the feedback…');
         }
         if (event.kind === 'filled' && runLog.length) {
           const pressed = event.applied?.checked === 'final' ? 'Final Check' : 'Check answer';
@@ -307,22 +304,24 @@ async function startPilot() {
           runLog.at(-1).submitted = event.applied?.advanced === 'check';
           $('progress').value = event.completed;
           $('progress').max = limit || event.completed;
-          $('progress-label').textContent = `${event.completed} done`;
+          progress(`${event.completed} done`);
         }
-        if (event.kind === 'next') working('Moving to the next question…');
+        if (event.kind === 'next') progress('Moving to the next question…');
         if (event.kind === 'done') {
-          $('progress-label').textContent = event.all ? 'Finished' : `${event.completed} done`;
+          progress(`Finished ${event.completed} question${event.completed === 1 ? '' : 's'}`);
           $('pace-status').textContent = `${event.spent} of ${budget} AI solves used`;
-          status(`Finished ${event.completed} question${event.completed === 1 ? '' : 's'}.`);
         }
       },
     });
     breakdown();
-    finish();
+    pilotState('Done');
   } catch (error) {
     breakdown();
-    finish(error);
+    const stopped = error.message === 'Stopped.';
+    pilotState(stopped ? 'Stopped' : 'Error');
+    if (!stopped) { $('pilot-error').textContent = error.message; $('pilot-error').hidden = false; }
   } finally {
+    setBusy(false);
     $('start-pilot').hidden = false;
   }
 }
@@ -383,12 +382,17 @@ document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click'
 /* ---------- Top actions ---------- */
 document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => {
   if (busy) return;
-  show('home');
+  if (button.dataset.action !== 'autopilot') show('home');
   if (button.dataset.action === 'screenshot') screenshotSolve();
   if (button.dataset.action === 'solve') helpSolve();
-  if (button.dataset.action === 'autopilot') openPilot();
+  if (button.dataset.action === 'autopilot') show('autopilot');
 }));
 $('start-pilot').onclick = () => { if (!busy) startPilot(); };
+$('stop-pilot').onclick = async () => {
+  token++;
+  try { await send({type: 'stop'}); } catch {}
+  $('pace-status').textContent = 'Stopped. Starting again resumes from the current page.';
+};
 $('stop').onclick = async () => {
   token++;
   setBusy(false);
@@ -400,8 +404,6 @@ $('new-chat').onclick = () => {
   if (busy) return;
   chat = []; runLog = [];
   $('results').replaceChildren();
-  $('autopilot-panel').hidden = true;
-  $('pilot-progress').hidden = true;
   $('empty').hidden = false;
   setActive(null);
   setAttachment(null);

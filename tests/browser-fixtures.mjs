@@ -216,14 +216,12 @@ try{
     }}};
   });
   await pilot.goto(origin+'/src/popup/popup.html');
-  await pilot.getByRole('button',{name:'Settings',exact:true}).click();
+  await pilot.locator('[data-action="autopilot"]').click();
+  assert.equal(await pilot.locator('[data-view="autopilot"]').isVisible(),true);
   assert.equal(await pilot.locator('#time-min option').count(),12);
   await pilot.locator('#speed-run').check();
   assert.equal(await pilot.locator('#timing-settings').isVisible(),false);
   await pilot.locator('#question-limit').selectOption('1');
-  await pilot.getByRole('button',{name:'Home',exact:true}).click();
-  await pilot.locator('[data-action="autopilot"]').click();
-  assert.equal(await pilot.locator('#autopilot-panel').isVisible(),true);
   await pilot.getByRole('button',{name:'Start AutoPilot'}).click();
   await pilot.waitForFunction(()=>typeof releaseSolve==='function');
   await pilot.getByRole('button',{name:'Pause AutoPilot',exact:true}).click();
@@ -231,7 +229,7 @@ try{
   await pilot.waitForTimeout(200);
   assert.equal(await pilot.evaluate(()=>pilotCalls.includes('apply')),false);
   await pilot.getByRole('button',{name:'Resume AutoPilot',exact:true}).click();
-  await pilot.waitForFunction(()=>document.querySelector('#results').textContent.includes('Run breakdown'));
+  await pilot.waitForFunction(()=>document.querySelector('#pilot-log').textContent.includes('Run breakdown'));
   assert.equal(await pilot.evaluate(()=>pilotCalls.filter(c=>c==='apply').length),1);
   assert.equal(await pilot.locator('#progress').getAttribute('value'),'1');
   console.log('PASS: AutoPilot settings, speed run, pause during solve, resume once, and run limit');
