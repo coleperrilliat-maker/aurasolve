@@ -107,6 +107,11 @@ export function majorityDrawing(solutions) {
   const ranked = [...groups.values()].sort((left, right) => right.length - left.length ||
     Math.max(...right.map(s => s.confidence)) - Math.max(...left.map(s => s.confidence)));
   if (!ranked.length) return solutions.find(Boolean) || null;
-  const winner = ranked[0].reduce((best, s) => s.confidence > best.confidence ? s : best);
+  // Within the winning drawing, keep the points most runs chose; they are the
+  // ones read off the grid, not an off-screen point on the same line.
+  const pointCounts = new Map();
+  for (const solution of solutions) for (const item of solution?.drawing || []) for (const p of item.points) pointCounts.set(`${p.x},${p.y}`, (pointCounts.get(`${p.x},${p.y}`) || 0) + 1);
+  const support = solution => solution.drawing.reduce((sum, item) => sum + item.points.reduce((total, p) => total + pointCounts.get(`${p.x},${p.y}`), 0), 0);
+  const winner = ranked[0].reduce((best, s) => (support(s) - support(best) || s.confidence - best.confidence) > 0 ? s : best);
   return ranked[0].length > 1 ? winner : {...winner, confidence: Math.min(winner.confidence, .6)};
 }

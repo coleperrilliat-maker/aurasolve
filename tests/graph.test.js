@@ -58,6 +58,8 @@ test('the same line through different points counts as one drawing, and the majo
   assert.notEqual(drawingKey(line([9,3],[10,7])),drawingKey(line([9.5,3],[10.5,7])));
   const winner=majorityDrawing([line([9.5,3],[10.5,7],1),line([9,3],[10,7],.8),line([10,7],[9,3],.85)]);
   assert.deepEqual(winner.drawing[0].points,[{x:10,y:7},{x:9,y:3}]);
+  const onGrid=majorityDrawing([line([8,-1],[10,7],1),line([9,3],[10,7],.8),line([9,3],[10,7],.7)]);
+  assert.deepEqual(onGrid.drawing[0].points,[{x:9,y:3},{x:10,y:7}]);
   const split=majorityDrawing([line([9.5,3],[10.5,7],.9),line([9,3],[10,7],.95)]);
   assert.ok(split.confidence<=.6);
 });
