@@ -1,11 +1,10 @@
-import {verifiedSolve, sameActions} from "./verification.js";
+import {verifiedSolve, sameActions, majorityDrawing} from "./verification.js";
 import {solutionSchema, validateSolution, withDrawing} from "../src/shared/solution.js";
 import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS, PAGE_CLUES, CONGRUENCE_CHECKS, ASK_INSTRUCTIONS, GRAPH_TOOL_NOTE} from "../src/shared/instructions.js";
 import {answerSlots, slotSolutionSchema, slotsToActions} from "../src/shared/answer-slots.js";
 
 export const DEFAULT_MODEL = "gpt-5-mini";
 export const FALLBACK_MODEL = "gpt-4.1";
-export const REASONING_FALLBACK = "o4-mini";
 export const STRONG_MODEL = "gpt-5";
 // Old extension builds saved these non-reasoning models as the user's choice.
 const LEGACY_MODELS = new Set(["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"]);
@@ -187,8 +186,14 @@ export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,reques
  const cheap=pickModel(requestedModel), strong=strongModel();
  const chosen=EFFORTS.includes(requestedEffort) ? requestedEffort : undefined;
  const solveWith=(models,effort)=>verifiedSolve((question,runMode)=>solveOnceAvailable(models,question,runMode,signal,effort),snapshot,mode);
- const cheapChain=modelChain(cheap,REASONING_FALLBACK,FALLBACK_MODEL), strongChain=modelChain(strong,cheap,REASONING_FALLBACK,FALLBACK_MODEL);
- if(snapshot.graphTool && !(snapshot.fields || []).length)return solveWith(cheapChain,chosen || "high");
+ const cheapChain=modelChain(cheap,FALLBACK_MODEL), strongChain=modelChain(strong,cheap,FALLBACK_MODEL);
+ // A misread grid point changes the whole drawing, so three solves vote on it.
+ if(snapshot.graphTool && !(snapshot.fields || []).length){
+  const runs=await Promise.allSettled([0,1,2].map(()=>solveWith(cheapChain,chosen || "high")));
+  const solved=runs.filter(run=>run.status==="fulfilled").map(run=>run.value);
+  if(!solved.length)throw runs[0].reason;
+  return majorityDrawing(solved);
+ }
  if(mode==="explain" || !(snapshot.fields || []).length)return solveWith(cheapChain,chosen);
  // Pearson already rejected an answer, so pay for the strong model.
  if(snapshot.retryContext?.length || cheap===strong)return solveWith(strongChain,chosen || "high");
@@ -223,7 +228,7 @@ export async function askOpenAI({messages, image, solve}, signal) {
     ? {role: "user", content: [{type: "input_text", text: message.content}, {type: "input_image", image_url: picture, detail: "high"}]}
     : message);
   let last;
-  for (const model of modelChain(pickModel(), REASONING_FALLBACK, FALLBACK_MODEL)) {
+  for (const model of modelChain(pickModel(), FALLBACK_MODEL)) {
     const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort: solve || picture ? "medium" : "low"}} : {};
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",

@@ -77,3 +77,36 @@ export async function verifiedSolve(solve, snapshot, mode) {
   if(arithmeticCheck(snapshot,first)===false)return reject(first,'The answer failed the arithmetic check. Nothing was filled.');
   return first;
 }
+
+// Two drawings match when they draw the same objects, even through different points on the same line.
+const round = value => Math.round(value * 1000) / 1000;
+function objectKey({tool, points}) {
+  const [a, b] = points;
+  if (tool === 'line') {
+    let A = b.y - a.y, B = a.x - b.x, C = -(A * a.x + B * a.y);
+    const scale = (A || B) < 0 ? -Math.hypot(A, B) : Math.hypot(A, B);
+    return `line:${round(A / scale)},${round(B / scale)},${round(C / scale)}`;
+  }
+  if (tool === 'segment') return `segment:${[a, b].map(p => `${p.x},${p.y}`).sort().join(';')}`;
+  if (tool === 'ray') {
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    return `ray:${a.x},${a.y};${round((b.x - a.x) / length)},${round((b.y - a.y) / length)}`;
+  }
+  return `${tool}:${points.map(p => `${p.x},${p.y}`).join(';')}`;
+}
+export function drawingKey(solution) {
+  return (solution?.drawing || []).map(objectKey).sort().join('|');
+}
+export function majorityDrawing(solutions) {
+  const groups = new Map();
+  for (const solution of solutions) {
+    if (!solution?.drawing?.length) continue;
+    const key = drawingKey(solution);
+    groups.set(key, [...(groups.get(key) || []), solution]);
+  }
+  const ranked = [...groups.values()].sort((left, right) => right.length - left.length ||
+    Math.max(...right.map(s => s.confidence)) - Math.max(...left.map(s => s.confidence)));
+  if (!ranked.length) return solutions.find(Boolean) || null;
+  const winner = ranked[0].reduce((best, s) => s.confidence > best.confidence ? s : best);
+  return ranked[0].length > 1 ? winner : {...winner, confidence: Math.min(winner.confidence, .6)};
+}

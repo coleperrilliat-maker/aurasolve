@@ -106,6 +106,6 @@ test('an unavailable model falls through to the next model instead of dying',asy
       return {ok:false,status:404,text:async()=>'{"error":{"code":"model_not_found","message":"The model does not exist"}}'};
     return reply({answer:'A',confidence:.95,supported:true,answers:{choice_1:'1) A. SAS',blank_2:'2) SAS Postulate'}});
   },()=>solveWithOpenAI({...question,retryContext:[{actions:[],feedback:'Incorrect.'}]},'field'));
-  assert.deepEqual(models,['gpt-5','gpt-5-mini','o4-mini']);
+  assert.deepEqual(models,['gpt-5','gpt-5-mini','gpt-4.1']);
   assert.equal(solution.actions[0].target,'a');
 });
