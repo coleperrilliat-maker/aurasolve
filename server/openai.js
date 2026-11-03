@@ -151,7 +151,7 @@ async function solveOnce(snapshot, mode, model, signal, requestedEffort) {
       const {answers, ...rest} = parsed;
       parsed = {...rest, actions: slotsToActions(answers, slots, snapshot.dropTargets || [])};
     }
-    return validateSolution(parsed, snapshot, mode);
+    return {...validateSolution(parsed, snapshot, mode), model};
   } catch (error) {
     throw new Error(`Could not use the answer: ${error.message}`);
   }
