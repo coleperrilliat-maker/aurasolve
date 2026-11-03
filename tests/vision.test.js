@@ -128,7 +128,7 @@ test('an unavailable model falls back once instead of failing the question',asyn
  };
  try{
   await solveWithOpenAI({question:'Solve 2x = 10',fields:[],dropTargets:[],limitations:[]},'explain');
-  assert.deepEqual(models,['gpt-5-mini','gpt-4.1']);
+  assert.deepEqual(models,['gpt-5-mini','o4-mini']);
  }finally{
   globalThis.fetch=original;
   if(previousKey===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previousKey;

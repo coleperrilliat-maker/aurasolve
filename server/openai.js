@@ -5,6 +5,7 @@ import {answerSlots, slotSolutionSchema, slotsToActions} from "../src/shared/ans
 
 export const DEFAULT_MODEL = "gpt-5-mini";
 export const FALLBACK_MODEL = "gpt-4.1";
+export const REASONING_FALLBACK = "o4-mini";
 export const STRONG_MODEL = "gpt-5";
 // Old extension builds saved these non-reasoning models as the user's choice.
 const LEGACY_MODELS = new Set(["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"]);
@@ -171,7 +172,7 @@ async function solveOnceAvailable(models, question, runMode, signal, effort) {
   for (const name of models) {
     try {
       const solution = await solveOnce(question, runMode, name, signal, effort);
-      return skipped.length ? {...solution, skipped} : solution;
+      return solution;
     }
     catch (error) {
       if (!error.modelUnavailable) throw error;
@@ -186,7 +187,7 @@ export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,reques
  const cheap=pickModel(requestedModel), strong=strongModel();
  const chosen=EFFORTS.includes(requestedEffort) ? requestedEffort : undefined;
  const solveWith=(models,effort)=>verifiedSolve((question,runMode)=>solveOnceAvailable(models,question,runMode,signal,effort),snapshot,mode);
- const cheapChain=modelChain(cheap,FALLBACK_MODEL), strongChain=modelChain(strong,cheap,FALLBACK_MODEL);
+ const cheapChain=modelChain(cheap,REASONING_FALLBACK,FALLBACK_MODEL), strongChain=modelChain(strong,cheap,REASONING_FALLBACK,FALLBACK_MODEL);
  if(snapshot.graphTool && !(snapshot.fields || []).length)return solveWith(cheapChain,chosen || "high");
  if(mode==="explain" || !(snapshot.fields || []).length)return solveWith(cheapChain,chosen);
  // Pearson already rejected an answer, so pay for the strong model.
@@ -222,7 +223,7 @@ export async function askOpenAI({messages, image, solve}, signal) {
     ? {role: "user", content: [{type: "input_text", text: message.content}, {type: "input_image", image_url: picture, detail: "high"}]}
     : message);
   let last;
-  for (const model of modelChain(pickModel(), FALLBACK_MODEL)) {
+  for (const model of modelChain(pickModel(), REASONING_FALLBACK, FALLBACK_MODEL)) {
     const reasoning = /^(gpt-5|o\d)/.test(model) ? {reasoning: {effort: solve || picture ? "medium" : "low"}} : {};
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
