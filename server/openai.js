@@ -127,7 +127,7 @@ async function solveOnce(snapshot, mode, model, signal, requestedEffort) {
     const code = response.status;
     if ([400, 403, 404].includes(code) && model !== FALLBACK_MODEL) {
       const detail = await response.text().catch(() => "");
-      if (/model/i.test(detail)) throw Object.assign(new Error(`Model ${model} is unavailable.`), {modelUnavailable: true});
+      if (/model/i.test(detail)) throw Object.assign(new Error(`Model ${model} is unavailable.`), {modelUnavailable: true, detail: detail.slice(0, 400)});
     }
     throw new Error(
       code === 401
@@ -167,10 +167,15 @@ function modelChain(...names) {
 }
 async function solveOnceAvailable(models, question, runMode, signal, effort) {
   let last;
+  const skipped = [];
   for (const name of models) {
-    try { return await solveOnce(question, runMode, name, signal, effort); }
+    try {
+      const solution = await solveOnce(question, runMode, name, signal, effort);
+      return skipped.length ? {...solution, skipped} : solution;
+    }
     catch (error) {
       if (!error.modelUnavailable) throw error;
+      skipped.push(`${name}: ${error.detail || error.message}`);
       last = error;
     }
   }
