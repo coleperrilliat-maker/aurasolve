@@ -25,6 +25,22 @@ export const solutionSchema = {
     },required:["kind","target","value","destination","x","y"]}}
   }, required:["explanation","answer","choices","confidence","supported","limitation","actions"]
 };
+export const GRAPH_TOOLS = ["point","line","segment","ray","circle","parabola","absolute value","exponential","square root"];
+export function withDrawing(schema) {
+  const point = {type:"object",additionalProperties:false,properties:{x:{type:"number"},y:{type:"number"}},required:["x","y"]};
+  const drawing = {type:"array",items:{type:"object",additionalProperties:false,properties:{tool:{type:"string",enum:GRAPH_TOOLS},points:{type:"array",items:point}},required:["tool","points"]}};
+  return {...schema, properties:{...schema.properties, drawing}, required:[...schema.required, "drawing"]};
+}
+function validateDrawing(drawing) {
+  if (!Array.isArray(drawing) || drawing.length > 10) throw new Error("The model returned an invalid drawing.");
+  for (const item of drawing) {
+    const points = item?.points;
+    if (!GRAPH_TOOLS.includes(item?.tool) || !Array.isArray(points) || points.length !== (item.tool === "point" ? 1 : 2) ||
+        points.some(p => !Number.isFinite(p?.x) || !Number.isFinite(p?.y) || Math.abs(p.x) > 1e4 || Math.abs(p.y) > 1e4))
+      throw new Error("The model returned an invalid drawing.");
+    if (points.length === 2 && points[0].x === points[1].x && points[0].y === points[1].y) throw new Error("The drawing needs two different points.");
+  }
+}
 export function validateSolution(solution, snapshot, mode) {
   if (!solution || typeof solution.answer !== "string" || typeof solution.explanation !== "string" ||
       typeof solution.supported !== "boolean" || typeof solution.limitation !== "string" ||
@@ -38,6 +54,7 @@ export function validateSolution(solution, snapshot, mode) {
   if (!Array.isArray(solution.choices) || solution.choices.length > 12 || solution.choices.some(c => typeof c !== "string" || c.length > 500))
     throw new Error("The model returned invalid answer choices.");
   if (solution.actions.length > 24) throw new Error("Too many actions in the response.");
+  if (solution.drawing !== undefined) validateDrawing(solution.drawing);
   if (mode === "explain") {
     solution.actions = [];
     return solution;

@@ -258,6 +258,7 @@ export function snapshot() {
   const pictureNodes = pictureChoices(root, fields);
   const imageBased = pictureNodes.length > 0;
   const visual = imageBased || /\b(figures?|diagrams?|graphs?|pictures?|images?|shown|draw the next)\b/i.test(question);
+  const graphTool = !fields.length && (/graphing tool|click to enlarge graph/i.test(question) || [...(root?.querySelectorAll('button, [role="button"], a') || [])].some(el=>/enlarge graph/i.test(el.textContent || el.getAttribute('aria-label') || '')));
   const contentNodes = [...pictureNodes];
   for (const field of fields) {
     const el = elementFor(field.id);
@@ -271,7 +272,7 @@ export function snapshot() {
   const empty=scalar.find(f=>{const el=elementFor(f.id);return !(el.value ?? (el.isContentEditable ? el.textContent : '')).trim();});
   const autoSelected=(empty || scalar[0])?.id || null;
   return {player:readPlayer(document,visible),url:location.href,context:context(),question,fields,dropTargets:drops,selected:chosen?.id || autoSelected,selectionSource:chosen?'manual':autoSelected?'automatic':null,hash,limitations:[...new Set(limitations)],controls:{continue:findButtons('continue').length,submit:findButtons('submit').length,next:findButtons('next').length,similar:findButtons('similar').length},
-    fallback:isFallback(root),promptHash,visual,imageBased,rect:box,viewport:globalThis.innerWidth || 0,viewportHeight:globalThis.innerHeight || 0,devicePixelRatio:globalThis.devicePixelRatio || 1,
+    fallback:isFallback(root),promptHash,visual,imageBased,graphTool,rect:box,viewport:globalThis.innerWidth || 0,viewportHeight:globalThis.innerHeight || 0,devicePixelRatio:globalThis.devicePixelRatio || 1,
     problemCount:[...document.querySelectorAll(rootSelector)].filter(visible).length};
 }
 function painted(el) {

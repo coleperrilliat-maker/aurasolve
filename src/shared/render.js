@@ -88,6 +88,23 @@ export function answerLines(solution, question) {
   });
 }
 
+const TOOL_NAMES = {point:"Point", line:"Line", segment:"Segment", ray:"Ray", circle:"Circle", parabola:"Parabola", "absolute value":"Absolute value", exponential:"Exponential", "square root":"Square root"};
+const pair = p => `**(${p.x}, ${p.y})**`;
+export function drawingSteps(drawing) {
+  if (!Array.isArray(drawing) || !drawing.length) return [];
+  const steps = ["Click **Click to enlarge graph** to open the graphing tool."];
+  for (const item of drawing) {
+    const [a, b] = item.points || [];
+    const tool = `Pick the **${TOOL_NAMES[item.tool] || item.tool}** tool`;
+    if (item.tool === "point") steps.push(`${tool}, then click ${pair(a)}.`);
+    else if (item.tool === "circle") steps.push(`${tool}. Click the center ${pair(a)}, then ${pair(b)} on the circle.`);
+    else if (["parabola", "absolute value", "square root"].includes(item.tool)) steps.push(`${tool}. Click the vertex ${pair(a)}, then ${pair(b)}.`);
+    else steps.push(`${tool}. Click ${pair(a)}, then ${pair(b)}.`);
+  }
+  steps.push("Press **Save**, then **Check answer**.");
+  return steps;
+}
+
 // Chat replies: "- " lines become a list, other lines become paragraphs.
 export function renderRich(text) {
   const box = el("div", "rich");
@@ -117,6 +134,13 @@ export function renderSolution(result, label) {
     for (const line of answers) list.append(rich(el("li"), line));
     card.append(list);
   } else card.append(rich(el("p", "answer"), answers[0] || ""));
+  const drawing = drawingSteps(result.solution.drawing);
+  if (drawing.length) {
+    const head = el("h3"); head.textContent = "How to draw it"; card.append(head);
+    const list = el("ol", "steps draw-steps");
+    for (const step of drawing) list.append(rich(el("li"), step));
+    card.append(list);
+  }
   const steps = explanationSteps(result.solution.explanation);
   if (steps.length) {
     const why = el("h3"); why.textContent = "Explanation"; card.append(why);

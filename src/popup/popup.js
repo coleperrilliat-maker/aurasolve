@@ -416,7 +416,7 @@ $('inspect-page').onclick = async () => {
   $('inspect-page').disabled = true;
   try {
     inspectionReport = await send({type: 'inspectPage'});
-    $('inspection-summary').textContent = inspectionReport.frames.map(frame => `Frame ${frame.frameId}: ${frame.fields.length} answer boxes, ${frame.controls.length} buttons; diagram ${frame.visual ? 'found' : 'not found'}.`).join('\n');
+    $('inspection-summary').textContent = inspectionReport.frames.map(frame => `Frame ${frame.frameId}: ${frame.fields.length} answer boxes, ${frame.controls.length} buttons; diagram ${frame.visual ? 'found' : 'not found'}${frame.graph?.surfaces?.length ? `; ${frame.graph.surfaces.length} graph surface${frame.graph.surfaces.length === 1 ? '' : 's'}, ${frame.graph.labels.length} labels` : ''}.`).join('\n');
     $('inspection-summary').hidden = false; $('save-inspection').hidden = false;
   } catch (error) {
     $('inspection-summary').textContent = error.message; $('inspection-summary').hidden = false;

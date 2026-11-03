@@ -673,7 +673,7 @@ async function handle(message,sender) {
           limitation:next ? `This question asks you to draw the next figure. Nothing was filled. ${next}` : 'This question asks you to draw the next figure. The drawing area cannot be filled automatically.'};
       } else {
         solution = await solve(question,missingField?'explain':message.mode==='field'?'autopilot':message.mode,settings,controller.signal);
-        if (missingField) solution={...solution,supported:false,actions:[],limitation:'I can explain this question, but could not detect a supported answer box on this page.'};
+        if (missingField) solution={...solution,supported:false,actions:[],limitation:solution.drawing?.length ? 'Draw this with the graphing tool using the steps above, then press Save.' : 'I can explain this question, but could not detect a supported answer box on this page.'};
       }
     }
     finally {clearTimeout(timeout);if(jobs.get(tabId)===controller)jobs.delete(tabId);}
