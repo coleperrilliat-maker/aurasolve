@@ -934,7 +934,7 @@ async function handle(message,sender) {
   throw new Error("Unknown request.");
 }
 // Content scripts cannot watch trusted storage, so push button settings to open tabs.
-chrome.storage.onChanged.addListener(async (changes, area) => {
+chrome.storage.onChanged?.addListener(async (changes, area) => {
   if (area !== 'local' || !changes[OVERLAY_KEY]) return;
   const settings = changes[OVERLAY_KEY].newValue;
   for (const tab of await chrome.tabs.query({}).catch(() => [])) {
