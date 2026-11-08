@@ -39,7 +39,7 @@ const publicFiles = new Map([
 
 function resolveDocsAsset(requestPath) {
   if (!requestPath || requestPath.includes("\0")) return null;
-  const decoded = decodeURIComponent(requestPath);
+  const decoded = requestPath;
   if (!decoded.startsWith("/") || decoded.includes("..")) return null;
   const relative = decoded.slice(1);
   if (!relative || relative.endsWith("/")) return null;
@@ -102,7 +102,7 @@ function readBody(req) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-AuraSolve-Key");
@@ -113,7 +113,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const path = req.url?.split("?")[0];
+  let path;
+  try {
+    path = decodeURIComponent(req.url?.split("?")[0] || "/");
+  } catch {
+    sendJson(res, 400, {error: "Invalid request path."});
+    return;
+  }
 
   if (req.method === "GET") {
     const exact = publicFiles.get(path);
@@ -158,8 +164,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      sendJson(res, 400, {error: "Expected a JSON object."});
+      return;
+    }
     const {mode, snapshot, model, effort} = payload;
-    if (!["explain", "field", "autopilot"].includes(mode) || !snapshot || typeof snapshot !== "object") {
+    if (!["explain", "field", "autopilot"].includes(mode) || !snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
       sendJson(res, 400, {error: "Missing mode or snapshot."});
       return;
     }
@@ -211,8 +221,24 @@ const server = http.createServer(async (req, res) => {
   }
 
   sendJson(res, 404, {error: "Not found"});
-});
+}
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`AuraSolve API listening on 0.0.0.0:${PORT}`);
-});
+export function createServer() {
+  return http.createServer((req, res) => {
+    handleRequest(req, res).catch(() => {
+      // Never log request bodies, screenshots, credentials, or provider responses.
+      console.error("AuraSolve request failed unexpectedly.");
+      if (!res.headersSent && !res.destroyed) {
+        sendJson(res, 500, {error: "AuraSolve encountered an unexpected error. Try again."});
+      } else if (!res.destroyed) {
+        res.end();
+      }
+    });
+  });
+}
+
+if (process.argv[1] && nodePath.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  createServer().listen(PORT, "0.0.0.0", () => {
+    console.log(`AuraSolve API listening on 0.0.0.0:${PORT}`);
+  });
+}
