@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {editorBridge} from '../src/background/editors.js';
-import {TUTOR_INSTRUCTIONS} from '../src/shared/instructions.js';
+import {TUTOR_INSTRUCTIONS} from '../server/instructions.js';
 
 function fixture(kind='mathquill',valid=true) {
   let value='';

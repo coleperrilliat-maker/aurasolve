@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve — Practice Tutor",
-  "version": "1.18.10",
+  "version": "1.19.0",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "141",
   "permissions": [
@@ -61,18 +61,18 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "src/content/*.js",
-        "src/content/*.css",
-        "src/shared/*.js",
-        "src/vendor/katex/*",
-        "src/vendor/katex/fonts/*",
-        "src/shared/*.css",
-        "icons/*.png"
+        "src/content/app.js",
+        "icons/icon-128.png"
       ],
       "matches": [
-        "http://*/*",
-        "https://*/*"
-      ]
+        "https://*.pearson.com/*",
+        "https://*.mathxl.com/*",
+        "https://*.mymathlab.com/*",
+        "https://*.raydass.com/*",
+        "http://localhost:4318/*",
+        "http://127.0.0.1:4318/*"
+      ],
+      "use_dynamic_url": true
     }
   ],
   "side_panel": {

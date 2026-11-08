@@ -1,7 +1,7 @@
 import {verifiedSolve, sameActions, majorityDrawing} from "./verification.js";
 import {solutionSchema, validateSolution, withDrawing} from "../src/shared/solution.js";
-import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS, PAGE_CLUES, CONGRUENCE_CHECKS, ASK_INSTRUCTIONS, GRAPH_TOOL_NOTE} from "../src/shared/instructions.js";
-import {answerSlots, slotSolutionSchema, slotsToActions} from "../src/shared/answer-slots.js";
+import {TUTOR_INSTRUCTIONS, GEOMETRY_CHECKS, PAGE_CLUES, CONGRUENCE_CHECKS, ASK_INSTRUCTIONS, GRAPH_TOOL_NOTE} from "./instructions.js";
+import {answerSlots, slotSolutionSchema, slotsToActions} from "./answer-slots.js";
 
 export const DEFAULT_MODEL = "gpt-5-mini";
 export const FALLBACK_MODEL = "gpt-4.1";

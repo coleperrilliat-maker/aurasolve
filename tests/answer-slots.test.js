@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {answerSlots, answerSlotsSchema, slotsToActions} from '../src/shared/answer-slots.js';
+import {answerSlots, answerSlotsSchema, slotsToActions} from '../server/answer-slots.js';
 import {solveWithOpenAI} from '../server/openai.js';
 
 const mixed=[

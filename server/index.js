@@ -4,12 +4,18 @@ import {readFile, stat} from "node:fs/promises";
 import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
 import {solveWithOpenAI, pickModel, askOpenAI} from "./openai.js";
+import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 4_000_000;
-const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 40;
-const hits = new Map();
+const perIp = createLimiter(60, 60_000);
+const perInstall = createLimiter(40, 60_000);
+const perInstallDay = createLimiter(1500, 24 * 60 * 60_000);
+const installsPerIp = createLimiter(10, 60 * 60_000);
+// Extensions released before per-install tokens send this old public value.
+// It is accepted only until store users have had time to update.
+const LEGACY_KEY = "81327b4960956fd15e9f8a01aa27151852e6b5e0c93c4701561ad675f1bea2a5";
+const LEGACY_UNTIL = Date.parse("2026-11-22T00:00:00Z");
 const docsRoot = nodePath.resolve(fileURLToPath(new URL("../docs/", import.meta.url)));
 const iconsRoot = nodePath.resolve(fileURLToPath(new URL("../icons/", import.meta.url)));
 const mimeByExt = {
@@ -57,16 +63,16 @@ function clientIp(req) {
   return req.socket.remoteAddress || "unknown";
 }
 
-function rateLimit(ip) {
-  const now = Date.now();
-  const bucket = hits.get(ip) || {count: 0, reset: now + WINDOW_MS};
-  if (now > bucket.reset) {
-    bucket.count = 0;
-    bucket.reset = now + WINDOW_MS;
-  }
-  bucket.count += 1;
-  hits.set(ip, bucket);
-  return bucket.count <= MAX_REQUESTS;
+// Returns the caller's install id, or sends the error and returns null.
+function authorize(req, res) {
+  const ip = clientIp(req);
+  if (!perIp(ip)) { sendJson(res, 429, {error: "Too many requests. Try again in a minute."}); return null; }
+  let install = verifyToken(bearer(req));
+  if (!install && req.headers["x-aurasolve-key"] === LEGACY_KEY && Date.now() < LEGACY_UNTIL) install = `legacy:${ip}`;
+  if (!install) { sendJson(res, 401, {error: "AuraSolve needs to reconnect. Reload the extension and try again."}); return null; }
+  if (!perInstall(install)) { sendJson(res, 429, {error: "Too many requests. Try again in a minute."}); return null; }
+  if (!perInstallDay(install)) { sendJson(res, 429, {error: "Daily limit reached. Try again tomorrow."}); return null; }
+  return install;
 }
 
 function sendJson(res, status, payload) {
@@ -103,9 +109,15 @@ function readBody(req) {
 }
 
 async function handleRequest(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-AuraSolve-Key");
+  const origin = req.headers.origin;
+  const trusted = originAllowed(origin);
+  if (origin && trusted && origin !== "null") {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-AuraSolve-Key");
+  }
+  res.setHeader("X-Content-Type-Options", "nosniff");
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
@@ -149,12 +161,26 @@ async function handleRequest(req, res) {
     return;
   }
 
-  if (path === "/api/v1/solve" && req.method === "POST") {
-    const ip = clientIp(req);
-    if (!rateLimit(ip)) {
-      sendJson(res, 429, {error: "Too many requests. Try again in a minute."});
+  if (path.startsWith("/api/") && req.method === "POST" && !trusted) {
+    sendJson(res, 403, {error: "Not allowed."});
+    return;
+  }
+
+  if (path === "/api/v1/install" && req.method === "POST") {
+    if (!installsPerIp(clientIp(req))) {
+      sendJson(res, 429, {error: "Too many new installs from this network. Try again later."});
       return;
     }
+    try {
+      sendJson(res, 200, issueToken());
+    } catch {
+      sendJson(res, 503, {error: "AuraSolve Cloud is not ready. Try again in a minute."});
+    }
+    return;
+  }
+
+  if (path === "/api/v1/solve" && req.method === "POST") {
+    if (!authorize(req, res)) return;
 
     let payload;
     try {
@@ -191,10 +217,7 @@ async function handleRequest(req, res) {
   }
 
   if (path === "/api/v1/ask" && req.method === "POST") {
-    if (!rateLimit(clientIp(req))) {
-      sendJson(res, 429, {error: "Too many requests. Try again in a minute."});
-      return;
-    }
+    if (!authorize(req, res)) return;
     let payload;
     try {
       payload = JSON.parse(await readBody(req));

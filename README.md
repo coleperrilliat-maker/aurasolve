@@ -18,9 +18,11 @@ Users install the extension and start practicing. **No API key in Chrome.** Your
 3. In Railway → **Variables**, add:
    - `OPENAI_API_KEY` — your OpenAI API key
    - `OPENAI_MODEL` — e.g. `gpt-4.1`
-   - `CLIENT_KEY` — a long random string (e.g. run `openssl rand -hex 32`)
+   - `INSTALL_SECRET` — optional long random string (`openssl rand -hex 32`) that signs per-install tokens. Without it, the server derives one from `OPENAI_API_KEY`.
+   - `EXTENSION_IDS` — optional comma-separated Chrome extension ids allowed to call the API (set it to your Web Store id once published).
+   - `REVOKED_INSTALLS` — optional comma-separated install ids to block.
 4. Railway → **Settings** → **Networking** → **Generate Domain**. Copy the public URL (e.g. `https://aurasolve-production.up.railway.app`).
-5. Set Railway variable `CLIENT_KEY` to match `src/shared/config.js` (already configured for `aurasolve-production.up.railway.app`).
+5. Nothing secret goes in the extension. Each install asks `/api/v1/install` for its own signed token, and the server rejects requests without one, requests from websites, and callers over their per-minute and daily limits.
 6. **Reload the extension** in Chrome after pulling updates.
 
 Railway runs `npm start` (`node server/index.js`). Health check: `/api/v1/health`.
@@ -28,11 +30,13 @@ Railway runs `npm start` (`node server/index.js`). Health check: `/api/v1/health
 ### Local API dev
 
 ```sh
-cp .env.example .env   # fill in OPENAI_API_KEY and CLIENT_KEY
+cp .env.example .env   # fill in OPENAI_API_KEY
 npm start              # http://localhost:8787
 ```
 
 Point `src/shared/config.js` at `http://localhost:8787` while developing, then switch back to your Railway URL before sharing the extension.
+
+`npm run package:extension` builds the store zip from minified bundles in `dist/extension`. Prompts, answer formats and model routing stay in `server/` and are never shipped; the build refuses to package if server-only text leaks in.
 
 ## Install the extension (no ZIP)
 
@@ -154,7 +158,7 @@ Tests cover multipart resume/retries, cost limits, consent expiry/page binding, 
 ## Troubleshooting
 
 - **Manifest missing:** select the extracted folder directly containing `manifest.json`.
-- **Server offline:** confirm Railway is deployed, variables are set, and `src/shared/config.js` matches your domain and `CLIENT_KEY`.
+- **Server offline:** confirm Railway is deployed, variables are set, and `src/shared/config.js` matches your domain.
 - **No question found:** the site needs a selector/adapter or is inside a frame the extension cannot access.
 - **Filling unavailable:** confirm the practice declaration and inspect the displayed limitation. Unsupported answer editors require a dedicated adapter.
 - **401 / 429:** check Railway `OPENAI_API_KEY`, API credits, limits, and model access.

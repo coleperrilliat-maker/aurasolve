@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateSolution} from '../src/shared/solution.js';
-import {API_BASE, CLIENT_KEY} from '../src/shared/config.js';
+import {API_BASE} from '../src/shared/config.js';
 import {solve} from '../src/background/api.js';
 const snapshot={question:'3x + 7 = 22',fields:[{id:'a1',kind:'text'},{id:'a2',kind:'text'}],selected:'a1',dropTargets:[],limitations:[]};
 const action={kind:'text',target:'a1',value:'5',destination:'',x:null,y:null};
@@ -50,7 +50,7 @@ test('number-line points must use an exposed tick and y zero',()=>{
   assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'point',x:1.5,y:1}]},snap,'field'),/grid/);
 });
 test('invalid select values and unknown drops are rejected',()=>{assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'select',value:'fake'}]},{...snapshot,fields:[{id:'a1',kind:'select',options:[{value:'real'}]}]},'field'));assert.throws(()=>validateSolution({...solution,actions:[{...action,kind:'drag',destination:'fake'}]},{...snapshot,fields:[{id:'a1',kind:'drag'}]},'field'));});
-test('extension calls AuraSolve Cloud with client key',async()=>{const original=globalThis.fetch;globalThis.fetch=async(url,request)=>{assert.equal(url,`${API_BASE}/api/v1/solve`);assert.equal(request.headers['X-AuraSolve-Key'],CLIENT_KEY);const body=JSON.parse(request.body);assert.equal(body.mode,'field');assert.deepEqual(body.snapshot,snapshot);return {ok:true,json:async()=>({solution})};};try{assert.deepEqual(await solve(snapshot,'field',{model:'test-model'},undefined),solution);}finally{globalThis.fetch=original;}});
+test('extension gets its own install token and calls AuraSolve Cloud with it',async()=>{const original=globalThis.fetch;globalThis.fetch=async(url,request)=>{if(url===`${API_BASE}/api/v1/install`)return {ok:true,json:async()=>({token:'v1.abc.sig'})};assert.equal(url,`${API_BASE}/api/v1/solve`);assert.equal(request.headers.Authorization,'Bearer v1.abc.sig');assert.equal(request.headers['X-AuraSolve-Key'],undefined);const body=JSON.parse(request.body);assert.equal(body.mode,'field');assert.deepEqual(body.snapshot,snapshot);return {ok:true,json:async()=>({solution})};};try{assert.deepEqual(await solve(snapshot,'field',{model:'test-model'},undefined),solution);}finally{globalThis.fetch=original;}});
 test('server errors surface without an action plan',async()=>{const original=globalThis.fetch;globalThis.fetch=async()=>({ok:false,status:502,json:async()=>({error:'OpenAI did not finish the answer.'})});try{await assert.rejects(solve(snapshot,'field',{model:'test-model'}),/did not finish/);}finally{globalThis.fetch=original;}});
 test('empty solutions are rejected',async()=>{const original=globalThis.fetch;globalThis.fetch=async()=>({ok:true,json:async()=>({})});try{await assert.rejects(solve(snapshot,'field',{model:'test-model'}),/empty answer/);}finally{globalThis.fetch=original;}});
 test('multiple-choice picks come from choices, or from chosen radio/checkbox fields',async()=>{

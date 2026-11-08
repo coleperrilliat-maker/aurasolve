@@ -27,6 +27,7 @@ globalThis.OffscreenCanvas=class {constructor(w,h){this.width=w;this.height=h;}g
 globalThis.fetch=async (url,options)=>{
   if(String(url).startsWith('data:'))return {blob:async()=>new Blob(['fixture'])};
 
+  if(String(url).includes('/api/v1/install'))return{ok:true,json:async()=>({token:'v1.test.sig'})};
   if(String(url).includes('/health'))return{ok:true,json:async()=>({ok:true,keyConfigured:true,model:'test-model'})};
   solveCalls++;lastSnapshot=JSON.parse(options.body).snapshot;
   return{ok:true,json:async()=>({solution})};
