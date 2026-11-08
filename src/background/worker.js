@@ -8,7 +8,8 @@ import {awaitSelection, placeClick, trustedClick, withDebugger} from './trusted-
 import {frameCall} from './frame-call.js';
 import {cropBox} from '../shared/capture.js';
 import {DEFAULT_MODEL} from '../shared/config.js';
-const plans = new Map(), jobs = new Map(), revisions = new Map();
+const plans = new Map(), jobs = new Map(), revisions = new Map(), regionWaits = new Map();
+const REGION_PROMPT = 'Solve the question in this screenshot. If it has several blanks or parts, answer every one.';
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
   const {settings={}}=await chrome.storage.local.get("settings");
   if(!settings.modelUpgrade5){
@@ -495,6 +496,64 @@ async function handle(message,sender) {
     if (/^(chrome|edge|about|chrome-extension):/i.test(tab.url || "")) throw new Error("Chrome doesn't allow screenshots of this page. Open the question's tab and try again.");
     try { return {image:await screenshot(tab.id,{})}; }
     catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
+  }
+  if (message.type === "regionSolve") {
+    if (sender.tab) throw new Error("Use the AuraSolve panel to select an area.");
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error("Open the page you want solved first.");
+    if (/^(chrome|edge|about|chrome-extension):/i.test(tab.url || "")) throw new Error("Chrome doesn't allow screenshots of this page. Open the question's tab and try again.");
+    const previous = regionWaits.get(tab.id);
+    if (previous) { previous.resolve({cancelled:true}); regionWaits.delete(tab.id); }
+    let image;
+    try { image = await screenshot(tab.id, {}); }
+    catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
+    await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},files:['src/content/region-pick.js']});
+    await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:(url)=>globalThis.__auraRegionPick?.start(url),args:[image]});
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (regionWaits.get(tab.id)?.resolve === resolve) {
+          regionWaits.delete(tab.id);
+          chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:()=>globalThis.__auraRegionPick?.clear?.()}).catch(()=>{});
+          resolve({cancelled:true});
+        }
+      }, 120000);
+      regionWaits.set(tab.id, {
+        resolve: value => { clearTimeout(timer); regionWaits.delete(tab.id); resolve(value); },
+        reject: error => { clearTimeout(timer); regionWaits.delete(tab.id); reject(error); },
+      });
+    });
+  }
+  if (message.type === "regionCancelled") {
+    const tabId = sender.tab?.id;
+    if (!tabId) return {};
+    regionWaits.get(tabId)?.resolve({cancelled:true});
+    return {};
+  }
+  if (message.type === "regionPicked") {
+    const tabId = sender.tab?.id;
+    const wait = tabId == null ? null : regionWaits.get(tabId);
+    if (!tabId || !wait) return {};
+    if (typeof message.image !== "string" || message.image.length > 3_500_000 || !/^data:image\/(jpeg|png);base64,/.test(message.image)) {
+      wait.reject(new Error("That selection could not be captured. Try a smaller area."));
+      return {};
+    }
+    try {
+      const reply = await ask([{role:'user', content:REGION_PROMPT}], message.image, true, AbortSignal.timeout(120000));
+      await chrome.scripting.executeScript({
+        target:{tabId, frameIds:[0]},
+        func:(text, point)=>globalThis.__auraRegionPick?.showResult(text, point),
+        args:[reply, message.point || null],
+      });
+      wait.resolve({reply, image:message.image});
+    } catch (error) {
+      await chrome.scripting.executeScript({
+        target:{tabId, frameIds:[0]},
+        func:(text, point)=>globalThis.__auraRegionPick?.showResult(text, point),
+        args:[error.message || 'Could not solve that area.', message.point || null],
+      }).catch(()=>{});
+      wait.reject(error);
+    }
+    return {};
   }
   if (message.type === "ask") {
     if (sender.tab) throw new Error("Ask from the AuraSolve panel.");

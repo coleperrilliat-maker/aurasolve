@@ -177,6 +177,26 @@ async function screenshotSolve(note) {
   } catch (error) { finish(error); }
 }
 
+async function regionSolve() {
+  setActive('region');
+  const live = begin();
+  try {
+    working('Drag on the page to select an area…', true);
+    const result = await send({type: 'regionSolve'}); live();
+    if (result?.cancelled) {
+      idle();
+      setBusy(false);
+      return;
+    }
+    addUser('Solve this area', result.image);
+    const body = renderRich(result.reply);
+    addReply('Selection', body);
+    chat.push({role: 'user', content: SCREENSHOT_PROMPT + ' (selected area)'}, {role: 'assistant', content: result.reply});
+    saveHistory({kind: 'Selection', title: firstLine(result.reply), text: result.reply});
+    finish();
+  } catch (error) { finish(error); }
+}
+
 /* ---------- Help me solve ---------- */
 const NO_QUESTION = /no supported question|no answer boxes|needs a site adapter|open a practice page|could not detect a supported answer box/i;
 function applyMessage(applied) {
@@ -386,6 +406,7 @@ document.querySelectorAll('[data-action]').forEach(button => button.addEventList
   if (button.dataset.action !== 'autopilot') show('home');
   if (button.dataset.action === 'screenshot') screenshotSolve();
   if (button.dataset.action === 'solve') helpSolve();
+  if (button.dataset.action === 'region') regionSolve();
   if (button.dataset.action === 'autopilot') show('autopilot');
 }));
 $('start-pilot').onclick = () => { if (!busy) startPilot(); };

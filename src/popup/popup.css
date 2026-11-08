@@ -48,7 +48,9 @@ svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-l
 .page-head h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.03em}
 
 /* Action tiles */
-.actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 var(--pad);container-type:inline-size}
+.actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 var(--pad);container-type:inline-size;align-items:stretch}
+.solve-pair{display:flex;gap:8px;min-width:0}
+.solve-pair .action[data-action="solve"]{flex:1;min-width:0}
 .action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;min-width:0;min-height:92px;padding:12px 4px;border:1px solid #e3e6ee;overflow:hidden;border-radius:16px;background:#fff;text-align:center;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .15s}
 .action:hover:not(:disabled){border-color:rgba(59,108,255,.45);box-shadow:0 6px 18px rgba(59,108,255,.1)}
 .action:active:not(:disabled){transform:scale(.98)}
@@ -56,6 +58,11 @@ svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-l
 .action-ic.solid{fill:currentColor;stroke-width:1.2}
 .action strong{max-width:100%;font-size:clamp(10px,4.6cqi,13px);font-weight:650;letter-spacing:-.01em;line-height:1.2;color:var(--ink);text-wrap:balance}
 .action.active{border-color:#2563ff;box-shadow:0 0 0 1px #2563ff,0 6px 18px rgba(59,108,255,.12)}
+.action-shot{flex:none;width:92px;min-width:92px;max-width:92px;padding:0}
+.action-shot .action-ic{width:28px;height:28px}
+@media (max-width:360px){
+  .action-shot{width:72px;min-width:72px;max-width:72px}
+}
 
 /* Feed */
 .feed{flex:1;min-height:0;overflow-y:auto;padding:18px var(--pad) 12px;scroll-behavior:smooth}
