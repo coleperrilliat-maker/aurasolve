@@ -9,7 +9,7 @@ import {frameCall} from './frame-call.js';
 import {cropBox} from '../shared/capture.js';
 import {DEFAULT_MODEL} from '../shared/config.js';
 import {readOverlay, writeOverlay} from '../shared/overlay.js';
-const plans = new Map(), jobs = new Map(), revisions = new Map(), regionWaits = new Map();
+const plans = new Map(), jobs = new Map(), revisions = new Map(), regionWaits = new Map(), regionImages = new Map();
 const REGION_PROMPT = 'Solve the question in this screenshot. If it has several blanks or parts, answer every one.';
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
   const {settings={}}=await chrome.storage.local.get("settings");
@@ -509,17 +509,17 @@ async function handle(message,sender) {
     let image;
     try { image = await screenshot(tab.id, {}); }
     catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
-    // Keep the huge screenshot out of executeScript args; session storage is safer.
-    const imageKey = `regionImage:${tab.id}:${Date.now()}`;
-    await chrome.storage.session.set({[imageKey]: image});
+    // Keep the huge screenshot out of executeScript args. Session storage is
+    // trusted-only, so the page-side picker collects it with a message.
+    const imageKey = `${tab.id}:${Date.now()}`;
+    regionImages.set(imageKey, image);
     try {
       await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},files:['src/content/region-pick.js']});
       const started = await chrome.scripting.executeScript({
         target:{tabId:tab.id,frameIds:[0]},
         func: async (key) => {
-          const data = await chrome.storage.session.get(key);
-          const url = data[key];
-          await chrome.storage.session.remove(key);
+          const response = await chrome.runtime.sendMessage({type:'regionImage', key});
+          const url = response?.ok ? response.data?.image : null;
           if (!url || !globalThis.__auraRegionPick?.start) return {ok:false, error:'Region picker failed to start.'};
           globalThis.__auraRegionPick.start(url);
           return {ok:true};
@@ -528,7 +528,7 @@ async function handle(message,sender) {
       });
       if (!started?.[0]?.result?.ok) throw new Error(started?.[0]?.result?.error || started?.[0]?.error?.message || 'Could not open the selection tool on this page.');
     } catch (error) {
-      await chrome.storage.session.remove(imageKey).catch(()=>{});
+      regionImages.delete(imageKey);
       throw new Error(error.message || 'Could not open the selection tool on this page.');
     }
     return await new Promise((resolve, reject) => {
@@ -551,6 +551,12 @@ async function handle(message,sender) {
         reject: error => finish(reject, error),
       });
     });
+  }
+  if (message.type === "regionImage") {
+    const image = regionImages.get(message.key);
+    regionImages.delete(message.key);
+    if (!image || !sender.tab || !String(message.key).startsWith(`${sender.tab.id}:`)) throw new Error("Region picker failed to start.");
+    return {image};
   }
   if (message.type === "regionCancelled") {
     const tabId = sender.tab?.id;

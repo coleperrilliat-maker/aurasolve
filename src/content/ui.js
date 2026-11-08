@@ -116,9 +116,10 @@ export function createUI() {
     }
   }
 
+  // Moving the host or rewriting its buttons between mousedown and mouseup
+  // cancels the click, so only re-place and repaint when something changed.
+  let placedKey = null, paintedKey = null;
   function mount() {
-    if (veiled) { host.style.visibility = 'hidden'; }
-    else host.style.visibility = '';
     const root = questionRoot(), current = snapshot();
     const sara = current.fields.some(field => field.adapter === 'sara-choice');
     const lazy = root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, .xlFillin, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"], .mq-editable-field')].some(visible);
@@ -128,16 +129,21 @@ export function createUI() {
     // The question may live in a child frame. Do not put a second toolbar
     // above that iframe in its parent document.
     if (frame && !current.fields.length && !lazy) return;
-    paint();
+    const key = JSON.stringify(settings);
+    if (!running && paintedKey !== key) { paint(); paintedKey = key; }
+    const fixed = settings.zone.startsWith('fixed-') || settings.zone === 'custom';
+    const inPlace = host.isConnected && (fixed ? host.parentNode === (document.body || document.documentElement) : root.contains(host));
+    if (inPlace && placedKey === key) return;
     placeHost(host, settings, root);
+    host.style.visibility = veiled ? 'hidden' : '';
+    placedKey = key;
   }
 
   async function refresh(next) {
     const fresh = normalizeOverlay(next || await fetchOverlay());
-    const same = JSON.stringify(fresh) === JSON.stringify(settings);
+    if (JSON.stringify(fresh) === JSON.stringify(settings) && host.isConnected) return;
     settings = fresh;
-    if (!same || !host.isConnected) mount();
-    else paint();
+    mount();
   }
 
   function setBusy(value) {

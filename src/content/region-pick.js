@@ -32,8 +32,18 @@
     return box;
   }
 
+  const plainMath = text => String(text || '')
+    .replace(/\\[()[\]]/g, '')
+    .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)')
+    .replace(/\\sqrt\{([^{}]*)\}/g, '√($1)')
+    .replace(/\\(times|cdot|div|pm|leq?|geq?|neq?|approx|infty|pi|theta|degree)\b/g, (_, name) => ({times:'×', cdot:'·', div:'÷', pm:'±', le:'≤', leq:'≤', ge:'≥', geq:'≥', ne:'≠', neq:'≠', approx:'≈', infty:'∞', pi:'π', theta:'θ', degree:'°'})[name])
+    .replace(/\^\{([^{}]*)\}/g, '^$1')
+    .replace(/\\(left|right)\b/g, '')
+    .replace(/[ \t]{2,}/g, ' ');
+
   function showResult(reply, point) {
     clear();
+    reply = plainMath(reply);
     const answerMatch = String(reply || '').match(/\*\*Answer:\*\*\s*([\s\S]*?)(?=\n-|\n\n|$)/i);
     const answer = (answerMatch ? answerMatch[1] : String(reply || '').split('\n')[0] || '').replace(/\*\*/g, '').trim();
     const explanation = String(reply || '')
@@ -67,6 +77,9 @@
     card.querySelector('[data-answer]').append(rich(answer || '…'));
     card.querySelector('[data-explain]').append(rich(explanation));
     card.querySelector('.x').onclick = () => card.remove();
+    const rect = card.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - 12) card.style.top = Math.max(12, window.innerHeight - 12 - rect.height) + 'px';
+    if (rect.right > window.innerWidth - 12) card.style.left = Math.max(12, window.innerWidth - 12 - rect.width) + 'px';
   }
 
   function showWaiting(point) {
