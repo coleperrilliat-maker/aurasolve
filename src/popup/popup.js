@@ -178,7 +178,7 @@ async function screenshotSolve(note) {
 }
 
 async function regionSolve() {
-  setActive('region');
+  setActive('screenshot');
   const live = begin();
   try {
     working('Drag on the page to select an area…', true);
@@ -404,9 +404,8 @@ document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click'
 document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => {
   if (busy) return;
   if (button.dataset.action !== 'autopilot') show('home');
-  if (button.dataset.action === 'screenshot') screenshotSolve();
+  if (button.dataset.action === 'screenshot') regionSolve();
   if (button.dataset.action === 'solve') helpSolve();
-  if (button.dataset.action === 'region') regionSolve();
   if (button.dataset.action === 'autopilot') show('autopilot');
 }));
 $('start-pilot').onclick = () => { if (!busy) startPilot(); };
