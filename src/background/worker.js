@@ -498,8 +498,7 @@ async function handle(message,sender) {
     catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
   }
   if (message.type === "regionSolve") {
-    if (sender.tab) throw new Error("Use the AuraSolve panel to select an area.");
-    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    const tab = sender.tab || (await chrome.tabs.query({active:true,currentWindow:true}))[0];
     if (!tab?.id) throw new Error("Open the page you want solved first.");
     if (/^(chrome|edge|about|chrome-extension):/i.test(tab.url || "")) throw new Error("Chrome doesn't allow screenshots of this page. Open the question's tab and try again.");
     const previous = regionWaits.get(tab.id);
@@ -507,6 +506,7 @@ async function handle(message,sender) {
     let image;
     try { image = await screenshot(tab.id, {}); }
     catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
+    // Region UI must live in the top frame; the Fill button may sit in a child frame.
     await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},files:['src/content/region-pick.js']});
     await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:(url)=>globalThis.__auraRegionPick?.start(url),args:[image]});
     return await new Promise((resolve, reject) => {
@@ -532,9 +532,16 @@ async function handle(message,sender) {
   if (message.type === "regionPicked") {
     const tabId = sender.tab?.id;
     const wait = tabId == null ? null : regionWaits.get(tabId);
-    if (!tabId || !wait) return {};
+    if (!tabId) return {};
     if (typeof message.image !== "string" || message.image.length > 3_500_000 || !/^data:image\/(jpeg|png);base64,/.test(message.image)) {
-      wait.reject(new Error("That selection could not be captured. Try a smaller area."));
+      wait?.reject(new Error("That selection could not be captured. Try a smaller area."));
+      if (!wait) {
+        await chrome.scripting.executeScript({
+          target:{tabId, frameIds:[0]},
+          func:(text, point)=>globalThis.__auraRegionPick?.showResult(text, point),
+          args:['That selection could not be captured. Try a smaller area.', message.point || null],
+        }).catch(()=>{});
+      }
       return {};
     }
     try {
@@ -544,14 +551,14 @@ async function handle(message,sender) {
         func:(text, point)=>globalThis.__auraRegionPick?.showResult(text, point),
         args:[reply, message.point || null],
       });
-      wait.resolve({reply, image:message.image});
+      wait?.resolve({reply, image:message.image});
     } catch (error) {
       await chrome.scripting.executeScript({
         target:{tabId, frameIds:[0]},
         func:(text, point)=>globalThis.__auraRegionPick?.showResult(text, point),
         args:[error.message || 'Could not solve that area.', message.point || null],
       }).catch(()=>{});
-      wait.reject(error);
+      if (wait) wait.reject(error);
     }
     return {};
   }

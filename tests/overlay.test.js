@@ -19,4 +19,6 @@ test('invisible mode is a boolean and custom zone stays available', () => {
   assert.equal(settings.zone, 'custom');
   assert.equal(settings.x, 50);
   assert.equal(settings.y, 40);
+  assert.equal(settings.showShot, true);
+  assert.equal(normalizeOverlay({showShot: false}).showShot, false);
 });

@@ -435,8 +435,8 @@ $('new-chat').onclick = () => {
 
 /* ---------- On-page Fill button ---------- */
 const overlayZone=$('overlay-zone'), overlayLabel=$('overlay-label'), overlayColors=$('overlay-colors');
-const overlayInvisible=$('overlay-invisible'), overlayCustom=$('overlay-custom');
-const overlayX=$('overlay-x'), overlayY=$('overlay-y'), overlayPreview=$('overlay-preview'), overlayNote=$('overlay-preview-note');
+const overlayInvisible=$('overlay-invisible'), overlayShot=$('overlay-shot'), overlayCustom=$('overlay-custom');
+const overlayX=$('overlay-x'), overlayY=$('overlay-y'), overlayPreview=$('overlay-preview'), overlayPreviewShot=$('overlay-preview-shot'), overlayNote=$('overlay-preview-note');
 for (const zone of OVERLAY_ZONES) overlayZone.add(new Option(zone.label, zone.id));
 for (const color of OVERLAY_COLORS) {
   const swatch=document.createElement('button');
@@ -457,6 +457,7 @@ const zoneCopy={
 function paintOverlay(settings) {
   const next=normalizeOverlay(settings);
   overlayInvisible.checked=next.invisible;
+  overlayShot.checked=next.showShot;
   overlayZone.value=next.zone;
   overlayLabel.value=next.label;
   overlayX.value=String(Math.round(next.x));
@@ -466,9 +467,12 @@ function paintOverlay(settings) {
   overlayPreview.textContent=next.invisible ? '' : next.label;
   overlayPreview.style.color=next.color;
   overlayPreview.classList.toggle('ghost', next.invisible);
+  overlayPreviewShot.hidden=!next.showShot;
+  overlayPreviewShot.style.color=next.color;
+  overlayPreviewShot.classList.toggle('ghost', next.invisible);
   overlayNote.textContent=next.invisible
-    ? 'Invisible on MyLab. The empty zone still fills answers when clicked.'
-    : zoneCopy[next.zone] || 'Shown on the MyLab page.';
+    ? 'Invisible on MyLab. The empty zones still work when clicked.'
+    : (next.showShot ? 'Fill answers plus a square select-area button. ' : '') + (zoneCopy[next.zone] || 'Shown on the MyLab page.');
   return next;
 }
 async function saveOverlay(patch={}) {
@@ -480,6 +484,7 @@ async function saveOverlay(patch={}) {
     zone: overlayZone.value,
     label: overlayLabel.value,
     invisible: overlayInvisible.checked,
+    showShot: overlayShot.checked,
     x: Number(overlayX.value),
     y: Number(overlayY.value),
   });
@@ -487,6 +492,7 @@ async function saveOverlay(patch={}) {
 }
 readOverlay().then(paintOverlay);
 overlayInvisible.onchange=()=>saveOverlay({invisible: overlayInvisible.checked});
+overlayShot.onchange=()=>saveOverlay({showShot: overlayShot.checked});
 overlayZone.onchange=()=>saveOverlay({zone: overlayZone.value});
 overlayLabel.onchange=()=>saveOverlay({label: overlayLabel.value});
 overlayLabel.onkeydown=event=>{ if(event.key==='Enter'){ event.preventDefault(); overlayLabel.blur(); } };

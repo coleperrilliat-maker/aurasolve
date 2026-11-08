@@ -138,7 +138,8 @@
       <div class="group">
         <h3>Fill answers on MyLab</h3>
         <p class="muted">This is the blue button on the practice page. Changes apply right away on the open tab.</p>
-        <label class="row" for="overlay-invisible"><span><strong>Invisible mode</strong><small>Hides the button. The click zone still fills answers.</small></span><input id="overlay-invisible" class="switch" type="checkbox" role="switch"></label>
+        <label class="row" for="overlay-invisible"><span><strong>Invisible mode</strong><small>Hides both buttons. The click zones still work.</small></span><input id="overlay-invisible" class="switch" type="checkbox" role="switch"></label>
+        <label class="row" for="overlay-shot"><span><strong>Select-area button</strong><small>Square screenshot button to the right of Fill answers</small></span><input id="overlay-shot" class="switch" type="checkbox" role="switch" checked></label>
         <label class="stack" for="overlay-zone"><strong>Zone</strong><select id="overlay-zone"></select></label>
         <label class="stack" for="overlay-label"><strong>Label</strong><input id="overlay-label" type="text" maxlength="28" placeholder="Fill answers"></label>
         <div class="stack">
@@ -155,7 +156,12 @@
         </div>
         <div class="preview-card">
           <span class="preview-label">Preview</span>
-          <button type="button" id="overlay-preview" class="overlay-preview" tabindex="-1">Fill answers</button>
+          <div class="preview-row">
+            <button type="button" id="overlay-preview" class="overlay-preview" tabindex="-1">Fill answers</button>
+            <button type="button" id="overlay-preview-shot" class="overlay-preview-shot" tabindex="-1" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15"/><circle cx="12" cy="12.5" r="3"/></svg>
+            </button>
+          </div>
           <p id="overlay-preview-note" class="muted">Shown next to the question.</p>
         </div>
       </div>
