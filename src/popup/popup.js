@@ -2,6 +2,7 @@ import {runFillAssignment} from '../shared/pilot-engine.js';
 import {renderSolution, renderRich, answerLines} from "../shared/render.js";
 import {BUILD_VERSION} from '../shared/version.js';
 import {sendExtension} from '../shared/messaging.js';
+import {DEFAULT_OVERLAY, OVERLAY_COLORS, OVERLAY_ZONES, normalizeOverlay, readOverlay, writeOverlay} from '../shared/overlay.js';
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -408,6 +409,72 @@ $('new-chat').onclick = () => {
   setActive(null);
   setAttachment(null);
   show('home');
+};
+
+
+/* ---------- On-page Fill button ---------- */
+const overlayZone=$('overlay-zone'), overlayLabel=$('overlay-label'), overlayColors=$('overlay-colors');
+const overlayInvisible=$('overlay-invisible'), overlayCustom=$('overlay-custom');
+const overlayX=$('overlay-x'), overlayY=$('overlay-y'), overlayPreview=$('overlay-preview'), overlayNote=$('overlay-preview-note');
+for (const zone of OVERLAY_ZONES) overlayZone.add(new Option(zone.label, zone.id));
+for (const color of OVERLAY_COLORS) {
+  const swatch=document.createElement('button');
+  swatch.type='button'; swatch.className='swatch'; swatch.style.background=color.id;
+  swatch.dataset.color=color.id; swatch.title=color.label; swatch.setAttribute('role','radio');
+  swatch.setAttribute('aria-label', color.label); swatch.setAttribute('aria-checked','false');
+  overlayColors.append(swatch);
+}
+const zoneCopy={
+  'prompt-right':'Shown on the right side of the question text.',
+  'prompt-left':'Shown on the left side of the question text.',
+  'fixed-tr':'Pinned to the top right of the MyLab page.',
+  'fixed-tl':'Pinned to the top left of the MyLab page.',
+  'fixed-br':'Pinned to the bottom right of the MyLab page.',
+  'fixed-bl':'Pinned to the bottom left of the MyLab page.',
+  'custom':'Drag the bar above the button on MyLab, or set Left % and Top % here.',
+};
+function paintOverlay(settings) {
+  const next=normalizeOverlay(settings);
+  overlayInvisible.checked=next.invisible;
+  overlayZone.value=next.zone;
+  overlayLabel.value=next.label;
+  overlayX.value=String(Math.round(next.x));
+  overlayY.value=String(Math.round(next.y));
+  overlayCustom.hidden=next.zone!=='custom';
+  for (const swatch of overlayColors.children) swatch.setAttribute('aria-checked', String(swatch.dataset.color===next.color));
+  overlayPreview.textContent=next.invisible ? '' : next.label;
+  overlayPreview.style.color=next.color;
+  overlayPreview.classList.toggle('ghost', next.invisible);
+  overlayNote.textContent=next.invisible
+    ? 'Invisible on MyLab. The empty zone still fills answers when clicked.'
+    : zoneCopy[next.zone] || 'Shown on the MyLab page.';
+  return next;
+}
+async function saveOverlay(patch={}) {
+  const current=await readOverlay();
+  const next=await writeOverlay({
+    ...current,
+    ...patch,
+    color: patch.color || [...overlayColors.children].find(node=>node.getAttribute('aria-checked')==='true')?.dataset.color || current.color,
+    zone: overlayZone.value,
+    label: overlayLabel.value,
+    invisible: overlayInvisible.checked,
+    x: Number(overlayX.value),
+    y: Number(overlayY.value),
+  });
+  paintOverlay(next);
+}
+readOverlay().then(paintOverlay);
+overlayInvisible.onchange=()=>saveOverlay({invisible: overlayInvisible.checked});
+overlayZone.onchange=()=>saveOverlay({zone: overlayZone.value});
+overlayLabel.onchange=()=>saveOverlay({label: overlayLabel.value});
+overlayLabel.onkeydown=event=>{ if(event.key==='Enter'){ event.preventDefault(); overlayLabel.blur(); } };
+overlayX.onchange=()=>saveOverlay({zone:'custom', x:Number(overlayX.value)});
+overlayY.onchange=()=>saveOverlay({zone:'custom', y:Number(overlayY.value)});
+overlayColors.onclick=event=>{
+  const swatch=event.target.closest('.swatch');
+  if(!swatch)return;
+  saveOverlay({color: swatch.dataset.color});
 };
 
 /* ---------- Troubleshoot ---------- */

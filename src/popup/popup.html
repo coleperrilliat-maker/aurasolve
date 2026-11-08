@@ -128,6 +128,34 @@
       <p id="history-empty" class="muted">Your solved questions and chats show up here.</p>
     </section>
 
+    <section class="view page" data-view="overlay" hidden>
+      <div class="page-head"><h2>Buttons</h2></div>
+      <div class="group">
+        <h3>Fill answers on MyLab</h3>
+        <p class="muted">This is the blue button on the practice page. Changes apply right away on the open tab.</p>
+        <label class="row" for="overlay-invisible"><span><strong>Invisible mode</strong><small>Hides the button. The click zone still fills answers.</small></span><input id="overlay-invisible" class="switch" type="checkbox" role="switch"></label>
+        <label class="stack" for="overlay-zone"><strong>Zone</strong><select id="overlay-zone"></select></label>
+        <label class="stack" for="overlay-label"><strong>Label</strong><input id="overlay-label" type="text" maxlength="28" placeholder="Fill answers"></label>
+        <div class="stack">
+          <strong>Color</strong>
+          <div class="swatches" id="overlay-colors" role="radiogroup" aria-label="Button color"></div>
+        </div>
+        <div id="overlay-custom" class="stack" hidden>
+          <strong>Custom spot</strong>
+          <p class="muted">On the MyLab page, drag the blue bar above the button to move it. Or set the spot here.</p>
+          <div class="two">
+            <label>Left %<input id="overlay-x" type="number" min="0" max="95" step="1"></label>
+            <label>Top %<input id="overlay-y" type="number" min="0" max="95" step="1"></label>
+          </div>
+        </div>
+        <div class="preview-card">
+          <span class="preview-label">Preview</span>
+          <button type="button" id="overlay-preview" class="overlay-preview" tabindex="-1">Fill answers</button>
+          <p id="overlay-preview-note" class="muted">Shown next to the question.</p>
+        </div>
+      </div>
+    </section>
+
     <section class="view page" data-view="settings" hidden>
       <div class="page-head"><h2>Settings</h2></div>
       <div class="group">
@@ -168,6 +196,7 @@
           <li><span class="howto-ic">2</span><div><strong>Help me solve</strong><small>Reads the current MyLab question, explains it, and can fill in the answer.</small></div></li>
           <li><span class="howto-ic">3</span><div><strong>AutoPilot</strong><small>Works through the practice set, pressing Check answer and Next. Never Submit assignment.</small></div></li>
           <li><span class="howto-ic">4</span><div><strong>Ask anything</strong><small>Type a question. Tap Screen to include what's on your page.</small></div></li>
+          <li><span class="howto-ic">5</span><div><strong>Buttons</strong><small>Change the MyLab Fill button color, zone, or make it invisible.</small></div></li>
         </ul>
       </div>
       <div class="group links">
@@ -185,6 +214,9 @@
     </button>
     <button class="rail-btn" data-goto="autopilot" type="button" aria-label="AutoPilot" data-tip="AutoPilot">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.6 4.4 4.9 10.3c-.7.3-.6 1.3.1 1.5l6 1.6 1.6 6c.2.7 1.2.8 1.5.1z"/></svg>
+    </button>
+    <button class="rail-btn" data-goto="overlay" type="button" aria-label="Buttons" data-tip="Buttons">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="5" rx="1.5"/><rect x="4" y="14" width="10" height="5" rx="1.5"/></svg>
     </button>
     <button class="rail-btn" data-goto="history" type="button" aria-label="History" data-tip="History">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/><path d="M12 8v4.5l3 2"/></svg>
