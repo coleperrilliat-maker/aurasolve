@@ -145,15 +145,36 @@ export async function runPilot({request,checkpoint=async()=>{},delay,onEvent=()=
 
 // Repeats Fill answers: fill this question, press Check answer or the red Next
 // button, and continue until the last question is filled. Never clicks assignment Submit.
-// After Check answer: read Pearson's verdict, close its popup, retry a wrong
-// answer up to twice with that feedback, then Continue to the next part or press Next.
-export async function runFillAssignment({request, checkpoint=async()=>{}, delay, onEvent=()=>{}, limit=0, budget=200, pace=async()=>{}, retries=2}) {
+// After Check answer: read Pearson's verdict and close its popup. A wrong part
+// is retried up to twice with that feedback. An OK that reveals the next part
+// of the same question keeps solving that question. When a homework question
+// had a wrong part, it is finished and then redone with Similar question for
+// full credit. Test mode gives no verdict, so its OK just leads to Next.
+export async function runFillAssignment({request, checkpoint=async()=>{}, delay, onEvent=()=>{}, limit=0, budget=200, pace=async()=>{}, retries=2, similarTries=3}) {
   let completed=0, spent=0, retryContext=null, attempts=0;
+  let questionNumber=null, part=1, questionWrong=false;
+  const similarUsed={}, solvedHash={};
   const finish=async all=>{await onEvent({kind:'done', completed, all, spent});return {completed, spent};};
   const answerBoxes=async()=>{
     await request({type:'prepareField'});
     try{return await request({type:'inspect'});}
     catch(error){if(/no supported question/i.test(error.message || ''))return null;throw error;}
+  };
+  const numberOf=page=>page?.question?.player?.progress?.current || null;
+  const partOf=page=>page?.question?.player?.progress?.part || null;
+  const label=()=>questionNumber || completed+1;
+  const changed=(page,previous,previousPart)=>Boolean(page?.question?.hash && (page.question.hash!==previous || (partOf(page) && partOf(page)!==previousPart)));
+  const settle=async (previous,previousPart)=>{
+    let page=null;
+    for(let n=0;n<8;n++){
+      page=await answerBoxes().catch(()=>null);
+      if(changed(page,previous,previousPart))return page;
+      await delay(250);
+    }
+    return page;
+  };
+  const newQuestion=page=>{
+    questionNumber=numberOf(page);part=partOf(page) || 1;questionWrong=false;attempts=0;retryContext=null;
   };
   for(let step=0; step<500; step++){
     await checkpoint();
@@ -164,42 +185,93 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
       if(completed>0)return finish(true);
       throw new Error('No answer boxes were found on this question. AutoPilot stopped before using an AI request.');
     }
-    await onEvent({kind:'solve', spent:spent+1, retry:Boolean(retryContext)});
+    if(numberOf(page) && numberOf(page)!==questionNumber)newQuestion(page);
+    const seen=solvedHash[page.question.hash]=(solvedHash[page.question.hash] || 0)+1;
+    if(seen>retries+2)throw new Error(`Question ${label()} kept showing the same part after it was answered. Review it, then start AutoPilot again.`);
+    const partBefore=partOf(page);
+    await onEvent({kind:'solve', spent:spent+1, retry:Boolean(retryContext), number:label(), part});
     const result=await request({type:'solve', mode:'field', ...(retryContext?{retryContext}:{})});
     spent++;
-    await onEvent({kind:'answer', result, spent});
+    await onEvent({kind:'answer', result, spent, number:label(), part});
     if(!result.solution?.supported || result.solution.confidence<.85 || !result.solution.actions?.length)
       throw new Error(result.solution?.limitation || 'This answer needs a manual step. AutoPilot paused.');
-    await pace(result);
+    await pace(result, {number:label(), part});
     await checkpoint();
     const applied=await request({type:'apply', planId:result.planId, stopAtEnd:true});
+    const previous=result.question?.hash;
     let verdict='';
     if(applied.advanced==='check'){
       const checked=await request({type:'checkResult'});
       verdict=checked?.verdict || 'unknown';
-      if(verdict==='incorrect' && attempts<retries){
-        const again=await answerBoxes();
-        if(again?.question?.fields?.length){
-          attempts++;
-          retryContext=[...(retryContext || []), {actions:result.solution.actions, feedback:checked.text || 'Pearson marked this answer incorrect.'}];
-          await onEvent({kind:'retry', result, applied, verdict, spent});
+      if(verdict==='incorrect'){
+        questionWrong=true;
+        if(attempts<retries){
+          const again=await answerBoxes();
+          if(again?.question?.fields?.length && (!previous || again.question.hash===previous)){
+            attempts++;
+            retryContext=[...(retryContext || []), {actions:result.solution.actions, feedback:checked.text || 'Pearson marked this answer incorrect.'}];
+            await onEvent({kind:'retry', result, applied, verdict, spent, number:label(), part});
+            continue;
+          }
+        }
+      }
+      attempts=0;retryContext=null;
+      const after=await settle(previous,partBefore);
+      const moved=Boolean(after?.question?.fields?.length) && changed(after,previous,partBefore);
+      const otherQuestion=moved && numberOf(after) && questionNumber && numberOf(after)!==questionNumber;
+      // Same question, new answer boxes: the OK only closed a "this part is right" popup.
+      if(moved && !otherQuestion){
+        part++;
+        await onEvent({kind:'part', result, applied, verdict, spent, number:label(), part});
+        continue;
+      }
+      if(!moved && (after?.controls?.continue || 0)>0){
+        const step=await request({type:'advanceQuestion', only:'continue'});
+        if(step?.moved==='continue'){
+          await settle(previous,partBefore);
+          part++;
+          await onEvent({kind:'part', result, applied, verdict, spent, number:label(), part});
           continue;
         }
       }
-    }
-    attempts=0;retryContext=null;
-    completed++;
-    await onEvent({kind:'filled', result, applied, verdict, completed, spent});
-    if(applied.advanced!=='next' && applied.advanced!=='check')return finish(true);
-    const previous=result.question?.hash;
-    if(applied.advanced==='check'){
+      // The question is finished. A wrong part means redo it with Similar question.
+      const key=String(questionNumber || previous);
+      if(!otherQuestion && questionWrong && (after?.controls?.similar || 0)>0 && (similarUsed[key] || 0)<similarTries){
+        similarUsed[key]=(similarUsed[key] || 0)+1;
+        await onEvent({kind:'similar', result, applied, verdict, spent, number:label(), tries:similarUsed[key]});
+        const clicked=await request({type:'similarQuestion'});
+        if(clicked?.clicked){
+          const fresh=await settle(previous,partBefore);
+          if(!changed(fresh,previous,partBefore))throw new Error('Similar question was pressed, but a new version did not load. Review the page, then start AutoPilot again.');
+          part=1;questionWrong=false;
+          continue;
+        }
+      }
+      completed++;
+      await onEvent({kind:'filled', result, applied, verdict, completed, spent, number:label()});
+      if(otherQuestion){newQuestion(after);continue;}
       const step=await request({type:'advanceQuestion'});
       if(step?.moved==='none'){
         const now=await answerBoxes();
-        if(now?.question?.fields?.length && now.question.hash!==previous)continue;
+        if(now?.question?.fields?.length && now.question.hash!==previous){newQuestion(now);continue;}
         return finish(true);
       }
+      await onEvent({kind:'next', completed, spent, number:label()});
+      let moved2=false;
+      for(let watch=0; watch<40 && !moved2; watch++){
+        await delay(250);
+        const info=await request({type:'inspect'}).catch(()=>null);
+        moved2=Boolean(info?.question?.hash && info.question.hash!==previous);
+      }
+      if(!moved2)throw new Error('The answer was checked, but Pearson did not move to the next question. Press Next, then resume AutoPilot.');
+      questionNumber=null;part=1;questionWrong=false;
+      continue;
     }
+    attempts=0;retryContext=null;
+    completed++;
+    await onEvent({kind:'filled', result, applied, verdict, completed, spent, number:label()});
+    questionNumber=null;part=1;questionWrong=false;
+    if(applied.advanced!=='next')return finish(true);
     await onEvent({kind:'next', completed, spent});
     let moved=false;
     for(let watch=0; watch<40 && !moved; watch++){

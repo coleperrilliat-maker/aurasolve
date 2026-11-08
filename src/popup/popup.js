@@ -9,7 +9,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text != null) node.textContent = text; return node; };
 $('version').textContent = `AuraSolve ${BUILD_VERSION}`;
 
-let pilotTabId = null, token = 0, busy = false, paused = false, runLog = [];
+let pilotTabId = null, token = 0, busy = false, runLog = [];
 let chat = [], attachedImage = null;
 
 async function send(message) {
@@ -131,8 +131,7 @@ function setBusy(value) {
   busy = value;
   document.querySelectorAll('[data-action], #start-pilot, #send, .chip').forEach(button => { button.disabled = value; });
   document.querySelectorAll('#autopilot-settings input, #autopilot-settings select').forEach(input => { input.disabled = value; });
-  $('pause').disabled = !value;
-  if (!value) { paused = false; pauseUI(); }
+  $('stop-pilot').disabled = !value;
 }
 function begin() {
   const mine = ++token;
@@ -257,15 +256,24 @@ async function helpSolve() {
 }
 
 /* ---------- AutoPilot ---------- */
-function pauseUI() {
-  $('pause').setAttribute('aria-label', paused ? 'Resume AutoPilot' : 'Pause AutoPilot');
-  $('pause').title = paused ? 'Resume AutoPilot' : 'Pause AutoPilot';
-  $('pause').innerHTML = paused ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 9 6-9 6Z"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg>';
+// The pill reads "AutoPilot: <status> (12.3s)…" with a live per-question timer.
+const pilotClock = {text: 'Starting', verb: '', since: 0, timer: 0, done: false};
+function drawPilot() {
+  const verb = pilotClock.verb ? Object.assign(document.createElement('span'), {className: 'pilot-verb', textContent: pilotClock.verb + ' '}) : '';
+  const prefix = Object.assign(document.createElement('span'), {className: 'pilot-prefix', textContent: 'AutoPilot: '});
+  $('progress-label').replaceChildren(prefix, verb, pilotClock.text);
+  const seconds = pilotClock.since ? ((Date.now() - pilotClock.since) / 1000).toFixed(1) : '0.0';
+  $('progress-time').textContent = pilotClock.done ? '' : `(${seconds}s)…`;
 }
-$('pause').onclick = () => {
-  paused = !paused; pauseUI(); pilotState(paused ? 'Paused' : 'Running');
-  $('pace-status').textContent = paused ? 'Paused. An action already sent may finish first.' : 'Resuming…';
-};
+function pilotStatus(text, {restart = false, done = false, verb = ''} = {}) {
+  pilotClock.text = text;
+  pilotClock.verb = verb;
+  pilotClock.done = done;
+  if (restart || !pilotClock.since) pilotClock.since = Date.now();
+  clearInterval(pilotClock.timer);
+  if (!done) pilotClock.timer = setInterval(drawPilot, 100);
+  drawPilot();
+}
 function breakdown() {
   if (!runLog.length) return;
   const box = el('div');
@@ -283,16 +291,20 @@ function breakdown() {
 }
 async function startPilot() {
   const live = begin();
-  runLog = []; paused = false; pauseUI();
-  const checkpoint = async () => { live(); while (paused) { await sleep(100); live(); } };
-  const delay = async ms => { let left = ms; while (left > 0) { await checkpoint(); const step = Math.min(100, left); await sleep(step); live(); if (!paused) left -= step; } await checkpoint(); };
+  runLog = [];
+  const checkpoint = async () => { live(); };
+  const delay = async ms => { let left = ms; while (left > 0) { const step = Math.min(100, left); await sleep(step); live(); left -= step; } };
   $('pilot-progress').hidden = false; $('start-pilot').hidden = true; $('pilot-error').hidden = true;
-  $('pace-status').textContent = ''; $('progress').value = 0;
-  const progress = text => { $('progress-label').textContent = text; };
+  $('pace-status').hidden = true;
+  pilotClock.since = 0;
+  pilotStatus('Starting', {restart: true});
   pilotState('Running');
   const limit = Number($('question-limit').value), budget = Number($('solve-budget').value);
+  let current = null;
+  const onQuestion = number => {
+    if (number !== current) { current = number; pilotStatus(`Question ${number}`, {restart: true, verb: 'Solving'}); }
+  };
   try {
-    progress('Checking this page…');
     pilotTabId = null;
     const settings = await send({type: 'settingsStatus'}); live();
     if (!settings.configured) throw new Error('AuraSolve Cloud is offline. Try again in a minute.');
@@ -301,37 +313,42 @@ async function startPilot() {
     await runFillAssignment({
       request: async message => { const response = await send(message); live(); return response; },
       checkpoint, delay, limit, budget,
-      pace: async () => {
+      pace: async (result, {number} = {}) => {
         const min = Number($('time-min').value), max = Number($('time-max').value);
         const seconds = $('speed-run').checked ? 0 : min + ($('random-timing').checked ? 10 * Math.floor(Math.random() * ((max - min) / 10 + 1)) : 0);
-        let left = seconds * 1000;
-        while (left > 0) { $('pace-status').textContent = `Next question in ${Math.ceil(left / 1000)}s`; const step = Math.min(250, left); await delay(step); left -= step; }
+        const elapsed = pilotClock.since ? (Date.now() - pilotClock.since) / 1000 : 0;
+        // Pace is the total time per question, so time already spent solving counts.
+        let left = Math.max(0, seconds - elapsed) * 1000;
+        while (left > 0) { const step = Math.min(250, left); await delay(step); left -= step; }
       },
       onEvent: async event => {
         live();
         if (event.kind === 'solve') {
-          progress(`Solving question ${runLog.length + 1}…`);
-          $('pace-status').textContent = `${event.spent} of ${budget} AI solves used`;
-          $('progress').max = limit || Math.max($('progress').max || 1, runLog.length + 1);
+          onQuestion(event.number);
+          const part = event.part > 1 ? `, part ${event.part}` : '';
+          pilotStatus(event.retry ? `Retrying Question ${event.number}${part}` : `Question ${event.number}${part}`, {verb: event.retry ? '' : 'Solving'});
         }
-        if (event.kind === 'answer') runLog.push({number: String(runLog.length + 1), result: event.result, outcome: 'Filling', submitted: false});
+        if (event.kind === 'answer') {
+          const last = runLog.at(-1);
+          if (!last || last.number !== String(event.number)) runLog.push({number: String(event.number), result: event.result, outcome: 'Filling', submitted: false});
+          else last.result = event.result;
+        }
         if (event.kind === 'retry') {
           if (runLog.length) runLog.at(-1).outcome = 'Incorrect · trying again';
-          progress('Marked incorrect. Trying again with the feedback…');
+          pilotStatus(`Retrying Question ${event.number}`);
+        }
+        if (event.kind === 'part') pilotStatus(`Question ${event.number}, part ${event.part}`, {verb: 'Solving'});
+        if (event.kind === 'similar') {
+          if (runLog.length) runLog.at(-1).outcome = 'Missed a part · redoing with Similar question';
+          pilotStatus(`Redoing Question ${event.number} (Similar question)`, {restart: true});
         }
         if (event.kind === 'filled' && runLog.length) {
           const pressed = event.applied?.checked === 'final' ? 'Final Check' : 'Check answer';
           runLog.at(-1).outcome = event.verdict === 'correct' ? 'Correct' : event.verdict === 'incorrect' ? 'Incorrect' : event.applied?.advanced === 'check' ? `Filled and pressed ${pressed}` : event.applied?.advanced === 'next' ? 'Filled and pressed Next' : 'Filled the last question';
           runLog.at(-1).submitted = event.applied?.advanced === 'check';
-          $('progress').value = event.completed;
-          $('progress').max = limit || event.completed;
-          progress(`${event.completed} done`);
         }
-        if (event.kind === 'next') progress('Moving to the next question…');
-        if (event.kind === 'done') {
-          progress(`Finished ${event.completed} question${event.completed === 1 ? '' : 's'}`);
-          $('pace-status').textContent = `${event.spent} of ${budget} AI solves used`;
-        }
+        if (event.kind === 'next') pilotStatus(`Moving past Question ${event.number}`);
+        if (event.kind === 'done') pilotStatus(`Finished ${event.completed} question${event.completed === 1 ? '' : 's'}`, {done: true});
       },
     });
     breakdown();
@@ -340,8 +357,10 @@ async function startPilot() {
     breakdown();
     const stopped = error.message === 'Stopped.';
     pilotState(stopped ? 'Stopped' : 'Error');
+    pilotStatus(stopped ? 'Stopped' : 'Paused on an error', {done: true});
     if (!stopped) { $('pilot-error').textContent = error.message; $('pilot-error').hidden = false; }
   } finally {
+    clearInterval(pilotClock.timer);
     setBusy(false);
     $('start-pilot').hidden = false;
   }
@@ -412,7 +431,7 @@ $('start-pilot').onclick = () => { if (!busy) startPilot(); };
 $('stop-pilot').onclick = async () => {
   token++;
   try { await send({type: 'stop'}); } catch {}
-  $('pace-status').textContent = 'Stopped. Starting again resumes from the current page.';
+  pilotStatus('Stopping', {done: true});
 };
 $('stop').onclick = async () => {
   token++;

@@ -656,7 +656,9 @@ async function handle(message,sender) {
   }
   if (message.type === "inspect") {
     const state = await collect(tabId);
-    return {tabId,question:state.question,signed:true};
+    const controls = {continue:0, similar:0, next:0};
+    for (const frame of state.frames || [state.question, state.top]) for (const key of Object.keys(controls)) controls[key] += frame?.controls?.[key] || 0;
+    return {tabId,question:state.question,controls,signed:true};
   }
   if (message.type === 'checkResult') {
     // Wait for Pearson's verdict after Check answer, then close its popup.
@@ -696,6 +698,7 @@ async function handle(message,sender) {
       const clicked = await frameCall(tabId, continues[0].documentId, 'clickControl', 'continue').catch(()=>null);
       if (clicked?.clicked) return {moved:'continue'};
     }
+    if (message.only === 'continue') return {moved:'none'};
     const next = await clickFooterNext(tabId, generation, 'next');
     if (next.clicked) return {moved:'next'};
     for (const documentId of new Set(frames.map(frame=>frame.documentId).filter(Boolean))) {
@@ -703,6 +706,15 @@ async function handle(message,sender) {
       if (result?.clicked) return {moved:'next'};
     }
     return {moved:'none'};
+  }
+  if (message.type === 'similarQuestion') {
+    const state = await collect(tabId).catch(()=>null);
+    const frames = state ? state.frames || [state.question, state.top] : [];
+    for (const frame of frames.filter(frame=>(frame?.controls?.similar || 0) > 0)) {
+      const clicked = await frameCall(tabId, frame.documentId, 'clickControl', 'similar').catch(()=>null);
+      if (clicked?.clicked) return {clicked:true};
+    }
+    return {clicked:false};
   }
   if (message.type === "nextProblem") {
     cancel(tabId);

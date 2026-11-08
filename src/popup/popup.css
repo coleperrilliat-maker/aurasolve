@@ -140,17 +140,18 @@ svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-l
 .pilot-hero div{display:flex;flex-direction:column;min-width:0}
 .pilot-hero strong{font-size:15px;font-weight:650;letter-spacing:-.01em}
 .pilot-hero small{color:var(--ink-3);font-size:12.5px;line-height:1.4}
-#pilot-progress{padding:14px;border-radius:14px;background:var(--soft)}
-.progress-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:600}
-.pilot-ctrls{display:flex;gap:6px}
-#pause,#stop-pilot{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:50%;cursor:pointer}
-#pause{background:var(--ink);color:#fff}
-#stop-pilot{background:#fff;color:#c8323a;box-shadow:0 0 0 1px var(--line)}
-#pause svg,#stop-pilot svg{width:15px;height:15px;stroke-width:2.4}
+.pilot-bar{container-type:inline-size;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:50px;padding:7px 7px 7px 16px;border-radius:18px;background:#4d6ef5;color:#fff;box-shadow:0 8px 22px rgba(77,110,245,.32)}
+.pilot-text{display:flex;align-items:baseline;min-width:0;font-size:13.5px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+#progress-label{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#progress-time{flex:none;padding-left:4px;font-variant-numeric:tabular-nums}
+#progress-time:empty{display:none}
+.pilot-verb,.pilot-prefix{display:none}
+@container (min-width:290px){.pilot-prefix{display:inline}}
+@container (min-width:350px){.pilot-verb{display:inline}}
+#stop-pilot{display:grid;place-items:center;flex:none;width:36px;height:36px;border:0;border-radius:50%;background:#fff;color:#4d6ef5;cursor:pointer}
+#stop-pilot:disabled{visibility:hidden}
+#stop-pilot svg{width:16px;height:16px}
 #stop-pilot svg rect{fill:currentColor;stroke:none}
-progress{width:100%;height:6px;margin-top:12px;appearance:none;border:0;border-radius:6px;overflow:hidden}
-progress::-webkit-progress-bar{background:#e1e6f2}
-progress::-webkit-progress-value{background:var(--grad);border-radius:6px;transition:width .3s}
 .pilot-error{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:#fff5f5;color:#b4232a;font-size:12.5px}
 .hint{margin:10px 0 0;color:var(--ink-3);font-size:11.5px;line-height:1.5}
 .run-head{margin:0;font-size:14px;font-weight:650}

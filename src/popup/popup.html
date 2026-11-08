@@ -93,15 +93,11 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>Start AutoPilot
         </button>
         <div id="pilot-progress" hidden>
-          <div class="progress-head">
-            <span id="progress-label">Starting…</span>
-            <div class="pilot-ctrls">
-              <button id="pause" type="button" aria-label="Pause AutoPilot" title="Pause AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button>
-              <button id="stop-pilot" type="button" aria-label="Stop AutoPilot" title="Stop AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
-            </div>
+          <div class="pilot-bar">
+            <span class="pilot-text" aria-live="polite"><span id="progress-label">AutoPilot: Starting</span><span id="progress-time"></span></span>
+            <button id="stop-pilot" type="button" aria-label="Stop AutoPilot" title="Stop AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2.5"/></svg></button>
           </div>
-          <progress id="progress" max="5" value="0"></progress>
-          <p id="pace-status" class="hint" aria-live="polite"></p>
+          <p id="pace-status" class="hint" aria-live="polite" hidden></p>
         </div>
         <p id="pilot-error" class="pilot-error" hidden></p>
       </div>
