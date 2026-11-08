@@ -136,6 +136,9 @@ const server = http.createServer(async (req, res) => {
       version: BUILD_VERSION,
       model: pickModel(),
       keyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+      // Prompts, model routing, and answer checks live here. Push to main to
+      // change them on Railway without a Chrome Web Store resubmission.
+      answering: "server",
     });
     return;
   }
