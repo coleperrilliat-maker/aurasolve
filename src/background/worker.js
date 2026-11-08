@@ -4,7 +4,7 @@ import {fieldValue} from '../shared/solution.js';
 import {statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
 import {checkBackend, solve, ask} from "./api.js";
 import {editorBridge} from './editors.js';
-import {awaitSelection, placeClick, trustedClick, withDebugger} from './trusted-click.js';
+import {awaitSelection, placeClick, trustedClick, trustedDrag, withDebugger} from './trusted-click.js';
 import {frameCall} from './frame-call.js';
 import {cropBox} from '../shared/capture.js';
 import {DEFAULT_MODEL} from '../shared/config.js';
@@ -458,6 +458,22 @@ async function fillReason(tabId, plan, field, value) {
     throw new Error(last?.error || `${name} did not keep the reason. The box still shows "nothing".`);
   });
 }
+// The selected area doubles as the question picture. When the page has answer
+// boxes, solve them with it and fill them in (Check answer is left to the user).
+async function fillFromSelection(tabId, image) {
+  const state = await collect(tabId).catch(() => null);
+  if (!state?.question?.fields?.length) return null;
+  const self = {id: chrome.runtime.id, tab: {id: tabId}, frameId: 0};
+  const result = await handle({type: 'solve', mode: 'field', image}, self);
+  const {solution} = result;
+  if (!solution?.supported || solution.confidence < .85 || !solution.actions?.length) return null;
+  let note = 'Filled in. Review it, then press Check answer.';
+  try { await handle({type: 'apply', planId: result.planId, fillOnly: true}, self); }
+  catch (error) { note = `Could not fill it in: ${error.message}`; }
+  const answer = String(solution.answer || '').trim();
+  const explanation = String(solution.explanation || '').trim();
+  return {reply: `**Answer:** ${answer}\n\n${explanation}\n\n${note}`.trim()};
+}
 async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");
   if (message.type==='writeEditor') {
@@ -479,6 +495,16 @@ async function handle(message,sender) {
     if (outcome?.error) throw new Error(outcome.error);
     if (!outcome?.result?.filled) throw new Error(outcome?.result?.error || 'The editor did not confirm the answer.');
     return result[0].result;
+  }
+  if (message.type==='trustedDrag') {
+    const tabId=sender.tab?.id, plan=plans.get(message.planId);
+    if (!plan || plan.tabId!==tabId || plan.documentId!==sender.documentId || !['applying','submitting'].includes(plan.state) || plan.generation!==rev(tabId) || Date.now()-plan.created>10*60*1000) throw new Error('That matching answer expired. Generate a new answer.');
+    const reports=await frameReports(tabId);
+    const from=placeClick(reports, sender.frameId, message.from, sender.url);
+    const to=placeClick(reports, sender.frameId, message.to, sender.url);
+    if (!from || !to) throw new Error('The matching tile was found, but the drag could not be placed on it.');
+    await withDebugger(tabId, ()=>trustedDrag(tabId, from, to));
+    return {dragged:true};
   }
   if (message.type === "settingsStatus") {
     const {settings={}} = await chrome.storage.local.get("settings");
@@ -580,7 +606,8 @@ async function handle(message,sender) {
       return {};
     }
     try {
-      const reply = await ask([{role:'user', content:REGION_PROMPT}], message.image, true, AbortSignal.timeout(120000));
+      const filled = await fillFromSelection(tabId, message.image).catch(() => null);
+      const reply = filled?.reply || await ask([{role:'user', content:REGION_PROMPT}], message.image, true, AbortSignal.timeout(120000));
       await chrome.scripting.executeScript({
         target:{tabId, frameIds:[0]},
         func:(text, point)=>globalThis.__auraRegionPick?.showResult(text, point),
@@ -758,7 +785,13 @@ async function handle(message,sender) {
         question.rect = revealed?.rect || rect;
         if (revealed?.devicePixelRatio) question.devicePixelRatio = revealed.devicePixelRatio;
       }
-      if (question.visual) {
+      const supplied = typeof message.image === 'string' && message.image.length < 3_500_000 && /^data:image\/(jpeg|png);base64,/.test(message.image) ? message.image : null;
+      if (supplied) {
+        question.image = supplied;
+        question.visual = true;
+        visualRead = true;
+        question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
+      } else if (question.visual) {
         question.image = await screenshot(tabId, question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
         const figures=await frameCall(tabId,state.question.documentId,'captureFigures').catch(()=>[]);
         let imageBytes=question.image.length;
@@ -811,6 +844,7 @@ async function handle(message,sender) {
     if (!submit) {
       const filled = await fillPlan(tabId,plan);
       if (!filled || filled.filled !== plan.solution.actions.length) throw Object.assign(new Error('Not every answer was verified. Check answer and Next were not pressed.'), {submission:'not_sent'});
+      if (message.fillOnly) { plan.state = "filled"; return {...filled, submitted:false, advanced:'none'}; }
       const follow = await clickFooterNext(tabId, plan.generation);
       plan.state = "filled";
       if (!follow.clicked) {

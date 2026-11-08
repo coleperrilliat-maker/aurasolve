@@ -92,7 +92,7 @@ test('a question limit stops the repeat before the assignment ends',async()=>{
   assert.equal(solves,1);
 });
 
-const mylab=(hash,current,part,controls={})=>({question:{hash,fields:[{id:'FL1',kind:'select'}],player:{progress:{current,part}}},controls});
+const mylab=(hash,current,part,controls={})=>({question:{hash,fields:[{id:'F-'+hash,kind:'select'}],player:{progress:{current,part}}},controls});
 
 test('an OK after a correct part keeps solving the same question instead of pressing Next',async()=>{
   let state={hash:'q1p1',current:1,part:1};const events=[];const calls=[];
@@ -163,4 +163,22 @@ test('test mode: an OK with no verdict moves on with Next and never asks for Sim
   assert.equal(result.completed,2);
   assert.equal(result.spent,2);
   assert.equal(calls.includes('similarQuestion'),false);
+});
+
+test('a moved matching tile is not mistaken for a new part',async()=>{
+  let state={hash:'d1',current:3};const events=[];
+  const result=await runFillAssignment({
+    delay:async()=>{},limit:1,
+    onEvent:event=>{events.push(event.kind);},
+    request:async message=>{
+      if(message.type==='solve')return question(state.hash);
+      if(message.type==='apply')return {filled:1,submitted:false,advanced:'check'};
+      if(message.type==='checkResult'){state={...state,hash:'d1-moved'};return {verdict:'correct'};}
+      if(message.type==='advanceQuestion'){state={hash:'d2',current:4};return {moved:'next'};}
+      if(message.type==='inspect')return {question:{hash:state.hash,fields:[{id:'tile',kind:'drag'}],player:{progress:{current:state.current}}}};
+      return {};
+    }
+  });
+  assert.equal(result.spent,1);
+  assert.equal(events.includes('part'),false);
 });

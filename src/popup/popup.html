@@ -83,24 +83,13 @@
     </section>
 
     <section class="view page" data-view="autopilot" hidden>
-      <div class="page-head"><h2>AutoPilot</h2><span class="pill" id="pilot-state">Ready</span></div>
-      <div class="pilot">
-        <div class="pilot-hero">
-          <span class="pilot-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.6 4.4 4.9 10.3c-.7.3-.6 1.3.1 1.5l6 1.6 1.6 6c.2.7 1.2.8 1.5.1z"/></svg></span>
-          <div><strong>Do the whole set</strong><small id="pace-summary">Starts at the current question.</small></div>
-        </div>
-        <button id="start-pilot" class="primary" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>Start AutoPilot
-        </button>
-        <div id="pilot-progress" hidden>
-          <div class="pilot-bar">
-            <span class="pilot-text" aria-live="polite"><span id="progress-label">AutoPilot: Starting</span><span id="progress-time"></span></span>
-            <button id="stop-pilot" type="button" aria-label="Stop AutoPilot" title="Stop AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2.5"/></svg></button>
-          </div>
-          <p id="pace-status" class="hint" aria-live="polite" hidden></p>
-        </div>
-        <p id="pilot-error" class="pilot-error" hidden></p>
+      <div class="page-head"><h2>AutoPilot</h2></div>
+      <div class="pilot-bar" id="pilot-progress">
+        <span class="pilot-text" aria-live="polite"><span id="progress-label">AutoPilot: Ready. Press play to start.</span> <span id="progress-time"></span></span>
+        <button id="start-pilot" class="pilot-btn" type="button" aria-label="Start AutoPilot" title="Start AutoPilot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11l9-5.5z"/></svg></button>
+        <button id="stop-pilot" class="pilot-btn" type="button" aria-label="Stop AutoPilot" title="Stop AutoPilot" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2.5"/></svg></button>
       </div>
+      <p id="pilot-error" class="pilot-error" hidden></p>
       <div class="group" id="autopilot-settings">
         <h3>Pace &amp; limits</h3>
         <label class="row" for="speed-run"><span><strong>Speed run</strong><small>No extra wait between questions</small></span><input id="speed-run" class="switch" type="checkbox" role="switch"></label>

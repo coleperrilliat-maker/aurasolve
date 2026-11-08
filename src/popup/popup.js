@@ -35,7 +35,7 @@ $('time-min').value = '20'; $('time-max').value = '40';
 function paceSummary() {
   const limit = $('question-limit').value === '0' ? 'every unfinished question' : `${$('question-limit').value} question${$('question-limit').value === '1' ? '' : 's'}`;
   const pace = $('speed-run').checked ? 'no wait' : $('random-timing').checked ? `${$('time-min').value}–${$('time-max').value}s per question` : `${$('time-min').value}s per question`;
-  $('pace-summary').textContent = `Answers ${limit}, ${pace}.`;
+  if (!busy) { $('progress-label').textContent = `AutoPilot: Ready to answer ${limit}, ${pace}. Press play to start.`; $('progress-time').textContent = ''; }
 }
 function updateTiming() {
   $('timing-settings').hidden = $('speed-run').checked;
@@ -131,7 +131,6 @@ function setBusy(value) {
   busy = value;
   document.querySelectorAll('[data-action], #start-pilot, #send, .chip').forEach(button => { button.disabled = value; });
   document.querySelectorAll('#autopilot-settings input, #autopilot-settings select').forEach(input => { input.disabled = value; });
-  $('stop-pilot').disabled = !value;
 }
 function begin() {
   const mine = ++token;
@@ -147,7 +146,7 @@ function firstLine(text) {
   const line = String(text || '').split('\n').map(part => part.replace(/\*\*|\\\(|\\\)/g, '').replace(/^answer:\s*/i, '').trim()).find(Boolean) || '';
   return line.length > 80 ? line.slice(0, 77) + '…' : line;
 }
-function pilotState(text) { $('pilot-state').textContent = text; $('pilot-state').dataset.state = text.toLowerCase(); }
+function pilotState(text) { $('pilot-progress').dataset.state = text.toLowerCase(); }
 function setActive(action) {
   document.querySelectorAll('[data-action]').forEach(button => button.classList.toggle('active', button.dataset.action === action));
 }
@@ -259,9 +258,7 @@ async function helpSolve() {
 // The pill reads "AutoPilot: <status> (12.3s)…" with a live per-question timer.
 const pilotClock = {text: 'Starting', verb: '', since: 0, timer: 0, done: false};
 function drawPilot() {
-  const verb = pilotClock.verb ? Object.assign(document.createElement('span'), {className: 'pilot-verb', textContent: pilotClock.verb + ' '}) : '';
-  const prefix = Object.assign(document.createElement('span'), {className: 'pilot-prefix', textContent: 'AutoPilot: '});
-  $('progress-label').replaceChildren(prefix, verb, pilotClock.text);
+  $('progress-label').textContent = `AutoPilot: ${pilotClock.verb ? pilotClock.verb + ' ' : ''}${pilotClock.text}`;
   const seconds = pilotClock.since ? ((Date.now() - pilotClock.since) / 1000).toFixed(1) : '0.0';
   $('progress-time').textContent = pilotClock.done ? '' : `(${seconds}s)…`;
 }
@@ -294,8 +291,7 @@ async function startPilot() {
   runLog = [];
   const checkpoint = async () => { live(); };
   const delay = async ms => { let left = ms; while (left > 0) { const step = Math.min(100, left); await sleep(step); live(); left -= step; } };
-  $('pilot-progress').hidden = false; $('start-pilot').hidden = true; $('pilot-error').hidden = true;
-  $('pace-status').hidden = true;
+  $('start-pilot').hidden = true; $('stop-pilot').hidden = false; $('pilot-error').hidden = true;
   pilotClock.since = 0;
   pilotStatus('Starting', {restart: true});
   pilotState('Running');
@@ -348,7 +344,7 @@ async function startPilot() {
           runLog.at(-1).submitted = event.applied?.advanced === 'check';
         }
         if (event.kind === 'next') pilotStatus(`Moving past Question ${event.number}`);
-        if (event.kind === 'done') pilotStatus(`Finished ${event.completed} question${event.completed === 1 ? '' : 's'}`, {done: true});
+        if (event.kind === 'done') pilotStatus(`Finished ${event.completed} question${event.completed === 1 ? '' : 's'}. Press play to run again.`, {done: true});
       },
     });
     breakdown();
@@ -357,12 +353,12 @@ async function startPilot() {
     breakdown();
     const stopped = error.message === 'Stopped.';
     pilotState(stopped ? 'Stopped' : 'Error');
-    pilotStatus(stopped ? 'Stopped' : 'Paused on an error', {done: true});
+    pilotStatus(stopped ? 'Stopped. Press play to continue from this question.' : 'Stopped on an error (details below). Press play to try again.', {done: true});
     if (!stopped) { $('pilot-error').textContent = error.message; $('pilot-error').hidden = false; }
   } finally {
     clearInterval(pilotClock.timer);
     setBusy(false);
-    $('start-pilot').hidden = false;
+    $('start-pilot').hidden = false; $('stop-pilot').hidden = true;
   }
 }
 

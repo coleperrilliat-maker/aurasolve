@@ -126,6 +126,17 @@ export async function execute(plan) {
     } else if (a.kind === "drag") {
       const dest = elementFor(a.destination);
       if (!visible(dest)) throw new Error("The drop target disappeared.");
+      if (!el.matches('[draggable="true"], [data-aura-draggable]')) {
+        const tile = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        const landed = () => dest.contains(el) || (tile && (dest.innerText || dest.textContent || '').replace(/\s+/g, ' ').includes(tile));
+        el.scrollIntoView({block: 'nearest'});
+        dest.scrollIntoView({block: 'nearest'});
+        const centre = node => { const box = node.getBoundingClientRect(); return {x: box.left + box.width / 2, y: box.top + box.height / 2}; };
+        await sendExtension({type: 'trustedDrag', planId: plan.id, from: centre(el), to: centre(dest)});
+        for (let wait = 0; wait < 10 && !landed(); wait++) await new Promise(resolve => setTimeout(resolve, 100));
+        if (!landed()) throw new Error("The matching tile did not stay in its box. Complete it manually.");
+        continue;
+      }
       const dataTransfer = new DataTransfer();
       el.dispatchEvent(new DragEvent("dragstart",{bubbles:true,dataTransfer}));
       dest.dispatchEvent(new DragEvent("dragenter",{bubbles:true,cancelable:true,dataTransfer}));

@@ -93,3 +93,21 @@ export async function trustedClick(tabId, x, y) {
   await new Promise(resolve => setTimeout(resolve, 40));
   await send('mouseReleased', 'left', 0, 1);
 }
+
+// Pearson's matching tiles follow the real mouse, not script drag events.
+export async function trustedDrag(tabId, from, to) {
+  for (const point of [from, to]) if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) throw new Error('The matching tile moved. Generate a new answer.');
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const send = (type, x, y, buttons) => chrome.debugger.sendCommand({tabId}, 'Input.dispatchMouseEvent', {
+    type, x: Math.round(x), y: Math.round(y), button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: 1
+  });
+  await send('mouseMoved', from.x, from.y, 0);
+  await send('mousePressed', from.x, from.y, 1);
+  await pause(80);
+  for (let step = 1; step <= 14; step++) {
+    await send('mouseMoved', from.x + (to.x - from.x) * step / 14, from.y + (to.y - from.y) * step / 14, 1);
+    await pause(25);
+  }
+  await pause(80);
+  await send('mouseReleased', to.x, to.y, 0);
+}

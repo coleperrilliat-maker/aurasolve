@@ -217,7 +217,11 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
       }
       attempts=0;retryContext=null;
       const after=await settle(previous,partBefore);
-      const moved=Boolean(after?.question?.fields?.length) && changed(after,previous,partBefore);
+      // A moved tile or a re-rendered box changes the page too. Only new answer
+      // boxes or a new "Part X of Y" label mean Pearson opened the next part.
+      const before=new Set(page.question.fields.map(field=>field.id));
+      const fresh=after?.question?.fields?.some(field=>!before.has(field.id));
+      const moved=Boolean(after?.question?.fields?.length) && changed(after,previous,partBefore) && (fresh || (partOf(after) && partOf(after)!==partBefore));
       const otherQuestion=moved && numberOf(after) && questionNumber && numberOf(after)!==questionNumber;
       // Same question, new answer boxes: the OK only closed a "this part is right" popup.
       if(moved && !otherQuestion){
@@ -247,16 +251,17 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
           continue;
         }
       }
+      const finished=label();
       completed++;
-      await onEvent({kind:'filled', result, applied, verdict, completed, spent, number:label()});
+      await onEvent({kind:'filled', result, applied, verdict, completed, spent, number:finished});
       if(otherQuestion){newQuestion(after);continue;}
       const step=await request({type:'advanceQuestion'});
       if(step?.moved==='none'){
         const now=await answerBoxes();
-        if(now?.question?.fields?.length && now.question.hash!==previous){newQuestion(now);continue;}
+        if(now?.question?.fields?.some(field=>!before.has(field.id)) && now.question.hash!==previous){newQuestion(now);continue;}
         return finish(true);
       }
-      await onEvent({kind:'next', completed, spent, number:label()});
+      await onEvent({kind:'next', completed, spent, number:finished});
       let moved2=false;
       for(let watch=0; watch<40 && !moved2; watch++){
         await delay(250);
@@ -268,11 +273,12 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
       continue;
     }
     attempts=0;retryContext=null;
+    const finished=label();
     completed++;
-    await onEvent({kind:'filled', result, applied, verdict, completed, spent, number:label()});
+    await onEvent({kind:'filled', result, applied, verdict, completed, spent, number:finished});
     questionNumber=null;part=1;questionWrong=false;
     if(applied.advanced!=='next')return finish(true);
-    await onEvent({kind:'next', completed, spent});
+    await onEvent({kind:'next', completed, spent, number:finished});
     let moved=false;
     for(let watch=0; watch<40 && !moved; watch++){
       await delay(250);

@@ -53,9 +53,9 @@
     card.id = 'aurasolve-region-result';
     card.innerHTML = `
       <style>
-        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;width:min(340px,calc(100vw - 24px));max-height:min(70vh,520px);display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:16px;background:#fff;box-shadow:0 12px 40px rgba(15,18,34,.22),0 0 0 1px rgba(15,18,34,.08);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0e1120;overflow:auto}
+        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;width:min(340px,calc(100vw - 24px));min-width:220px;min-height:140px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:16px;background:#fff;box-shadow:0 12px 40px rgba(15,18,34,.22),0 0 0 1px rgba(15,18,34,.08);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0e1120;overflow:auto}
         #aurasolve-region-result *{box-sizing:border-box}
-        #aurasolve-region-result .head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        #aurasolve-region-result .head{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:move;user-select:none;touch-action:none}
         #aurasolve-region-result .head strong{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#3b6cff}
         #aurasolve-region-result .x{width:28px;height:28px;border:0;border-radius:8px;background:#f1f3f8;color:#474e63;font-size:18px;cursor:pointer;line-height:1}
         #aurasolve-region-result .box{padding:12px 14px;border-radius:12px;background:#f7f8fb;box-shadow:inset 0 0 0 1px rgba(15,18,34,.06)}
@@ -77,6 +77,20 @@
     card.querySelector('[data-answer]').append(rich(answer || '…'));
     card.querySelector('[data-explain]').append(rich(explanation));
     card.querySelector('.x').onclick = () => card.remove();
+    const head = card.querySelector('.head');
+    head.addEventListener('pointerdown', event => {
+      if (event.target.closest('.x')) return;
+      event.preventDefault();
+      const start = card.getBoundingClientRect(), ox = event.clientX - start.left, oy = event.clientY - start.top;
+      head.setPointerCapture(event.pointerId);
+      const move = e => {
+        card.style.left = Math.min(window.innerWidth - 40, Math.max(0, e.clientX - ox)) + 'px';
+        card.style.top = Math.min(window.innerHeight - 40, Math.max(0, e.clientY - oy)) + 'px';
+      };
+      const up = () => { head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); };
+      head.addEventListener('pointermove', move);
+      head.addEventListener('pointerup', up);
+    });
     const rect = card.getBoundingClientRect();
     if (rect.bottom > window.innerHeight - 12) card.style.top = Math.max(12, window.innerHeight - 12 - rect.height) + 'px';
     if (rect.right > window.innerWidth - 12) card.style.left = Math.max(12, window.innerWidth - 12 - rect.width) + 'px';

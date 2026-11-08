@@ -14,8 +14,10 @@ export function idFor(el) {
 export const elementFor = id => elements.get(id);
 const clean = value => String(value || "").replace(/\s+/g," ").trim();
 const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid]';
-const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable], [draggable="true"], [role="slider"]';
-const dropSelector = '[data-aura-drop], [aria-dropeffect]:not([aria-dropeffect="none"])';
+const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable], [draggable="true"], .dojoDndItem, [role="slider"]';
+// Pearson matching boxes are dojo drop targets; a box that already holds tiles is the tile bank.
+const dropSelector = '[data-aura-drop], [aria-dropeffect]:not([aria-dropeffect="none"]), .dojoDndTarget:not(:has(.dojoDndItem)), .dojoDndSource:not(:has(.dojoDndItem))';
+const dropLabel = el => clean(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText) || clean(fieldContext(el)).slice(0,200) || labelFor(el);
 // Pearson leaves earlier parts' editor wrappers visible after disabling their inputs.
 // Those are answer history, not unsupported controls for the current part.
 export function writable(el) {
@@ -185,7 +187,7 @@ export function snapshot() {
   for (const [id,el] of elements) if (!el.isConnected) elements.delete(id);
   const root = questionRoot();
   const fields = [], limitations = [];
-  const drops = root ? [...root.querySelectorAll(dropSelector)].filter(el=>visible(el) && writable(el)).map(el=>({id:idFor(el),label:labelFor(el)})) : [];
+  const drops = root ? [...root.querySelectorAll(dropSelector)].filter(el=>visible(el) && writable(el)).map(el=>({id:idFor(el),label:dropLabel(el)})) : [];
   const radioInputs = root ? [...root.querySelectorAll('input[type="radio"]')].filter(el => el.type === "radio" && visible(el) && writable(el)) : [];
   const radioInfo = radioInputs.length ? describeRadioGroups(root, radioInputs) : new Map();
   if (root) for (const el of root.querySelectorAll(fieldSelector)) {
@@ -222,7 +224,7 @@ export function snapshot() {
       const bounds = Object.fromEntries(["xMin","xMax","yMin","yMax"].map(key=>[key,Number(el.dataset[key])]));
       if (el.dataset.auraGraph === "point" && Object.values(bounds).every(Number.isFinite) && bounds.xMin < bounds.xMax && bounds.yMin < bounds.yMax) fields.push({...base,kind:"point",bounds});
       else limitations.push("Graph control has no supported coordinate adapter.");
-    } else if (el.matches('[data-aura-draggable], [draggable="true"]')) {
+    } else if (el.matches('[data-aura-draggable], [draggable="true"], .dojoDndItem')) {
       if(drops.length)fields.push({...base,kind:"drag"});
       else limitations.push('This drag item has no explicitly identified drop targets.');
     }
