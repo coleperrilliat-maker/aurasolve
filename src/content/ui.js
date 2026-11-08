@@ -1,7 +1,7 @@
 import {sendExtension} from '../shared/messaging.js';
 import {questionRoot,snapshot,visible} from './detection.js';
 import {BUILD_VERSION} from '../shared/version.js';
-import {DEFAULT_OVERLAY, OVERLAY_KEY, normalizeOverlay, readOverlay, writeOverlay} from '../shared/overlay.js';
+import {DEFAULT_OVERLAY, OVERLAY_KEY, normalizeOverlay, fetchOverlay, pushOverlay} from '../shared/overlay.js';
 
 export function promptBox(root) {
   const named=root.querySelector('#top, [id$="_top"], [data-testid="question-text"], .question-text');
@@ -133,8 +133,11 @@ export function createUI() {
   }
 
   async function refresh(next) {
-    settings = normalizeOverlay(next || await readOverlay());
-    mount();
+    const fresh = normalizeOverlay(next || await fetchOverlay());
+    const same = JSON.stringify(fresh) === JSON.stringify(settings);
+    settings = fresh;
+    if (!same || !host.isConnected) mount();
+    else paint();
   }
 
   function setBusy(value) {
@@ -174,7 +177,8 @@ export function createUI() {
     shot.innerHTML = `<span class="spinner" aria-hidden="true"></span>`;
     notice.hidden = true;
     try {
-      await sendExtension({type: 'regionSolve'});
+      const result = await sendExtension({type: 'regionSolve'});
+      if (result?.cancelled) notice.hidden = true;
     } catch (error) {
       if (!settings.invisible) { notice.textContent = error.message; notice.hidden = false; }
       else console.warn('AuraSolve select-area failed:', error.message);
@@ -200,7 +204,7 @@ export function createUI() {
     wrap.classList.remove('dragging');
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
-    await writeOverlay(settings);
+    try { settings = await pushOverlay(settings); } catch {}
   };
   drag.addEventListener('pointerdown', event => {
     if (settings.zone !== 'custom' || settings.invisible) return;
@@ -213,9 +217,14 @@ export function createUI() {
   });
 
   refresh();
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes[OVERLAY_KEY]) refresh(changes[OVERLAY_KEY].newValue);
-  });
+  // Panel writes settings through the worker; it also mirrors into local storage
+  // for extension pages. Listen when available, and poll lightly as a fallback.
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[OVERLAY_KEY]) refresh(changes[OVERLAY_KEY].newValue);
+    });
+  } catch {}
+  setInterval(() => { if (!running && !document.hidden) refresh(); }, 5000);
   let scheduled = false;
   const observer = new MutationObserver(() => {
     if (scheduled) return;

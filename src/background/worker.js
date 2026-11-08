@@ -8,6 +8,7 @@ import {awaitSelection, placeClick, trustedClick, withDebugger} from './trusted-
 import {frameCall} from './frame-call.js';
 import {cropBox} from '../shared/capture.js';
 import {DEFAULT_MODEL} from '../shared/config.js';
+import {readOverlay, writeOverlay} from '../shared/overlay.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map(), regionWaits = new Map();
 const REGION_PROMPT = 'Solve the question in this screenshot. If it has several blanks or parts, answer every one.';
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
@@ -488,6 +489,8 @@ async function handle(message,sender) {
       return {configured:false,model:settings.model || DEFAULT_MODEL,service:"AuraSolve Cloud"};
     }
   }
+  if (message.type === "getOverlay") return {settings: await readOverlay()};
+  if (message.type === "setOverlay") return {settings: await writeOverlay(message.settings)};
   // Screenshot and chat work on any page, so they skip the practice-page setup.
   if (message.type === "captureScreen") {
     if (sender.tab) throw new Error("Use the AuraSolve panel to take a screenshot.");
@@ -506,20 +509,46 @@ async function handle(message,sender) {
     let image;
     try { image = await screenshot(tab.id, {}); }
     catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
-    // Region UI must live in the top frame; the Fill button may sit in a child frame.
-    await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},files:['src/content/region-pick.js']});
-    await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:(url)=>globalThis.__auraRegionPick?.start(url),args:[image]});
+    // Keep the huge screenshot out of executeScript args; session storage is safer.
+    const imageKey = `regionImage:${tab.id}:${Date.now()}`;
+    await chrome.storage.session.set({[imageKey]: image});
+    try {
+      await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},files:['src/content/region-pick.js']});
+      const started = await chrome.scripting.executeScript({
+        target:{tabId:tab.id,frameIds:[0]},
+        func: async (key) => {
+          const data = await chrome.storage.session.get(key);
+          const url = data[key];
+          await chrome.storage.session.remove(key);
+          if (!url || !globalThis.__auraRegionPick?.start) return {ok:false, error:'Region picker failed to start.'};
+          globalThis.__auraRegionPick.start(url);
+          return {ok:true};
+        },
+        args:[imageKey],
+      });
+      if (!started?.[0]?.result?.ok) throw new Error(started?.[0]?.result?.error || started?.[0]?.error?.message || 'Could not open the selection tool on this page.');
+    } catch (error) {
+      await chrome.storage.session.remove(imageKey).catch(()=>{});
+      throw new Error(error.message || 'Could not open the selection tool on this page.');
+    }
     return await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (regionWaits.get(tab.id)?.id === waitId) regionWaits.delete(tab.id);
+        fn(value);
+      };
+      const waitId = `${tab.id}:${Date.now()}`;
       const timer = setTimeout(() => {
-        if (regionWaits.get(tab.id)?.resolve === resolve) {
-          regionWaits.delete(tab.id);
-          chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:()=>globalThis.__auraRegionPick?.clear?.()}).catch(()=>{});
-          resolve({cancelled:true});
-        }
+        chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},func:()=>globalThis.__auraRegionPick?.clear?.()}).catch(()=>{});
+        finish(resolve, {cancelled:true});
       }, 120000);
       regionWaits.set(tab.id, {
-        resolve: value => { clearTimeout(timer); regionWaits.delete(tab.id); resolve(value); },
-        reject: error => { clearTimeout(timer); regionWaits.delete(tab.id); reject(error); },
+        id: waitId,
+        resolve: value => finish(resolve, value),
+        reject: error => finish(reject, error),
       });
     });
   }

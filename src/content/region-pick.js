@@ -55,9 +55,6 @@
         #aurasolve-region-result ul{margin:0;padding-left:18px}
         #aurasolve-region-result p{margin:0 0 6px}
         #aurasolve-region-result p:last-child{margin-bottom:0}
-        #aurasolve-region-result .wait{display:flex;align-items:center;gap:10px;color:#474e63;font-size:13px}
-        #aurasolve-region-result .spin{width:14px;height:14px;border:2px solid #c9d7ff;border-top-color:#3b6cff;border-radius:50%;animation:aura-spin .8s linear infinite}
-        @keyframes aura-spin{to{transform:rotate(360deg)}}
       </style>
       <div class="head"><strong>AuraSolve</strong><button class="x" type="button" aria-label="Close">×</button></div>
       <div class="box"><h3>Answer</h3><div class="body" data-answer></div></div>
@@ -110,31 +107,38 @@
     root.id = 'aurasolve-region-root';
     root.innerHTML = `
       <style>
-        #aurasolve-region-root{all:initial;position:fixed;inset:0;z-index:2147483646;cursor:crosshair;user-select:none}
-        #aurasolve-region-root .bg{position:absolute;inset:0;background:#111 center / 100% 100% no-repeat}
+        #aurasolve-region-root{all:initial;position:fixed;inset:0;z-index:2147483646;cursor:crosshair;user-select:none;overflow:hidden}
+        #aurasolve-region-root .layer{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none}
         #aurasolve-region-root .veil{position:absolute;inset:0;background:rgba(8,12,24,.55);pointer-events:none}
-        #aurasolve-region-root .select{position:absolute;box-shadow:0 0 0 9999px rgba(8,12,24,.55);border:2px solid #3b6cff;background:transparent;pointer-events:none;overflow:hidden}
-        #aurasolve-region-root .select .cut{position:absolute;left:0;top:0;width:100vw;height:100vh;background:center / 100% 100% no-repeat;pointer-events:none}
+        #aurasolve-region-root .select{position:absolute;box-shadow:0 0 0 9999px rgba(8,12,24,.55);border:2px solid #3b6cff;overflow:hidden;pointer-events:none}
+        #aurasolve-region-root .select .cut{position:absolute;max-width:none;pointer-events:none}
         #aurasolve-region-root .hint{position:fixed;left:50%;top:18px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(15,18,34,.88);color:#fff;font:600 13px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:none;white-space:nowrap;z-index:1}
       </style>
-      <div class="bg"></div>
+      <img class="layer" alt="">
       <div class="veil"></div>
       <div class="hint">Drag to select · Esc to cancel</div>`;
-    const bg = root.querySelector('.bg');
+    const layer = root.querySelector('.layer');
     const veil = root.querySelector('.veil');
-    bg.style.backgroundImage = `url("${imageUrl}")`;
+    layer.src = imageUrl;
     const select = document.createElement('div');
     select.className = 'select';
     select.hidden = true;
-    const cut = document.createElement('div');
+    const cut = document.createElement('img');
     cut.className = 'cut';
-    cut.style.backgroundImage = `url("${imageUrl}")`;
+    cut.alt = '';
+    cut.src = imageUrl;
     select.append(cut);
     root.append(select);
     document.documentElement.append(root);
 
     let origin = null;
     let box = null;
+
+    const sizeCut = () => {
+      cut.style.width = window.innerWidth + 'px';
+      cut.style.height = window.innerHeight + 'px';
+    };
+    sizeCut();
 
     const paint = (next) => {
       box = next;
@@ -143,18 +147,19 @@
         veil.hidden = false;
         return;
       }
-      // Selection cutout stays full color; everything around it stays dimmed.
       veil.hidden = true;
       select.hidden = false;
       select.style.left = box.x + 'px';
       select.style.top = box.y + 'px';
       select.style.width = box.w + 'px';
       select.style.height = box.h + 'px';
-      cut.style.transform = `translate(${-box.x}px, ${-box.y}px)`;
+      cut.style.left = -box.x + 'px';
+      cut.style.top = -box.y + 'px';
     };
 
     const finish = async (cancelled) => {
       window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', sizeCut);
       root.remove();
       if (cancelled || !box || box.w < 12 || box.h < 12) {
         chrome.runtime.sendMessage({type: 'regionCancelled'}).catch(() => {});
@@ -195,6 +200,7 @@
       finish(false);
     });
     window.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', sizeCut);
   }
 
   globalThis.__auraRegionPick = {

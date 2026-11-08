@@ -55,3 +55,22 @@ export async function writeOverlay(next) {
   await chrome.storage.local.set({[OVERLAY_KEY]: settings});
   return settings;
 }
+
+// Content scripts cannot read trusted local storage. Ask the worker instead.
+export async function fetchOverlay() {
+  try {
+    const runtime = globalThis.chrome?.runtime;
+    if (typeof runtime?.sendMessage !== 'function') return {...DEFAULT_OVERLAY};
+    const response = await runtime.sendMessage({type: 'getOverlay'});
+    if (response?.ok && response.data?.settings) return normalizeOverlay(response.data.settings);
+  } catch {}
+  return {...DEFAULT_OVERLAY};
+}
+
+export async function pushOverlay(next) {
+  const runtime = globalThis.chrome?.runtime;
+  if (typeof runtime?.sendMessage !== 'function') return normalizeOverlay(next);
+  const response = await runtime.sendMessage({type: 'setOverlay', settings: next});
+  if (!response?.ok) throw new Error(response?.error || 'Could not save button settings.');
+  return normalizeOverlay(response.data?.settings || next);
+}
