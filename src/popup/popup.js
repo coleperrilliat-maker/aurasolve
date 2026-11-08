@@ -449,7 +449,7 @@ $('new-chat').onclick = () => {
 
 /* ---------- On-page Fill button ---------- */
 const overlayZone=$('overlay-zone'), overlayLabel=$('overlay-label'), overlayColors=$('overlay-colors');
-const overlayInvisible=$('overlay-invisible'), overlayShot=$('overlay-shot'), overlayCustom=$('overlay-custom');
+const overlayInvisible=$('overlay-invisible'), overlayFill=$('overlay-fill'), overlayShot=$('overlay-shot'), overlayCustom=$('overlay-custom');
 const overlayX=$('overlay-x'), overlayY=$('overlay-y'), overlayPreview=$('overlay-preview'), overlayPreviewShot=$('overlay-preview-shot'), overlayNote=$('overlay-preview-note');
 for (const zone of OVERLAY_ZONES) overlayZone.add(new Option(zone.label, zone.id));
 for (const color of OVERLAY_COLORS) {
@@ -471,6 +471,7 @@ const zoneCopy={
 function paintOverlay(settings) {
   const next=normalizeOverlay(settings);
   overlayInvisible.checked=next.invisible;
+  overlayFill.checked=next.showFill;
   overlayShot.checked=next.showShot;
   overlayZone.value=next.zone;
   overlayLabel.value=next.label;
@@ -481,12 +482,16 @@ function paintOverlay(settings) {
   overlayPreview.textContent=next.invisible ? '' : next.label;
   overlayPreview.style.color=next.color;
   overlayPreview.classList.toggle('ghost', next.invisible);
+  overlayPreview.hidden=!next.showFill;
   overlayPreviewShot.hidden=!next.showShot;
   overlayPreviewShot.style.color=next.color;
   overlayPreviewShot.classList.toggle('ghost', next.invisible);
-  overlayNote.textContent=next.invisible
-    ? 'Invisible on MyLab. The empty zones still work when clicked.'
-    : (next.showShot ? 'Fill answers plus a square select-area button. ' : '') + (zoneCopy[next.zone] || 'Shown on the MyLab page.');
+  const shown=next.showFill && next.showShot ? 'Fill answers plus the square screenshot button. ' : next.showFill ? 'Only Fill answers is shown. ' : next.showShot ? 'Only the screenshot button is shown. ' : '';
+  overlayNote.textContent=!next.showFill && !next.showShot
+    ? 'Both buttons are off, so nothing is shown on MyLab.'
+    : next.invisible
+      ? 'Invisible on MyLab. The empty zones still work when clicked.'
+      : shown + (zoneCopy[next.zone] || 'Shown on the MyLab page.');
   return next;
 }
 async function saveOverlay(patch={}) {
@@ -498,6 +503,7 @@ async function saveOverlay(patch={}) {
     zone: overlayZone.value,
     label: overlayLabel.value,
     invisible: overlayInvisible.checked,
+    showFill: overlayFill.checked,
     showShot: overlayShot.checked,
     x: Number(overlayX.value),
     y: Number(overlayY.value),
@@ -506,6 +512,7 @@ async function saveOverlay(patch={}) {
 }
 readOverlay().then(paintOverlay);
 overlayInvisible.onchange=()=>saveOverlay({invisible: overlayInvisible.checked});
+overlayFill.onchange=()=>saveOverlay({showFill: overlayFill.checked});
 overlayShot.onchange=()=>saveOverlay({showShot: overlayShot.checked});
 overlayZone.onchange=()=>saveOverlay({zone: overlayZone.value});
 overlayLabel.onchange=()=>saveOverlay({label: overlayLabel.value});

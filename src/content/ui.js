@@ -97,6 +97,7 @@ export function createUI() {
     wrap.style.setProperty('--aura-color', settings.color);
     button.classList.toggle('ghost', settings.invisible);
     shot.classList.toggle('ghost', settings.invisible);
+    button.hidden = !settings.showFill;
     shot.hidden = !settings.showShot;
     notice.classList.toggle('ghost-note', settings.invisible);
     wrap.classList.toggle('movable', settings.zone === 'custom' && !settings.invisible);
@@ -124,7 +125,7 @@ export function createUI() {
     const sara = current.fields.some(field => field.adapter === 'sara-choice');
     const lazy = root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, .xlFillin, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"], .mq-editable-field')].some(visible);
     const answering = Boolean(root && current.question && (sara || (!current.fallback && (current.fields.length || lazy))));
-    if (!answering) { if (host.isConnected) host.remove(); return; }
+    if (!answering || (!settings.showFill && !settings.showShot)) { if (host.isConnected) host.remove(); return; }
     const frame = [...document.querySelectorAll('iframe')].find(el => el.getBoundingClientRect().width > 400 && el.getBoundingClientRect().height > 250);
     // The question may live in a child frame. Do not put a second toolbar
     // above that iframe in its parent document.
@@ -155,7 +156,7 @@ export function createUI() {
   }
 
   button.onclick = async () => {
-    if (running) return;
+    if (running || button.hidden) return;
     setBusy(true);
     button.innerHTML = settings.invisible
       ? `<span class="spinner" aria-hidden="true"></span>`
@@ -228,6 +229,11 @@ export function createUI() {
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes[OVERLAY_KEY]) refresh(changes[OVERLAY_KEY].newValue);
+    });
+  } catch {}
+  try {
+    chrome.runtime.onMessage.addListener(message => {
+      if (message?.type === 'overlayChanged') refresh(message.settings);
     });
   } catch {}
   setInterval(() => { if (!running && !document.hidden) refresh(); }, 5000);

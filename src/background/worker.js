@@ -8,7 +8,7 @@ import {awaitSelection, placeClick, trustedClick, trustedDrag, withDebugger} fro
 import {frameCall} from './frame-call.js';
 import {cropBox} from '../shared/capture.js';
 import {DEFAULT_MODEL} from '../shared/config.js';
-import {readOverlay, writeOverlay} from '../shared/overlay.js';
+import {OVERLAY_KEY, readOverlay, writeOverlay} from '../shared/overlay.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map(), regionWaits = new Map(), regionImages = new Map();
 const REGION_PROMPT = 'Solve the question in this screenshot. If it has several blanks or parts, answer every one.';
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
@@ -933,6 +933,14 @@ async function handle(message,sender) {
   }
   throw new Error("Unknown request.");
 }
+// Content scripts cannot watch trusted storage, so push button settings to open tabs.
+chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area !== 'local' || !changes[OVERLAY_KEY]) return;
+  const settings = changes[OVERLAY_KEY].newValue;
+  for (const tab of await chrome.tabs.query({}).catch(() => [])) {
+    if (tab.id != null) chrome.tabs.sendMessage(tab.id, {type: 'overlayChanged', settings}).catch(() => {});
+  }
+});
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message,
     ...(['not_sent','unknown'].includes(error.submission)?{submission:error.submission}:{})}));
