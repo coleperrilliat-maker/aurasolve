@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Practice test mode</title>
+<style>body{margin:0;font:15px -apple-system,sans-serif;color:#1d2433}header{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;border-bottom:1px solid #ddd}#handin{background:#c8102e;color:#fff;border:0;border-radius:20px;padding:10px 22px;font-weight:600}main{max-width:720px;margin:40px auto 120px}footer{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:flex-end;padding:16px 24px;border-top:1px solid #ddd;background:#fafafa}#next{background:#1d2433;color:#fff;border:0;border-radius:20px;padding:10px 26px}.modal{position:fixed;inset:0;display:grid;place-items:center;background:#0005}.modal div{background:#fff;border-radius:10px;padding:28px;width:420px}</style></head>
+<body><header><strong>Practice Test</strong><button id="handin" type="button">Submit</button></header>
+<main><p id="progress">Question 1 of 2</p><section id="question" data-aura-question></section></main>
+<footer><button id="next" type="button">Next</button></footer>
+<script>
+const qs=['<h2>Solve for x: 2x + 4 = 10.</h2><label>x = <input id="a" type="text" aria-label="Value of x"></label>','<h2>Solve for y: y - 3 = 9.</h2><label>y = <input id="a" type="text" aria-label="Value of y"></label>'];
+if(location.search.includes('trap')){document.getElementById('next').remove();document.querySelector('footer').append(document.getElementById('handin'));}
+let i=0;window.__handInShown=0;window.__handedIn=false;
+const show=()=>{document.getElementById('question').innerHTML=qs[i];document.getElementById('progress').textContent=`Question ${i+1} of ${qs.length}`;};show();
+document.getElementById('next')&&(document.getElementById('next').onclick=()=>{if(i<qs.length-1){i++;show();}});
+document.getElementById('handin').onclick=()=>{window.__handInShown++;const m=document.createElement('div');m.className='modal';m.innerHTML='<div role="dialog"><h3>Confirmation</h3><p>YOU HAVE NOT COMPLETED YOUR ASSIGNMENT! You still have 14 unanswered questions. Are you sure you want to submit your assignment?</p><button id="cancel">Cancel</button> <button id="confirm">Submit</button></div>';document.body.append(m);m.querySelector('#cancel').onclick=()=>m.remove();m.querySelector('#confirm').onclick=()=>{window.__handedIn=true;m.remove();};};
+</script></body></html>

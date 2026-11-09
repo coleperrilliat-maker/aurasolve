@@ -155,6 +155,18 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
   let questionNumber=null, part=1, questionWrong=false;
   const similarUsed={}, solvedHash={};
   const finish=async all=>{await onEvent({kind:'done', completed, all, spent});return {completed, spent};};
+  // Each inspect can take seconds on a heavy page, so cap the wait by time too.
+  // Next on the last test question does nothing; that is the end, not an error.
+  const watchMove=async previous=>{
+    const started=Date.now();
+    let info=null;
+    for(let watch=0; watch<40 && Date.now()-started<10000; watch++){
+      await delay(250);
+      info=await request({type:'inspect'}).catch(()=>null);
+      if(info?.question?.hash && info.question.hash!==previous)return {moved:true};
+    }
+    return {moved:false, last:Boolean(info?.lastQuestion)};
+  };
   const answerBoxes=async()=>{
     await request({type:'prepareField'});
     try{return await request({type:'inspect'});}
@@ -262,13 +274,9 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
         return finish(true);
       }
       await onEvent({kind:'next', completed, spent, number:finished});
-      let moved2=false;
-      for(let watch=0; watch<40 && !moved2; watch++){
-        await delay(250);
-        const info=await request({type:'inspect'}).catch(()=>null);
-        moved2=Boolean(info?.question?.hash && info.question.hash!==previous);
-      }
-      if(!moved2)throw new Error('The answer was checked, but Pearson did not move to the next question. Press Next, then resume AutoPilot.');
+      const watched2=await watchMove(previous);
+      if(watched2.last)return finish(true);
+      if(!watched2.moved)throw new Error('The answer was checked, but Pearson did not move to the next question. Press Next, then resume AutoPilot.');
       questionNumber=null;part=1;questionWrong=false;
       continue;
     }
@@ -279,13 +287,9 @@ export async function runFillAssignment({request, checkpoint=async()=>{}, delay,
     questionNumber=null;part=1;questionWrong=false;
     if(applied.advanced!=='next')return finish(true);
     await onEvent({kind:'next', completed, spent, number:finished});
-    let moved=false;
-    for(let watch=0; watch<40 && !moved; watch++){
-      await delay(250);
-      const info=await request({type:'inspect'}).catch(()=>null);
-      moved=Boolean(info?.question?.hash && info.question.hash!==previous);
-    }
-    if(!moved)throw new Error('The answer was checked, but Pearson did not move to the next question. Press Next, then resume AutoPilot.');
+    const watched=await watchMove(previous);
+    if(watched.last)return finish(true);
+    if(!watched.moved)throw new Error('The answer was checked, but Pearson did not move to the next question. Press Next, then resume AutoPilot.');
   }
   throw new Error('AutoPilot reached its step limit. Review the current page before resuming.');
 }

@@ -182,3 +182,19 @@ test('a moved matching tile is not mistaken for a new part',async()=>{
   assert.equal(result.spent,1);
   assert.equal(events.includes('part'),false);
 });
+
+test('test mode: Next on the last question finishes instead of reporting an error',async()=>{
+  const events=[];
+  const result=await runFillAssignment({
+    delay:async()=>{},
+    onEvent:event=>{events.push(event.kind);},
+    request:async message=>{
+      if(message.type==='solve')return question('last');
+      if(message.type==='apply')return {filled:1,submitted:false,advanced:'next'};
+      if(message.type==='inspect')return {...page('last'),lastQuestion:true};
+      return {};
+    }
+  });
+  assert.equal(result.completed,1);
+  assert.equal(events.at(-1),'done');
+});

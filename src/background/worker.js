@@ -152,6 +152,9 @@ function footerNext(op, only='') {
       let kind = kindOf(target) || kindOf(el);
       const rect = target.getBoundingClientRect();
       if (rect.width<40 || rect.height<22 || rect.width>360 || rect.height>96) continue;
+      // On tests the only "Submit" sits in the top bar and hands in the whole
+      // test. The per-question control is always in the lower part of the page.
+      if (kind==='check' && rect.top < (globalThis.innerHeight || 800) * 0.3) continue;
       const style = getComputedStyle(target);
       if (style.display==='none' || style.visibility==='hidden' || style.pointerEvents==='none' || Number(style.opacity)===0) continue;
       const red = Math.max(redOf(style.backgroundColor), redOf(style.backgroundImage?.includes?.('rgb') ? '' : style.backgroundColor));
@@ -190,6 +193,36 @@ function footerNext(op, only='') {
     return {...found, clicked:true};
   } catch { return {count:0, clicked:false, red:0, bottom:0, kind:'', hasFinal:false, hasNext:false}; }
 }
+// Last line of defence: Pearson asks before handing in an assignment. If that
+// question is on screen, press Cancel (never Submit) and report it.
+function cancelHandIn() {
+  try {
+    const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
+    const dialogs = [...document.querySelectorAll('[role="dialog"],[role="alertdialog"],.dijitDialog,.modal,dialog,[class*="dialog" i],[class*="modal" i]')]
+      .filter(el => el.getClientRects().length && /submit your (?:assignment|test|quiz|homework)|not completed your (?:assignment|test)|unanswered questions/i.test(clean(el.innerText)));
+    for (const dialog of dialogs) {
+      const buttons = [...dialog.querySelectorAll('button,[role="button"],input[type="button"],a')];
+      const cancel = buttons.find(el => /^(cancel|no|close|go back|return)$/i.test(clean(el.innerText || el.value || el.getAttribute('aria-label'))))
+        || buttons.find(el => /close/i.test(el.getAttribute('aria-label') || el.title || ''));
+      if (cancel) { cancel.click(); return {found: true, cancelled: true}; }
+      return {found: true, cancelled: false};
+    }
+    return {found: false};
+  } catch { return {found: false}; }
+}
+async function guardHandIn(tabId) {
+  const pause = ms => new Promise(resolve=>setTimeout(resolve, globalThis.__AURA_INSTANT__ ? 0 : ms));
+  for (let attempt=0; attempt<(globalThis.__AURA_INSTANT__ ? 1 : 4); attempt++) {
+    const frames = await chrome.scripting.executeScript({target:{tabId, allFrames:true}, func:cancelHandIn}).catch(()=>[]);
+    const hit = frames.find(frame=>frame.result?.found);
+    if (hit) {
+      throw Object.assign(new Error(hit.result.cancelled
+        ? 'AutoPilot stopped: that button would have handed in your whole assignment, so it pressed Cancel. Nothing was submitted.'
+        : 'AutoPilot stopped: Pearson is asking to hand in your whole assignment. Press Cancel on that box. Nothing else was clicked.'), {submission:'not_sent'});
+    }
+    await pause(150);
+  }
+}
 // Pearson enables Check answer a moment after the answer registers. While a
 // greyed-out Check answer is on the page, wait for it rather than pressing Next,
 // which would skip the check.
@@ -219,6 +252,7 @@ async function clickFooterNext(tabId, generation, only='') {
   try {
     const pressed = await chrome.scripting.executeScript({target:{tabId, frameIds:[best.frameId]}, func:footerNext, args:['press', only]});
     if (!pressed[0]?.result?.clicked) return {clicked:false};
+    await guardHandIn(tabId);
     return {clicked:true, kind:pressed[0].result.kind || best.result.kind || 'next'};
   } catch (error) {
     if (!error.submission) error.submission = 'unknown';
@@ -685,7 +719,8 @@ async function handle(message,sender) {
     const state = await collect(tabId);
     const controls = {continue:0, similar:0, next:0};
     for (const frame of state.frames || [state.question, state.top]) for (const key of Object.keys(controls)) controls[key] += frame?.controls?.[key] || 0;
-    return {tabId,question:state.question,controls,signed:true};
+    const lastQuestion = (state.frames || [state.question, state.top]).some(frame=>(frame?.player || frame)?.progress?.lastQuestion);
+    return {tabId,question:state.question,controls,lastQuestion,signed:true};
   }
   if (message.type === 'checkResult') {
     // Wait for Pearson's verdict after Check answer, then close its popup.

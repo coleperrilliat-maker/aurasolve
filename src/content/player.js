@@ -15,13 +15,17 @@ export function readPlayer(doc,visible){
     if(!visible(el))continue;
     const nav=el.matches?.('button.navButton, a.navButton, .navButton');
     const dialog=Boolean(el.closest?.('.xlDialogButtonContainer, [role="dialog"], [role="alertdialog"], .dijitDialog, .feedbackDialog'));
-    const kind=controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '',{nav,dialog});
+    let kind=controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '',{nav,dialog});
+    // A Submit in the top bar is a test's hand-in button, never Check answer.
+    if(kind==='submit' && (el.getBoundingClientRect?.().top ?? 9999) < (globalThis.innerHeight || 800) * 0.3)kind=null;
     if(kind==='submit')controls.submitPresent++;
     if(kind in controls && !el.disabled && el.getAttribute('aria-disabled')!=='true')controls[kind]++;
   }
   const dialogs=[...doc.querySelectorAll('[role="dialog"],[role="alertdialog"],.dijitDialog,.modal')].filter(visible);
   const incompleteWarning=dialogs.some(e=>/you have not completed this question/i.test(e.innerText) && /leave this question/i.test(e.innerText));
-  return {progress:{current,part:Number(parts?.[1]) || null,totalParts:Number(parts?.[2]) || null,status:questions.find(q=>q.number===current)?.status || 'unknown',questions},controls,incompleteWarning};
+  const of=clean(doc.body?.innerText).match(/\bQuestion\s+(\d+)\s+of\s+(\d+)\b/i);
+  const lastQuestion=Boolean((of && Number(of[1])===Number(of[2])) || (current && questions.length && current===Math.max(...questions.map(q=>q.number))));
+  return {progress:{current,part:Number(parts?.[1]) || null,totalParts:Number(parts?.[2]) || null,status:questions.find(q=>q.number===current)?.status || 'unknown',questions,lastQuestion},controls,incompleteWarning};
 }
 export function goToQuestion(doc,number,visible){
   const candidates=[...doc.querySelectorAll('[id^="xl_dijit_HigherEdAssignmentReviewNav_"] a.questionLabel')]

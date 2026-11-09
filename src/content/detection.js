@@ -341,8 +341,15 @@ export function findButtons(kind) {
     if(!visible(el) || el.disabled || el.getAttribute('aria-disabled')==='true')return false;
     const nav=el.matches?.('button.navButton, a.navButton, .navButton');
     const dialog=Boolean(el.closest?.('.xlDialogButtonContainer, [role="dialog"], [role="alertdialog"], .dijitDialog, .feedbackDialog'));
-    return controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '',{nav,dialog})===kind;
+    const found=controlKind([el.innerText,el.value,el.getAttribute('aria-label'),el.getAttribute('title')],el.getAttribute('command') || '',{nav,dialog});
+    // A Submit in the top bar is a test's hand-in button, never Check answer.
+    if(found==='submit' && handInBar(el))return false;
+    return found===kind;
   });
+}
+export function handInBar(el){
+  const top=el.getBoundingClientRect?.().top ?? 9999;
+  return top < (globalThis.innerHeight || 800) * 0.3;
 }
 export function findButton(kind) {
   const buttons = findButtons(kind);
