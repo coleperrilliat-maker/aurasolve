@@ -1,7 +1,7 @@
 import http from "node:http";
 import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
-const routes={"/":"../demo/index.html","/test-mode":"../demo/test-mode.html","/forms":"../demo/forms.html","/demo.js":"../demo/demo.js","/demo.css":"../demo/demo.css"};
+const routes={"/":"../demo/index.html","/test-mode":"../demo/test-mode.html","/forms":"../demo/forms.html","/forms-embed":"../demo/forms-embed.html","/demo.js":"../demo/demo.js","/demo.css":"../demo/demo.css"};
 http.createServer(async(req,res)=>{
   const path=new URL(req.url,"http://localhost").pathname;
   if(!routes[path]){res.writeHead(404);res.end("Not found");return;}

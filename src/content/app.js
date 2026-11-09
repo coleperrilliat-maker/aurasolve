@@ -8,7 +8,7 @@ import {isGoogleForm} from '../shared/form-answer.js';
 export async function start() {
   trackSelection();
   const forms = isGoogleForm(location.href) || /\/forms\/?$/.test(location.pathname);
-  if (forms) startForms();
+  if (forms) await startForms();
   const ui = forms ? null : createUI();
   globalThis.__aura = {inspectControls,snapshot,feedback,execute,advance,nextProblem,clickControl,dismissFeedback,stayOnIncompleteQuestion,navigateQuestion,prepareField,revealQuestion,incorrectNotice,askRetry,captureFigures,open:()=>ui?.open()};
   globalThis.__auraVeil = hidden => ui?.veil(hidden);

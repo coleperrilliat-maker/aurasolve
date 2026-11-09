@@ -567,9 +567,11 @@ async function handle(message,sender) {
     let image = null;
     // Always crop the question. Diagrams, charts, and picture choices live
     // here, and Google Forms often delays loading the <img> until it's on screen.
-    if (q.rect) {
-      try { image = await screenshot(tabId, {imageBased: true, rect: q.rect, devicePixelRatio: q.devicePixelRatio}); } catch {}
-    }
+    try {
+      image = await screenshot(tabId, q.fullTab || !q.rect
+        ? {}
+        : {imageBased: true, rect: q.rect, devicePixelRatio: q.devicePixelRatio});
+    } catch {}
     return {answer: await formAnswer({kind: q.kind, title: q.title, description: q.description, options: q.options, image: image || undefined})};
   }
   if (message.type === "regionSolve") {

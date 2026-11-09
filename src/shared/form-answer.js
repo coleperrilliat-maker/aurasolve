@@ -15,13 +15,15 @@ export function matchOption(options, wanted) {
 export function isGoogleForm(url) {
   try {
     const {hostname, pathname, searchParams} = new URL(url);
-    if (hostname !== 'docs.google.com' && hostname !== 'localhost' && hostname !== '127.0.0.1') return false;
-    // Modern share link: /forms/d/.../viewform or /forms/d/e/.../viewform
-    if (hostname === 'docs.google.com' && /^\/forms\/(?:u\/\d+\/)?d\/(?:e\/)?[^/]+\/(?:viewform|formResponse)/.test(pathname)) return true;
-    // Older / LMS embed link: /forms/viewform?id=FORM_ID&embedded=true
-    if (hostname === 'docs.google.com' && /^\/forms\/(?:u\/\d+\/)?viewform$/.test(pathname) && searchParams.get('id')) return true;
-    // Local practice page used by the demo server and tests.
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && pathname === '/forms') return true;
+    if (hostname !== 'docs.google.com') return false;
+    if (!pathname.startsWith('/forms/')) return false;
+    // Never activate on the form editor.
+    if (/\/(edit|create)$/.test(pathname) || pathname.includes('/edit')) return false;
+    // Older LMS embed: /forms/viewform?id=FORM_ID
+    if (/^\/forms\/(?:u\/\d+\/)?viewform$/.test(pathname)) return Boolean(searchParams.get('id'));
+    // Modern share / published response pages.
+    if (/viewform|formResponse|alreadyresponded|closedform/i.test(pathname)) return true;
     return false;
   } catch { return false; }
 }
