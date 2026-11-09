@@ -22,13 +22,19 @@ async function installToken(signal) {
   await saveToken(data.token);
   return data.token;
 }
+// The account session (after email sign-in) is separate from the install token.
+const SESSION_KEY = "auraSession";
+async function storedSession() {
+  try { return (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] || null; } catch { return null; }
+}
 async function callApi(path, body, signal) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const token = await installToken(signal);
+    const session = await storedSession();
     const response = await fetch(`${API_BASE}${path}`, {
       method: "POST",
       signal,
-      headers: {"Content-Type": "application/json", "Authorization": `Bearer ${token}`},
+      headers: {"Content-Type": "application/json", "Authorization": `Bearer ${token}`, ...(session ? {"X-AuraSolve-Session": session} : {})},
       body: JSON.stringify(body),
     });
     if (response.status === 401 && attempt === 0) { await saveToken(null); continue; }
@@ -68,6 +74,30 @@ export async function ask(messages, image, solve, signal) {
   if (!data.reply) throw new Error("AuraSolve returned an empty reply.");
   return data.reply;
 }
+
+async function accountCall(path, body = {}) {
+  const response = await callApi(path, body);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(data.error || `AuraSolve request failed (${response.status}).`), {code: data.code});
+  return data;
+}
+export async function plans() {
+  const response = await fetch(`${API_BASE}/api/v1/plans`);
+  if (!response.ok) throw new Error("Plans couldn't load. Try again in a minute.");
+  return response.json();
+}
+export const account = () => accountCall("/api/v1/account");
+export const startSignIn = email => accountCall("/api/v1/auth/start", {email});
+export async function finishSignIn(challenge, code) {
+  const data = await accountCall("/api/v1/auth/verify", {challenge, code});
+  await chrome.storage.local.set({[SESSION_KEY]: data.session});
+  return data.account;
+}
+export async function signOut() {
+  await chrome.storage.local.remove(SESSION_KEY);
+}
+export const checkoutUrl = plan => accountCall("/api/v1/checkout", {plan}).then(data => data.url);
+export const portalUrl = () => accountCall("/api/v1/portal").then(data => data.url);
 
 export async function checkBackend(signal) {
   const response = await fetch(`${API_BASE}/api/v1/health`, {signal});

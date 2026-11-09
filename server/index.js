@@ -5,6 +5,7 @@ import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
 import {solveWithOpenAI, pickModel, askOpenAI} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
+import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, sendCode, createStripe} from "./billing.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 4_000_000;
@@ -12,6 +13,18 @@ const perIp = createLimiter(60, 60_000);
 const perInstall = createLimiter(40, 60_000);
 const perInstallDay = createLimiter(1500, 24 * 60 * 60_000);
 const installsPerIp = createLimiter(10, 60 * 60_000);
+const codesPerEmail = createLimiter(5, 60 * 60_000);
+const codesPerIp = createLimiter(20, 60 * 60_000);
+const guessesPerChallenge = createLimiter(5, 15 * 60_000);
+const accountCache = new Map();
+let stripe = createStripe();
+let mailer = sendCode;
+// Tests swap in fakes for Stripe and email.
+export function setBillingDeps({stripe: nextStripe, mailer: nextMailer} = {}) {
+  if (nextStripe) stripe = nextStripe;
+  if (nextMailer) mailer = nextMailer;
+  accountCache.clear();
+}
 // Extensions released before per-install tokens send this old public value.
 // It is accepted only until store users have had time to update.
 const LEGACY_KEY = "81327b4960956fd15e9f8a01aa27151852e6b5e0c93c4701561ad675f1bea2a5";
@@ -75,6 +88,66 @@ function authorize(req, res) {
   return install;
 }
 
+function publicBase(req) {
+  const configured = process.env.PUBLIC_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "aurasolve-production.up.railway.app";
+  const proto = req.headers["x-forwarded-proto"] || (/^(localhost|127\.)/.test(host) ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+async function loadAccount(email, fresh = false) {
+  const cached = accountCache.get(email);
+  // Paid status is cached briefly; free counts are always read live.
+  if (!fresh && cached?.account.paid && Date.now() - cached.at < 5 * 60_000) return cached.account;
+  const account = await stripe.account(email);
+  accountCache.set(email, {account, at: Date.now()});
+  if (accountCache.size > 20_000) accountCache.clear();
+  return account;
+}
+
+function publicAccount(account) {
+  if (!account) return {paywall: paywallEnabled(), signedIn: false, freeTotal: freeSolves()};
+  const {customerId, hadSubscription, ...rest} = account;
+  return {paywall: paywallEnabled(), signedIn: true, introEligible: !hadSubscription, ...rest};
+}
+
+// Returns {account, free} when the caller may solve, or sends 402 and returns null.
+async function entitle(req, res) {
+  if (!paywallEnabled()) return {account: null, free: false};
+  const email = readSession(req.headers["x-aurasolve-session"]);
+  if (!email) { sendJson(res, 402, {code: "signin", error: "Sign in to AuraSolve to keep solving. Open the AuraSolve panel and go to Account."}); return null; }
+  let account;
+  try { account = await loadAccount(email); }
+  catch { sendJson(res, 503, {error: "AuraSolve couldn't check your plan. Try again in a minute."}); return null; }
+  if (account.paid) return {account, free: false};
+  if (account.freeLeft > 0) return {account, free: true};
+  sendJson(res, 402, {code: "paywall", error: "You've used your free solves. Open the AuraSolve panel and pick a plan to keep going."});
+  return null;
+}
+
+async function spendFree(grant) {
+  if (!grant?.free) return;
+  try {
+    await stripe.useFree(grant.account.customerId, grant.account.freeUsed);
+    accountCache.delete(grant.account.email);
+  } catch {}
+}
+
+async function readJson(req, res) {
+  try {
+    const value = JSON.parse(await readBody(req));
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  } catch {}
+  sendJson(res, 400, {error: "Invalid JSON body."});
+  return null;
+}
+
+function billingPage(res, title, message) {
+  res.writeHead(200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"});
+  res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · AuraSolve</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px -apple-system,Segoe UI,sans-serif;background:#f5f7fb;color:#1d2433}main{background:#fff;border-radius:16px;padding:36px 40px;max-width:420px;text-align:center;box-shadow:0 10px 40px #1d24331a}img{width:56px;height:56px}h1{font-size:22px;margin:14px 0 8px}p{color:#5b6475;line-height:1.5}</style></head><body><main><img src="/icons/icon-128.png" alt=""><h1>${title}</h1><p>${message}</p></main></body></html>`);
+}
+
 function sendJson(res, status, payload) {
   res.writeHead(status, {"Content-Type": "application/json"});
   res.end(JSON.stringify(payload));
@@ -115,7 +188,7 @@ async function handleRequest(req, res) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-AuraSolve-Key");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-AuraSolve-Key, X-AuraSolve-Session");
   }
   res.setHeader("X-Content-Type-Options", "nosniff");
 
@@ -145,6 +218,15 @@ async function handleRequest(req, res) {
       }
       return;
     }
+  }
+
+  if (path === "/billing/done" && req.method === "GET") {
+    billingPage(res, "You're all set", "Your AuraSolve plan is updated. Close this tab and go back to AuraSolve. It may take a few seconds to show up.");
+    return;
+  }
+  if (path === "/billing/cancelled" && req.method === "GET") {
+    billingPage(res, "No charge made", "Checkout was cancelled and you weren't charged. You can pick a plan anytime from the AuraSolve panel.");
+    return;
   }
 
   if (path === "/api/v1/health" && req.method === "GET") {
@@ -179,26 +261,85 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (path === "/api/v1/plans" && req.method === "GET") {
+    sendJson(res, 200, {paywall: paywallEnabled(), freeTotal: freeSolves(), plans: Object.entries(PLANS).map(([id, plan]) => ({id, title: plan.title, price: plan.price, then: plan.then}))});
+    return;
+  }
+
+  if (path === "/api/v1/auth/start" && req.method === "POST") {
+    if (!authorize(req, res)) return;
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const email = normalizeEmail(payload.email);
+    if (!email) { sendJson(res, 400, {error: "Enter a valid email address."}); return; }
+    if (!codesPerIp(clientIp(req)) || !codesPerEmail(email)) { sendJson(res, 429, {error: "Too many codes requested. Wait a bit and try again."}); return; }
+    const {code, challenge} = createChallenge(email);
+    try { await mailer(email, code); }
+    catch (error) { sendJson(res, error.status || 502, {error: error.message}); return; }
+    sendJson(res, 200, {challenge});
+    return;
+  }
+
+  if (path === "/api/v1/auth/verify" && req.method === "POST") {
+    if (!authorize(req, res)) return;
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    if (typeof payload.challenge !== "string" || !guessesPerChallenge(payload.challenge.slice(-43))) { sendJson(res, 429, {error: "Too many tries. Request a new code."}); return; }
+    const email = checkChallenge(payload.challenge, payload.code);
+    if (!email) { sendJson(res, 400, {error: "That code is wrong or expired."}); return; }
+    let account = null;
+    if (paywallEnabled()) {
+      try { account = await loadAccount(email, true); }
+      catch { sendJson(res, 503, {error: "Signed in, but AuraSolve couldn't load your plan. Try again in a minute."}); return; }
+    }
+    sendJson(res, 200, {session: issueSession(email), account: account ? publicAccount(account) : {paywall: false, signedIn: true, email}});
+    return;
+  }
+
+  if (path === "/api/v1/account" && req.method === "POST") {
+    if (!authorize(req, res)) return;
+    const email = readSession(req.headers["x-aurasolve-session"]);
+    if (!email) { sendJson(res, 200, publicAccount(null)); return; }
+    if (!paywallEnabled()) { sendJson(res, 200, {paywall: false, signedIn: true, email}); return; }
+    try { sendJson(res, 200, publicAccount(await loadAccount(email, true))); }
+    catch { sendJson(res, 503, {error: "AuraSolve couldn't load your plan. Try again in a minute."}); }
+    return;
+  }
+
+  if ((path === "/api/v1/checkout" || path === "/api/v1/portal") && req.method === "POST") {
+    if (!authorize(req, res)) return;
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    if (!paywallEnabled()) { sendJson(res, 400, {error: "Plans aren't available yet. Everything is unlocked for now."}); return; }
+    const email = readSession(req.headers["x-aurasolve-session"]);
+    if (!email) { sendJson(res, 401, {code: "signin", error: "Sign in first."}); return; }
+    try {
+      const account = await loadAccount(email, true);
+      if (path === "/api/v1/checkout") {
+        if (account.paid) { sendJson(res, 409, {error: "You already have a plan. Use Manage subscription to change it."}); return; }
+        sendJson(res, 200, {url: await stripe.checkout(account, payload.plan, publicBase(req))});
+      } else {
+        sendJson(res, 200, {url: await stripe.portal(account, publicBase(req))});
+      }
+    } catch (error) {
+      sendJson(res, error.status === 400 ? 400 : 502, {error: error.status === 400 ? error.message : "Checkout is unavailable right now. Try again in a minute."});
+    }
+    return;
+  }
+
   if (path === "/api/v1/solve" && req.method === "POST") {
     if (!authorize(req, res)) return;
 
-    let payload;
-    try {
-      payload = JSON.parse(await readBody(req));
-    } catch {
-      sendJson(res, 400, {error: "Invalid JSON body."});
-      return;
-    }
-
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      sendJson(res, 400, {error: "Expected a JSON object."});
-      return;
-    }
+    const payload = await readJson(req, res);
+    if (!payload) return;
     const {mode, snapshot, model, effort} = payload;
     if (!["explain", "field", "autopilot"].includes(mode) || !snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
       sendJson(res, 400, {error: "Missing mode or snapshot."});
       return;
     }
+
+    const grant = await entitle(req, res);
+    if (!grant) return;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 180_000);
@@ -206,6 +347,7 @@ async function handleRequest(req, res) {
 
     try {
       const solution = await solveWithOpenAI(snapshot, mode, typeof model === "string" ? model : undefined, controller.signal, effort);
+      await spendFree(grant);
       sendJson(res, 200, {solution});
     } catch (error) {
       const message = error.name === "AbortError" ? "Request timed out." : error.message;
@@ -229,11 +371,14 @@ async function handleRequest(req, res) {
       sendJson(res, 400, {error: "Missing messages."});
       return;
     }
+    const grant = await entitle(req, res);
+    if (!grant) return;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120_000);
     res.on("close", () => { if (!res.writableEnded) controller.abort(); });
     try {
       const reply = await askOpenAI({messages: payload.messages, image: payload.image, solve: payload.solve === true}, controller.signal);
+      await spendFree(grant);
       sendJson(res, 200, {reply});
     } catch (error) {
       sendJson(res, 502, {error: error.name === "AbortError" ? "Request timed out." : error.message});

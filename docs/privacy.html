@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=48">
+  <link rel="stylesheet" href="style.css?v=49">
 </head>
 <body>
   <header class="topbar">
@@ -30,37 +30,61 @@
   <main>
     <article class="legal">
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated October 29, 2026</p>
-      <p class="intro">AuraSolve is built to collect as little as possible. This policy explains what the extension reads, where it goes, and what we don't do.</p>
+      <p class="updated">Last updated November 8, 2026</p>
+      <p class="intro">AuraSolve is operated by William Perrilliat ("AuraSolve," "we," "us"). We collect as little as we can to run the service and take payments. This policy explains what we collect, why, who it's shared with, and your choices. Contact: <a href="mailto:cole@aurasolve.io">cole@aurasolve.io</a>.</p>
 
-      <h2>What AuraSolve reads</h2>
-      <p>AuraSolve only reads a page when you press one of its buttons, or while AutoPilot is running after you start it. It reads the current question: its text, its answer fields, and an image of the question area so diagrams and graphs can be understood. It doesn't read your browsing history, passwords, or other tabs.</p>
-
-      <h2>Where that information goes</h2>
-      <p>To produce an answer, the question text and image are sent to the AuraSolve service, which passes them to OpenAI and returns the result. The AuraSolve service doesn't save your questions, images, or answers. To prevent abuse, it keeps your IP address in memory for about a minute for rate limiting, then discards it. OpenAI processes API data under its own privacy policy and may keep it for a limited time for abuse monitoring.</p>
-
-      <h2>What stays on your device</h2>
-      <p>Your preferences are saved with Chrome's extension storage on your computer. Removing the extension deletes them.</p>
-
-      <h2>What we don't do</h2>
+      <h2>What we collect</h2>
       <ul>
-        <li>No accounts, sign-ups, or API keys.</li>
-        <li>No analytics, advertising, or tracking cookies in the extension.</li>
-        <li>No selling or sharing of your data for marketing.</li>
-        <li>No storing of your questions, answers, or grades.</li>
+        <li><strong>Your email address.</strong> You sign in with your email. We email you a 6-digit code to confirm it's yours. Codes aren't stored; they expire after 10 minutes.</li>
+        <li><strong>Plan and payment information.</strong> Payments are processed by Stripe. Your card details go directly to Stripe, and we never see or store your full card number. Stripe keeps your customer record: your email, your plan, your payment history, and how many free solves you've used.</li>
+        <li><strong>The questions you solve.</strong> AuraSolve only reads a page when you press one of its buttons, or while AutoPilot is running after you start it. It reads the current question (its text, its answer fields, and an image of the question or the area you select) and sends it to be solved. We don't save your questions, screenshots, or answers on our servers.</li>
+        <li><strong>Basic technical information.</strong> The extension gets a random install ID so the service can recognize it and limit abuse. Our server uses your IP address briefly, in memory, to rate-limit requests. Our hosting provider may keep standard request logs for a short time.</li>
       </ul>
 
-      <h2>This website</h2>
-      <p>This site doesn't use analytics or tracking cookies. It loads fonts from Google Fonts and checks GitHub for the latest download, so those services see a normal web request from your browser.</p>
+      <h2>What stays on your device</h2>
+      <p>Your preferences, your sign-in session, and (if you leave Save history on) your past answers are kept in Chrome's extension storage on your computer. Removing the extension deletes them.</p>
+
+      <h2>How we use it</h2>
+      <ul>
+        <li>To sign you in, solve your questions, and run your plan.</li>
+        <li>To process payments, send receipts and renewal reminders, and handle cancellations and refunds.</li>
+        <li>To count free solves and prevent fraud and abuse.</li>
+        <li>To answer your support emails and meet legal and tax obligations.</li>
+      </ul>
+
+      <h2>Who it's shared with</h2>
+      <p>We share information only with the service providers that run AuraSolve, and only what each one needs:</p>
+      <ul>
+        <li><strong>OpenAI</strong> receives the question content you send so it can produce an answer. Under OpenAI's API terms, this data isn't used to train their models by default, and it may be kept for up to 30 days for abuse monitoring.</li>
+        <li><strong>Stripe</strong> processes payments and stores billing records.</li>
+        <li><strong>Resend</strong> delivers sign-in code emails.</li>
+        <li><strong>Railway</strong> hosts the AuraSolve service.</li>
+      </ul>
+      <p>We don't sell your personal information, share it for targeted advertising, or use it for anything unrelated to AuraSolve. We may disclose information if required by law or to protect AuraSolve and its users from fraud or abuse.</p>
+
+      <h2>Chrome Web Store limited use</h2>
+      <p>AuraSolve's use of information received from Chrome APIs follows the Chrome Web Store User Data Policy, including its Limited Use requirements. Page content is used only to provide the feature you asked for, isn't transferred except as described above, and isn't used for advertising or credit decisions.</p>
+
+      <h2>How long we keep it</h2>
+      <p>Your email and billing records are kept while you have an account, and afterward as long as needed for tax, accounting, and legal reasons. Question content isn't stored by us. You can ask us to delete your account at any time.</p>
+
+      <h2>Your choices and rights</h2>
+      <p>You can ask to see, correct, or delete the personal information we have about you by emailing <a href="mailto:cole@aurasolve.io">cole@aurasolve.io</a>. Depending on where you live (for example, California or the EU/UK), you may have additional rights, such as to know what we collect or to object to certain uses. We'll respond within the time the law requires, and we won't treat you differently for using these rights. You can cancel your plan anytime from Account → Manage subscription.</p>
+
+      <h2>Security</h2>
+      <p>Connections to AuraSolve are encrypted, sign-in sessions are signed so they can't be forged, and no secret keys ship inside the extension. No system is perfectly secure, but we work to protect your information.</p>
 
       <h2>Browser permissions</h2>
-      <p>AuraSolve asks Chrome for permission to read and fill the page you're on, save your preferences, and open its side panel. If a version also asks to use Chrome's debugger, that's only used to click buttons and dropdowns on homework sites that ignore ordinary extension clicks, and only while AuraSolve is filling an answer.</p>
+      <p>AuraSolve asks Chrome for permission to read and fill the page you're on, save your preferences, and open its side panel. If a version also asks to use Chrome's debugger, that's only used to click buttons and drag tiles on the homework page in a way the site accepts. It's never used to read other tabs.</p>
+
+      <h2>This website</h2>
+      <p>This site doesn't use analytics or tracking cookies. It loads fonts from Google Fonts and checks GitHub for the latest download, so those services see a normal web request from your browser. Checkout and subscription pages are hosted by Stripe and covered by Stripe's privacy policy.</p>
 
       <h2>Children</h2>
-      <p>AuraSolve isn't directed to children under 13 and doesn't knowingly collect personal information from them.</p>
+      <p>AuraSolve isn't for children under 13, and we don't knowingly collect personal information from them. If you believe a child under 13 has created an account, email us and we'll delete it. Users from 13 to 17 need a parent or guardian's permission, and a parent or guardian must make any purchase.</p>
 
       <h2>Changes</h2>
-      <p>If this policy changes, the date at the top will be updated. Continuing to use AuraSolve after a change means you accept the updated policy.</p>
+      <p>If this policy changes, we'll update the date at the top. If a change is significant, we'll email account holders before it takes effect.</p>
 
       <p>See also our <a href="terms.html">Terms of Use</a>.</p>
     </article>

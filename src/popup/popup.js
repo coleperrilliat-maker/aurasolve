@@ -2,6 +2,7 @@ import {runFillAssignment} from '../shared/pilot-engine.js';
 import {renderSolution, renderRich, answerLines} from "../shared/render.js";
 import {BUILD_VERSION} from '../shared/version.js';
 import {sendExtension} from '../shared/messaging.js';
+import {account as loadAccount, plans as loadPlans, startSignIn, finishSignIn, signOut, checkoutUrl, portalUrl} from '../background/api.js';
 import {DEFAULT_OVERLAY, OVERLAY_COLORS, OVERLAY_ZONES, normalizeOverlay, readOverlay, writeOverlay} from '../shared/overlay.js';
 
 const $ = id => document.getElementById(id);
@@ -21,6 +22,7 @@ function show(view) {
   document.querySelectorAll('.view').forEach(section => { section.hidden = section.dataset.view !== view; });
   document.querySelectorAll('.rail-btn[data-goto]').forEach(button => button.classList.toggle('active', button.dataset.goto === view));
   if (view === 'history') renderHistory();
+  if (view === 'account') refreshAccount();
   if (view === 'home') $('prompt').focus();
 }
 document.querySelectorAll('[data-goto]').forEach(button => button.addEventListener('click', () => show(button.dataset.goto)));
@@ -141,6 +143,7 @@ function finish(error) {
   idle();
   setBusy(false);
   if (error && error.message !== 'Stopped.') addReply('', error.message, {error: true});
+  if (error && PAYWALL.test(error.message || '')) show('account');
 }
 function firstLine(text) {
   const line = String(text || '').split('\n').map(part => part.replace(/\*\*|\\\(|\\\)/g, '').replace(/^answer:\s*/i, '').trim()).find(Boolean) || '';
@@ -355,6 +358,7 @@ async function startPilot() {
     pilotState(stopped ? 'Stopped' : 'Error');
     pilotStatus(stopped ? 'Stopped. Press play to continue from this question.' : 'Stopped on an error (details below). Press play to try again.', {done: true});
     if (!stopped) { $('pilot-error').textContent = error.message; $('pilot-error').hidden = false; }
+    if (PAYWALL.test(error.message || '')) show('account');
   } finally {
     clearInterval(pilotClock.timer);
     setBusy(false);
@@ -543,6 +547,97 @@ $('save-inspection').onclick = () => {
   const link = document.createElement('a'); link.href = url; link.download = 'aurasolve-page-inspection.json'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
+
+/* ---------- Account and plans ---------- */
+const PAYWALL = /pick a plan|Sign in to AuraSolve to keep solving/i;
+const PLAN_NOTES = {
+  weekly: {tag: '', intro: '$0.99 today for your first week, then $8.99 every week until you cancel.', full: '$8.99 today, then $8.99 every week until you cancel.', fullPrice: '$8.99/week', fullThen: 'billed weekly'},
+  monthly: {tag: 'Most popular', intro: '$4.99 today for your first month, then $9.99 every month until you cancel.', full: '$9.99 today, then $9.99 every month until you cancel.', fullPrice: '$9.99/month', fullThen: 'billed monthly'},
+  yearly: {tag: 'Best value', intro: '$40.00 today, then $40.00 every year until you cancel.', full: '$40.00 today, then $40.00 every year until you cancel.'},
+};
+let challenge = null, chosenPlan = 'monthly', planList = null, accountState = null;
+const accountError = message => { $('account-error').textContent = message || ''; $('account-error').hidden = !message; };
+function drawPlans() {
+  const intro = accountState?.introEligible !== false;
+  $('plan-list').replaceChildren(...(planList || []).map(plan => {
+    const note = PLAN_NOTES[plan.id] || {};
+    const button = el('button', 'plan');
+    button.type = 'button'; button.setAttribute('role', 'radio'); button.setAttribute('aria-checked', String(plan.id === chosenPlan));
+    if (note.tag) button.append(el('span', 'plan-tag', note.tag));
+    const name = el('span', 'plan-name'); name.append(el('strong', '', plan.title), el('small', '', 'Unlimited solves'));
+    const price = el('span', 'plan-price'); price.append(el('strong', '', intro || !note.fullPrice ? plan.price : note.fullPrice), el('small', '', intro || !note.fullThen ? plan.then : note.fullThen));
+    button.append(name, price);
+    button.onclick = () => { chosenPlan = plan.id; drawPlans(); };
+    return button;
+  }));
+  const note = PLAN_NOTES[chosenPlan] || {};
+  $('plan-terms').textContent = intro ? note.intro || '' : note.full || '';
+}
+function drawAccount() {
+  const state = accountState || {};
+  const signedIn = Boolean(state.signedIn);
+  $('signin-email').hidden = signedIn || Boolean(challenge);
+  $('signin-code').hidden = signedIn || !challenge;
+  $('sign-out').hidden = !signedIn;
+  $('account-open-note').hidden = state.paywall !== false;
+  $('plan-status').hidden = !signedIn;
+  $('plans').hidden = !signedIn || !state.paywall || Boolean(state.paid);
+  $('manage-plan').hidden = !state.paid;
+  if (!signedIn) return;
+  const date = state.renews ? new Date(state.renews).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'}) : '';
+  if (!state.paywall) { $('plan-title').textContent = state.email; $('plan-detail').textContent = 'Everything is unlocked right now.'; return; }
+  if (state.paid) {
+    $('plan-title').textContent = `AuraSolve ${state.plan ? state.plan[0].toUpperCase() + state.plan.slice(1) : 'Pro'}`;
+    $('plan-detail').textContent = `${state.email} · ${state.cancelAtPeriodEnd ? `Ends ${date}` : state.status === 'past_due' ? 'Payment failed: update your card in Manage subscription' : `Renews ${date}`}`;
+  } else {
+    $('plan-title').textContent = 'Free';
+    $('plan-detail').textContent = `${state.email} · ${state.freeLeft} of ${state.freeTotal} free solves left`;
+    drawPlans();
+  }
+}
+async function refreshAccount() {
+  accountError('');
+  try {
+    [accountState, planList] = await Promise.all([loadAccount(), planList ? planList : loadPlans().then(data => data.plans)]);
+  } catch (error) { accountError(error.message); }
+  drawAccount();
+}
+$('signin-email').onsubmit = async event => {
+  event.preventDefault();
+  accountError(''); $('email-send').disabled = true;
+  try {
+    challenge = (await startSignIn($('email').value)).challenge;
+    $('code-note').textContent = `We sent a 6-digit code to ${$('email').value.trim()}. It expires in 10 minutes.`;
+    $('code').value = '';
+    drawAccount(); $('code').focus();
+  } catch (error) { accountError(error.message); }
+  finally { $('email-send').disabled = false; }
+};
+$('signin-code').onsubmit = async event => {
+  event.preventDefault();
+  accountError(''); $('code-check').disabled = true;
+  try {
+    accountState = await finishSignIn(challenge, $('code').value);
+    challenge = null;
+    await refreshAccount();
+  } catch (error) { accountError(error.message); }
+  finally { $('code-check').disabled = false; }
+};
+$('code-back').onclick = () => { challenge = null; accountError(''); drawAccount(); };
+$('sign-out').onclick = async () => { await signOut(); accountState = null; challenge = null; refreshAccount(); };
+$('subscribe').onclick = async () => {
+  accountError(''); $('subscribe').disabled = true;
+  try { chrome.tabs.create({url: await checkoutUrl(chosenPlan)}); }
+  catch (error) { accountError(error.message); }
+  finally { $('subscribe').disabled = false; }
+};
+$('manage-plan').onclick = async () => {
+  accountError('');
+  try { chrome.tabs.create({url: await portalUrl()}); }
+  catch (error) { accountError(error.message); }
+};
+// Coming back from Stripe checkout: show the new plan without a reload.
+window.addEventListener('focus', () => { if (!document.querySelector('[data-view="account"]').hidden) refreshAccount(); });
 
 /* ---------- Close and cloud status ---------- */
 $('close').onclick = async () => {

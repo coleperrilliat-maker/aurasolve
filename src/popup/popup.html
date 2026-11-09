@@ -148,6 +148,40 @@
       </div>
     </section>
 
+    <section class="view page" data-view="account" hidden>
+      <div class="page-head"><h2>Account</h2><button type="button" class="link-btn" id="sign-out" hidden>Sign out</button></div>
+      <p id="account-error" class="pilot-error" hidden></p>
+
+      <form class="group" id="signin-email" hidden>
+        <h3>Sign in</h3>
+        <p class="muted">Enter your email and we'll send you a 6-digit code. No password needed.</p>
+        <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+        <button class="primary" type="submit" id="email-send">Send code</button>
+      </form>
+      <form class="group" id="signin-code" hidden>
+        <h3>Check your email</h3>
+        <p class="muted" id="code-note">We sent a code to your email.</p>
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" required>
+        <button class="primary" type="submit" id="code-check">Sign in</button>
+        <button class="link-btn" type="button" id="code-back">Use a different email</button>
+      </form>
+
+      <div class="group" id="plan-status" hidden>
+        <h3 id="plan-title">Your plan</h3>
+        <p id="plan-detail" class="muted"></p>
+        <button class="secondary" type="button" id="manage-plan" hidden>Manage subscription</button>
+      </div>
+
+      <div class="group" id="plans" hidden>
+        <h3>Pick a plan</h3>
+        <div class="plans" id="plan-list" role="radiogroup" aria-label="Plans"></div>
+        <button class="primary" type="button" id="subscribe">Continue to checkout</button>
+        <p class="fine" id="plan-terms"></p>
+        <p class="fine">Plans renew automatically until you cancel. Cancel anytime from Manage subscription, and you keep access until the end of the period you paid for. Payments are handled by Stripe. By subscribing you agree to the <a href="https://aurasolve-production.up.railway.app/terms" target="_blank" rel="noopener">Terms</a> and <a href="https://aurasolve-production.up.railway.app/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+      </div>
+      <p class="muted center" id="account-open-note" hidden>Everything is unlocked right now.</p>
+    </section>
+
     <section class="view page" data-view="settings" hidden>
       <div class="page-head"><h2>Settings</h2></div>
       <div class="group">
@@ -194,7 +228,8 @@
       <div class="group links">
         <a href="https://aurasolve-production.up.railway.app/install.html" target="_blank" rel="noopener">Install &amp; update guide</a>
         <a href="https://aurasolve-production.up.railway.app/" target="_blank" rel="noopener">AuraSolve website</a>
-        <a href="https://aurasolve-production.up.railway.app/privacy.html" target="_blank" rel="noopener">Privacy</a>
+        <a href="https://aurasolve-production.up.railway.app/privacy" target="_blank" rel="noopener">Privacy</a>
+        <a href="https://aurasolve-production.up.railway.app/terms" target="_blank" rel="noopener">Terms</a>
       </div>
       <p class="muted center" id="version"></p>
     </section>
@@ -223,6 +258,9 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8v.1"/></svg>
     </button>
     <span class="rail-space"></span>
+    <button class="rail-btn" data-goto="account" type="button" aria-label="Account" data-tip="Account">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c.9-3.4 3.7-5.2 7-5.2s6.1 1.8 7 5.2"/></svg>
+    </button>
     <button class="rail-btn" id="close" type="button" aria-label="Close" data-tip="Close">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>
     </button>
