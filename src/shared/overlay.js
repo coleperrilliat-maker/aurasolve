@@ -25,6 +25,7 @@ export const DEFAULT_OVERLAY = {
   invisible: false,
   showFill: true,
   showShot: true,
+  formsHighlight: true,
   // custom position as percent of the viewport; used when zone is "custom"
   x: 78,
   y: 12,
@@ -40,7 +41,8 @@ export function normalizeOverlay(raw) {
   const label = String(value.label || DEFAULT_OVERLAY.label).trim().slice(0, 28) || DEFAULT_OVERLAY.label;
   const showFill = value.showFill === undefined ? DEFAULT_OVERLAY.showFill : Boolean(value.showFill);
   const showShot = value.showShot === undefined ? DEFAULT_OVERLAY.showShot : Boolean(value.showShot);
-  return {color, zone, invisible: Boolean(value.invisible), showFill, showShot, x, y, label};
+  const formsHighlight = value.formsHighlight === undefined ? DEFAULT_OVERLAY.formsHighlight : Boolean(value.formsHighlight);
+  return {color, zone, invisible: Boolean(value.invisible), showFill, showShot, formsHighlight, x, y, label};
 }
 
 export async function readOverlay() {

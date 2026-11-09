@@ -3,7 +3,7 @@ import http from "node:http";
 import {readFile, stat} from "node:fs/promises";
 import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
-import {solveWithOpenAI, pickModel, askOpenAI} from "./openai.js";
+import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, FORM_KINDS} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
 import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, sendCode, createStripe} from "./billing.js";
 
@@ -352,6 +352,31 @@ async function handleRequest(req, res) {
     } catch (error) {
       const message = error.name === "AbortError" ? "Request timed out." : error.message;
       sendJson(res, 502, {error: message});
+    } finally {
+      clearTimeout(timeout);
+    }
+    return;
+  }
+
+  if (path === "/api/v1/form" && req.method === "POST") {
+    if (!authorize(req, res)) return;
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const kind = FORM_KINDS.includes(payload.kind) ? payload.kind : null;
+    const title = String(payload.title || "").slice(0, 4000);
+    const options = Array.isArray(payload.options) ? [...new Set(payload.options.map(value => String(value).slice(0, 500)).filter(Boolean))].slice(0, 60) : [];
+    if (!kind || !title.trim() || (["radio", "checkbox", "dropdown"].includes(kind) && !options.length)) { sendJson(res, 400, {error: "That question type isn't supported yet."}); return; }
+    const grant = await entitle(req, res);
+    if (!grant) return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+    try {
+      const answer = await answerFormQuestion({kind, title, description: String(payload.description || "").slice(0, 4000), options, image: payload.image}, controller.signal);
+      await spendFree(grant);
+      sendJson(res, 200, {answer});
+    } catch (error) {
+      sendJson(res, 502, {error: error.name === "AbortError" ? "Request timed out." : error.message});
     } finally {
       clearTimeout(timeout);
     }

@@ -2,7 +2,7 @@ import {assignmentKey,decidePlayer} from '../shared/player-state.js';
 import {expectedPage} from '../shared/pilot-engine.js';
 import {fieldValue} from '../shared/solution.js';
 import {statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
-import {checkBackend, solve, ask} from "./api.js";
+import {checkBackend, solve, ask, formAnswer} from "./api.js";
 import {editorBridge} from './editors.js';
 import {awaitSelection, placeClick, trustedClick, trustedDrag, withDebugger} from './trusted-click.js';
 import {frameCall} from './frame-call.js';
@@ -559,6 +559,17 @@ async function handle(message,sender) {
     if (/^(chrome|edge|about|chrome-extension):/i.test(tab.url || "")) throw new Error("Chrome doesn't allow screenshots of this page. Open the question's tab and try again.");
     try { return {image:await screenshot(tab.id,{})}; }
     catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
+  }
+  if (message.type === "formSolve") {
+    const tabId = sender.tab?.id;
+    if (tabId == null) throw new Error("Open the form first.");
+    const q = message.question || {};
+    let image = null;
+    // Pictures in the question or its choices are read from a crop of the tab.
+    if (q.hasImage && q.rect) {
+      try { image = await screenshot(tabId, {imageBased: true, rect: q.rect, devicePixelRatio: q.devicePixelRatio}); } catch {}
+    }
+    return {answer: await formAnswer({kind: q.kind, title: q.title, description: q.description, options: q.options, image: image || undefined})};
   }
   if (message.type === "regionSolve") {
     const tab = sender.tab || (await chrome.tabs.query({active:true,currentWindow:true}))[0];
