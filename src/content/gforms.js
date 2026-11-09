@@ -1,5 +1,4 @@
 import {sendExtension} from '../shared/messaging.js';
-import {fetchOverlay} from '../shared/overlay.js';
 import {matchOption, selectionLooksActive, classifyFormControls, parseFormDate, parseFormTime} from '../shared/form-answer.js';
 
 // Google Forms: highlight anything in a question (even a space between words)
@@ -7,7 +6,6 @@ import {matchOption, selectionLooksActive, classifyFormControls, parseFormDate, 
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const busy = new WeakSet();
-let enabled = true;
 let lastKey = '';
 
 function inFrame() {
@@ -210,35 +208,22 @@ async function fill(item, question, answer) {
   typeInto(field, String(answer.text).trim());
 }
 
-let tip = null;
-function notice(message, {sticky = false} = {}) {
-  tip?.remove();
-  tip = document.createElement('div');
-  tip.dataset.auraTip = '1';
-  tip.textContent = message;
-  Object.assign(tip.style, {position: 'fixed', right: '16px', bottom: '16px', zIndex: 2147483647, maxWidth: '320px', padding: '10px 14px', borderRadius: '10px', background: '#1d2433', color: '#fff', font: '13px/1.4 -apple-system,Segoe UI,sans-serif', boxShadow: '0 8px 24px rgba(0,0,0,.2)', pointerEvents: 'none'});
-  document.documentElement.append(tip);
-  const mine = tip;
-  if (!sticky) setTimeout(() => mine.remove(), 4500);
-}
-
 async function answer(item) {
   if (busy.has(item)) return;
   busy.add(item);
-  notice('AuraSolve is answering…', {sticky: true});
   try {
     item.scrollIntoView({block: 'center', inline: 'nearest'});
     await pause(120);
     const question = readQuestion(item);
-    if (!question) { tip?.remove(); return; }
+    if (!question) return;
     const {answer: result} = await sendExtension({type: 'formSolve', question});
     await fill(item, question, result);
     getSelection()?.removeAllRanges();
-    tip?.remove();
   } catch (error) {
-    notice(error.message || 'AuraSolve couldn\'t answer that question.');
+    console.warn('AuraSolve:', error.message);
   } finally {
     busy.delete(item);
+    lastKey = '';
   }
 }
 
@@ -256,7 +241,6 @@ export function questionFromSelection(selection, root = document) {
 
 let timer = null;
 function onSelect() {
-  if (!enabled) return;
   clearTimeout(timer);
   timer = setTimeout(() => {
     const selection = getSelection();
@@ -272,39 +256,17 @@ function onSelect() {
   }, 220);
 }
 
-function showReady() {
-  const pill = document.createElement('div');
-  pill.dataset.auraTip = '1';
-  pill.textContent = 'AuraSolve on · highlight text or double-click a question';
-  Object.assign(pill.style, {position: 'fixed', left: '16px', bottom: '16px', zIndex: 2147483646, padding: '8px 12px', borderRadius: '999px', background: '#0666f5', color: '#fff', font: '600 12px/1.2 -apple-system,Segoe UI,sans-serif', boxShadow: '0 8px 24px rgba(6,102,245,.35)', pointerEvents: 'none'});
-  document.documentElement.append(pill);
-  setTimeout(() => pill.remove(), 12000);
-}
-
-function onDoubleClick(event) {
-  if (!enabled) return;
-  const item = questionItem(event.target);
-  if (!item || event.target.closest?.('input, textarea, [role="radio"], [role="checkbox"], [role="listbox"], button, a')) return;
-  // Image-only questions have no title text to highlight, so double-clicking
-  // the question's own picture or heading works too.
-  const picture = event.target.tagName === 'IMG' && !event.target.closest('label');
-  if (picture || item.querySelector('[role="heading"]')?.contains(event.target) || event.target.closest?.('[role="heading"]')) {
-    lastKey = '';
-    answer(item);
-  }
-}
-
-export async function startForms() {
-  chrome.runtime.onMessage.addListener(message => {
-    if (message?.type === 'overlayChanged' && message.settings) enabled = message.settings.formsHighlight !== false;
-  });
+export function startForms() {
+  globalThis.__auraFormsStop?.();
+  const keyup = event => { if (event.key === 'Shift' || event.shiftKey) onSelect(); };
   document.addEventListener('mouseup', onSelect, true);
   document.addEventListener('pointerup', onSelect, true);
   document.addEventListener('selectionchange', onSelect);
-  document.addEventListener('dblclick', onDoubleClick, true);
-  document.addEventListener('keyup', event => { if (event.key === 'Shift' || event.shiftKey) onSelect(); }, true);
-  showReady();
-  try { enabled = (await fetchOverlay()).formsHighlight !== false; }
-  catch { enabled = true; }
-  if (!enabled) tip?.remove();
+  document.addEventListener('keyup', keyup, true);
+  globalThis.__auraFormsStop = () => {
+    document.removeEventListener('mouseup', onSelect, true);
+    document.removeEventListener('pointerup', onSelect, true);
+    document.removeEventListener('selectionchange', onSelect);
+    document.removeEventListener('keyup', keyup, true);
+  };
 }

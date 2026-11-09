@@ -8,10 +8,11 @@ import {isGoogleForm} from '../shared/form-answer.js';
 export async function start() {
   trackSelection();
   const forms = isGoogleForm(location.href) || /\/forms\/?$/.test(location.pathname);
-  if (forms) await startForms();
+  if (forms) startForms();
   const ui = forms ? null : createUI();
   globalThis.__aura = {inspectControls,snapshot,feedback,execute,advance,nextProblem,clickControl,dismissFeedback,stayOnIncompleteQuestion,navigateQuestion,prepareField,revealQuestion,incorrectNotice,askRetry,captureFigures,open:()=>ui?.open()};
   globalThis.__auraVeil = hidden => ui?.veil(hidden);
+  globalThis.__auraAlive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } };
   return true;
 }
 

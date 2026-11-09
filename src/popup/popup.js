@@ -453,7 +453,7 @@ $('new-chat').onclick = () => {
 
 /* ---------- On-page Fill button ---------- */
 const overlayZone=$('overlay-zone'), overlayLabel=$('overlay-label'), overlayColors=$('overlay-colors');
-const overlayInvisible=$('overlay-invisible'), overlayFill=$('overlay-fill'), overlayShot=$('overlay-shot'), overlayForms=$('overlay-forms'), overlayCustom=$('overlay-custom');
+const overlayInvisible=$('overlay-invisible'), overlayFill=$('overlay-fill'), overlayShot=$('overlay-shot'), overlayCustom=$('overlay-custom');
 const overlayX=$('overlay-x'), overlayY=$('overlay-y'), overlayPreview=$('overlay-preview'), overlayPreviewShot=$('overlay-preview-shot'), overlayNote=$('overlay-preview-note');
 for (const zone of OVERLAY_ZONES) overlayZone.add(new Option(zone.label, zone.id));
 for (const color of OVERLAY_COLORS) {
@@ -477,7 +477,6 @@ function paintOverlay(settings) {
   overlayInvisible.checked=next.invisible;
   overlayFill.checked=next.showFill;
   overlayShot.checked=next.showShot;
-  overlayForms.checked=next.formsHighlight;
   overlayZone.value=next.zone;
   overlayLabel.value=next.label;
   overlayX.value=String(Math.round(next.x));
@@ -510,7 +509,6 @@ async function saveOverlay(patch={}) {
     invisible: overlayInvisible.checked,
     showFill: overlayFill.checked,
     showShot: overlayShot.checked,
-    formsHighlight: overlayForms.checked,
     x: Number(overlayX.value),
     y: Number(overlayY.value),
   });
@@ -520,7 +518,6 @@ readOverlay().then(paintOverlay);
 overlayInvisible.onchange=()=>saveOverlay({invisible: overlayInvisible.checked});
 overlayFill.onchange=()=>saveOverlay({showFill: overlayFill.checked});
 overlayShot.onchange=()=>saveOverlay({showShot: overlayShot.checked});
-overlayForms.onchange=()=>saveOverlay({formsHighlight: overlayForms.checked});
 overlayZone.onchange=()=>saveOverlay({zone: overlayZone.value});
 overlayLabel.onchange=()=>saveOverlay({label: overlayLabel.value});
 overlayLabel.onkeydown=event=>{ if(event.key==='Enter'){ event.preventDefault(); overlayLabel.blur(); } };

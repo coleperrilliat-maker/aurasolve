@@ -987,6 +987,23 @@ async function handle(message,sender) {
   }
   throw new Error("Unknown request.");
 }
+// Chrome only runs content scripts in pages loaded after install or update,
+// so start AuraSolve in tabs that were already open (Google Forms included).
+function startInFrame(pattern) {
+  if (!pattern || !new RegExp(pattern).test(location.href)) return;
+  const alive = () => { try { return Boolean(chrome.runtime?.id) && globalThis.__auraAlive?.() !== false; } catch { return false; } };
+  if (globalThis.__auraReady && alive()) return;
+  globalThis.__auraReady = import(chrome.runtime.getURL("src/content/app.js")).then(module => module.start());
+  globalThis.__auraReady.catch(() => {});
+}
+chrome.runtime.onInstalled?.addListener(async () => {
+  const pages = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || [])
+    .map(match => "^" + match.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")).join("|");
+  for (const tab of await chrome.tabs.query({}).catch(() => [])) {
+    if (tab.id == null || !/^https?:/.test(tab.url || "")) continue;
+    chrome.scripting.executeScript({target: {tabId: tab.id, allFrames: true}, func: startInFrame, args: [pages]}).catch(() => {});
+  }
+});
 // Content scripts cannot watch trusted storage, so push button settings to open tabs.
 chrome.storage.onChanged?.addListener(async (changes, area) => {
   if (area !== 'local' || !changes[OVERLAY_KEY]) return;
