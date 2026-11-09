@@ -8,7 +8,7 @@ import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./a
 import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, sendCode, createStripe} from "./billing.js";
 
 const PORT = Number(process.env.PORT) || 8787;
-const MAX_BODY = 4_000_000;
+const MAX_BODY = 8_000_000;
 const perIp = createLimiter(60, 60_000);
 const perInstall = createLimiter(40, 60_000);
 const perInstallDay = createLimiter(1500, 24 * 60 * 60_000);
@@ -365,14 +365,17 @@ async function handleRequest(req, res) {
     const kind = FORM_KINDS.includes(payload.kind) ? payload.kind : null;
     const title = String(payload.title || "").slice(0, 4000);
     const options = Array.isArray(payload.options) ? [...new Set(payload.options.map(value => String(value).slice(0, 500)).filter(Boolean))].slice(0, 60) : [];
-    if (!kind || !title.trim() || (["radio", "checkbox", "dropdown"].includes(kind) && !options.length)) { sendJson(res, 400, {error: "That question type isn't supported yet."}); return; }
+    const rows = Array.isArray(payload.rows) ? [...new Set(payload.rows.map(value => String(value).slice(0, 500)).filter(Boolean))].slice(0, 40) : [];
+    const images = Array.isArray(payload.images) ? payload.images.slice(0, 10).map(item => ({label: String(item?.label || "").slice(0, 200), image: typeof item?.image === "string" ? item.image : ""})).filter(item => item.image) : [];
+    const needsOptions = ["radio", "checkbox", "dropdown", "grid", "checkgrid"].includes(kind);
+    if (!kind || !title.trim() || (needsOptions && !options.length) || (["grid", "checkgrid"].includes(kind) && !rows.length)) { sendJson(res, 400, {error: "That question type isn't supported yet."}); return; }
     const grant = await entitle(req, res);
     if (!grant) return;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90_000);
     res.on("close", () => { if (!res.writableEnded) controller.abort(); });
     try {
-      const answer = await answerFormQuestion({kind, title, description: String(payload.description || "").slice(0, 4000), options, image: payload.image}, controller.signal);
+      const answer = await answerFormQuestion({kind, title, description: String(payload.description || "").slice(0, 4000), options, rows, images, image: payload.image}, controller.signal);
       await spendFree(grant);
       sendJson(res, 200, {answer});
     } catch (error) {

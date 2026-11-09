@@ -32,11 +32,21 @@ export function selectionLooksActive(selection) {
   return Boolean(selection && selection.rangeCount > 0 && !selection.isCollapsed);
 }
 
-export function classifyFormControls({title, radios=[], boxes=[], listbox=[], text=false, area=false, radiogroups=0}) {
+export const IMAGE_ONLY_TITLE = 'The question is shown in the attached image.';
+
+export function classifyFormControls({title, radios=[], boxes=[], listbox=[], text=false, area=false, radiogroups=0, grid=null, date=false, time=false, images=0}) {
   const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
-  const heading = clean(title).replace(/\s*\*$/, '');
+  const unique = list => [...new Set(list.map(clean).filter(value => value && !/^(choose|other:?)$/i.test(value)))];
+  const heading = clean(title).replace(/\s*\*$/, '') || (images ? IMAGE_ONLY_TITLE : '');
   if (!heading) return null;
+  if (grid?.rows?.length) {
+    const rows = unique(grid.rows), options = unique(grid.columns || []);
+    if (!rows.length || !options.length) return null;
+    return {kind: grid.multi ? 'checkgrid' : 'grid', title: heading, options, rows};
+  }
   if (radios.length && radiogroups > 1) return null;
+  if (date) return {kind: 'date', title: heading, options: [], rows: []};
+  if (time) return {kind: 'time', title: heading, options: [], rows: []};
   let kind = null, options = [];
   if (boxes.length && !radios.length) { kind = 'checkbox'; options = boxes; }
   else if (radios.length) { kind = 'radio'; options = radios; }
@@ -44,7 +54,27 @@ export function classifyFormControls({title, radios=[], boxes=[], listbox=[], te
   else if (area) kind = 'paragraph';
   else if (text) kind = 'text';
   if (!kind) return null;
-  options = [...new Set(options.map(clean).filter(value => value && !/^(choose|other:?)$/i.test(value)))];
+  options = unique(options);
   if (['radio', 'checkbox', 'dropdown'].includes(kind) && !options.length) return null;
-  return {kind, title: heading, options};
+  return {kind, title: heading, options, rows: []};
+}
+
+export function parseFormDate(text) {
+  const match = String(text ?? '').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return null;
+  const [, year, month, day] = match.map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return {year, month, day, iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`};
+}
+
+export function parseFormTime(text) {
+  const match = String(text ?? '').match(/(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?/i);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = match[3]?.[0]?.toLowerCase();
+  if (meridiem === 'p' && hour < 12) hour += 12;
+  if (meridiem === 'a' && hour === 12) hour = 0;
+  if (hour > 23 || minute > 59) return null;
+  return {hour, minute, hour12: hour % 12 || 12, pm: hour >= 12};
 }

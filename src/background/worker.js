@@ -572,7 +572,12 @@ async function handle(message,sender) {
         ? {}
         : {imageBased: true, rect: q.rect, devicePixelRatio: q.devicePixelRatio});
     } catch {}
-    return {answer: await formAnswer({kind: q.kind, title: q.title, description: q.description, options: q.options, image: image || undefined})};
+    const sources = Array.isArray(q.images) ? q.images.slice(0, 10) : [];
+    const images = (await Promise.all(sources.map(async item => {
+      const data = await formImage(item?.src).catch(() => null);
+      return data ? {label: String(item.label || "Image"), image: data} : null;
+    }))).filter(Boolean);
+    return {answer: await formAnswer({kind: q.kind, title: q.title, description: q.description, options: q.options, rows: q.rows || [], images, image: image || undefined})};
   }
   if (message.type === "regionSolve") {
     const tab = sender.tab || (await chrome.tabs.query({active:true,currentWindow:true}))[0];
@@ -990,6 +995,33 @@ chrome.storage.onChanged?.addListener(async (changes, area) => {
     if (tab.id != null) chrome.tabs.sendMessage(tab.id, {type: 'overlayChanged', settings}).catch(() => {});
   }
 });
+const FORM_IMAGE_HOST = /^https:\/\/([a-z0-9-]+\.)*(google\.com|googleusercontent\.com)\/|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i;
+
+// Pictures in a Google Form (equations, diagrams, picture choices) are sent
+// as their own labelled images, upscaled so small equations stay legible.
+async function formImage(src) {
+  if (typeof src !== "string" || !FORM_IMAGE_HOST.test(src)) return null;
+  const response = await fetch(src, {credentials: "include"});
+  if (!response.ok) return null;
+  const blob = await response.blob();
+  if (!/^image\//.test(blob.type) || blob.size > 8_000_000) return null;
+  const bitmap = await createImageBitmap(blob);
+  const longest = Math.max(bitmap.width, bitmap.height);
+  const scale = Math.min(4, Math.max(1, 640 / longest), 1600 / longest);
+  const canvas = new OffscreenCanvas(Math.max(1, Math.round(bitmap.width * scale)), Math.max(1, Math.round(bitmap.height * scale)));
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  let out = await canvas.convertToBlob({type: "image/png"});
+  if (out.size > 900_000) out = await canvas.convertToBlob({type: "image/jpeg", quality: 0.85});
+  const bytes = new Uint8Array(await out.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return `data:${out.type};base64,${btoa(binary)}`;
+}
+
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message,
     ...(['not_sent','unknown'].includes(error.submission)?{submission:error.submission}:{})}));

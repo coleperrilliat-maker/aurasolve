@@ -44,3 +44,33 @@ test('checkbox controls are classified as select-all', () => {
   assert.deepEqual(q.options, ['2', '3', '4']);
   assert.equal(classifyFormControls({title: 'x', radios: ['A'], boxes: [], listbox: [], text: false, area: false, radiogroups: 2}), null);
 });
+
+import {parseFormDate, parseFormTime, IMAGE_ONLY_TITLE} from '../src/shared/form-answer.js';
+
+test('image-only questions, grids, dates, and times are classified', () => {
+  const pictured = classifyFormControls({title: '', radios: ['True', 'False'], radiogroups: 1, images: 1});
+  assert.equal(pictured.kind, 'radio');
+  assert.equal(pictured.title, IMAGE_ONLY_TITLE);
+  assert.equal(classifyFormControls({title: '', radios: ['True', 'False'], radiogroups: 1}), null);
+  const grid = classifyFormControls({title: 'Rate', radios: ['A', 'B', 'A', 'B'], radiogroups: 2, grid: {multi: false, rows: ['Row 1', 'Row 2'], columns: ['A', 'B']}});
+  assert.deepEqual([grid.kind, grid.rows, grid.options], ['grid', ['Row 1', 'Row 2'], ['A', 'B']]);
+  assert.equal(classifyFormControls({title: 'x', grid: {multi: true, rows: ['r'], columns: ['c']}}).kind, 'checkgrid');
+  assert.equal(classifyFormControls({title: 'When', text: true, date: true}).kind, 'date');
+  assert.equal(classifyFormControls({title: 'At', text: true, time: true}).kind, 'time');
+});
+
+test('grid answers are constrained per row', () => {
+  const schema = formSchema('grid', ['A', 'B'], ['Row 1', 'Row 2']);
+  assert.equal(schema.properties.choices.maxItems, 0);
+  assert.deepEqual(schema.properties.rows.items.properties.row.enum, ['Row 1', 'Row 2']);
+  assert.equal(schema.properties.rows.items.properties.choices.maxItems, 1);
+  assert.equal(formSchema('checkgrid', ['A'], ['r']).properties.rows.items.properties.choices.maxItems, undefined);
+  assert.equal(formSchema('radio', ['A'], []).properties.rows.maxItems, 0);
+});
+
+test('form dates and times are parsed for filling', () => {
+  assert.deepEqual(parseFormDate('1969-7-20'), {year: 1969, month: 7, day: 20, iso: '1969-07-20'});
+  assert.equal(parseFormDate('July'), null);
+  assert.deepEqual(parseFormTime('14:05'), {hour: 14, minute: 5, hour12: 2, pm: true});
+  assert.deepEqual(parseFormTime('12:30 am'), {hour: 0, minute: 30, hour12: 12, pm: false});
+});
