@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "AuraSolve — Practice Tutor",
-  "version": "1.20.0",
+  "name": "AuraSolve \u2014 Practice Tutor",
+  "version": "1.21.0",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "141",
   "permissions": [
@@ -48,6 +48,7 @@
         "https://*.mathxl.com/*",
         "https://*.mymathlab.com/*",
         "https://*.raydass.com/*",
+        "https://docs.google.com/forms/*",
         "http://localhost:4318/*",
         "http://127.0.0.1:4318/*"
       ],
@@ -69,6 +70,7 @@
         "https://*.mathxl.com/*",
         "https://*.mymathlab.com/*",
         "https://*.raydass.com/*",
+        "https://docs.google.com/*",
         "http://localhost:4318/*",
         "http://127.0.0.1:4318/*"
       ],
