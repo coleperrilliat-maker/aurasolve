@@ -14,8 +14,12 @@ export function matchOption(options, wanted) {
 
 export function isGoogleForm(url) {
   try {
-    const {hostname, pathname} = new URL(url);
+    const {hostname, pathname, searchParams} = new URL(url);
+    if (hostname !== 'docs.google.com' && hostname !== 'localhost' && hostname !== '127.0.0.1') return false;
+    // Modern share link: /forms/d/.../viewform or /forms/d/e/.../viewform
     if (hostname === 'docs.google.com' && /^\/forms\/(?:u\/\d+\/)?d\/(?:e\/)?[^/]+\/(?:viewform|formResponse)/.test(pathname)) return true;
+    // Older / LMS embed link: /forms/viewform?id=FORM_ID&embedded=true
+    if (hostname === 'docs.google.com' && /^\/forms\/(?:u\/\d+\/)?viewform$/.test(pathname) && searchParams.get('id')) return true;
     // Local practice page used by the demo server and tests.
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && pathname === '/forms') return true;
     return false;

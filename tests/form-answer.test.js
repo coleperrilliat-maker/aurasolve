@@ -15,6 +15,8 @@ test('answers are matched back to the exact Google Forms choice', () => {
 test('only Google Forms answer pages turn on highlight mode', () => {
   assert.equal(isGoogleForm('https://docs.google.com/forms/d/e/1FAIpQLSf9/viewform'), true);
   assert.equal(isGoogleForm('https://docs.google.com/forms/u/0/d/e/1FAIpQLSf9/viewform?usp=sf_link'), true);
+  assert.equal(isGoogleForm('https://docs.google.com/forms/viewform?embedded=true&id=1SXuFuADwXfuo3tDj6e8HqRG3qNbadPP2wFlyRDNDXXQ'), true);
+  assert.equal(isGoogleForm('https://docs.google.com/forms/viewform'), false);
   assert.equal(isGoogleForm('https://docs.google.com/forms/d/1YkrO63f9a/edit'), false);
   assert.equal(isGoogleForm('https://docs.google.com/document/d/abc/edit'), false);
   assert.equal(isGoogleForm('http://localhost:4318/forms'), true);
