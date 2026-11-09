@@ -15,6 +15,30 @@ export function matchOption(options, wanted) {
 export function isGoogleForm(url) {
   try {
     const {hostname, pathname} = new URL(url);
-    return hostname === 'docs.google.com' && /^\/forms\/(?:u\/\d+\/)?d\/(?:e\/)?[^/]+\/(?:viewform|formResponse)/.test(pathname);
+    if (hostname === 'docs.google.com' && /^\/forms\/(?:u\/\d+\/)?d\/(?:e\/)?[^/]+\/(?:viewform|formResponse)/.test(pathname)) return true;
+    // Local practice page used by the demo server and tests.
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && pathname === '/forms') return true;
+    return false;
   } catch { return false; }
+}
+
+export function selectionLooksActive(selection) {
+  return Boolean(selection && selection.rangeCount > 0 && !selection.isCollapsed);
+}
+
+export function classifyFormControls({title, radios=[], boxes=[], listbox=[], text=false, area=false, radiogroups=0}) {
+  const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+  const heading = clean(title).replace(/\s*\*$/, '');
+  if (!heading) return null;
+  if (radios.length && radiogroups > 1) return null;
+  let kind = null, options = [];
+  if (boxes.length && !radios.length) { kind = 'checkbox'; options = boxes; }
+  else if (radios.length) { kind = 'radio'; options = radios; }
+  else if (listbox.length) { kind = 'dropdown'; options = listbox; }
+  else if (area) kind = 'paragraph';
+  else if (text) kind = 'text';
+  if (!kind) return null;
+  options = [...new Set(options.map(clean).filter(value => value && !/^(choose|other:?)$/i.test(value)))];
+  if (['radio', 'checkbox', 'dropdown'].includes(kind) && !options.length) return null;
+  return {kind, title: heading, options};
 }

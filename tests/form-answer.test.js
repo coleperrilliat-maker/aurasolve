@@ -17,6 +17,7 @@ test('only Google Forms answer pages turn on highlight mode', () => {
   assert.equal(isGoogleForm('https://docs.google.com/forms/u/0/d/e/1FAIpQLSf9/viewform?usp=sf_link'), true);
   assert.equal(isGoogleForm('https://docs.google.com/forms/d/1YkrO63f9a/edit'), false);
   assert.equal(isGoogleForm('https://docs.google.com/document/d/abc/edit'), false);
+  assert.equal(isGoogleForm('http://localhost:4318/forms'), true);
 });
 
 test('the form answer schema only allows real choices', () => {
@@ -25,4 +26,19 @@ test('the form answer schema only allows real choices', () => {
   assert.equal(radio.properties.choices.maxItems, 1);
   assert.equal(formSchema('text', []).properties.choices.maxItems, 0);
   assert.equal(formSchema('checkbox', ['A', 'B']).properties.choices.maxItems, undefined);
+});
+
+import {selectionLooksActive, classifyFormControls} from '../src/shared/form-answer.js';
+
+test('a space highlight is still an active selection', () => {
+  assert.equal(selectionLooksActive({isCollapsed: false, rangeCount: 1, toString: () => ' '}), true);
+  assert.equal(selectionLooksActive({isCollapsed: false, rangeCount: 1, toString: () => ''}), true);
+  assert.equal(selectionLooksActive({isCollapsed: true, rangeCount: 0, toString: () => 'hi'}), false);
+});
+
+test('checkbox controls are classified as select-all', () => {
+  const q = classifyFormControls({title: 'Pick primes', radios: [], boxes: ['2', '3', '4'], listbox: [], text: false, area: false, radiogroups: 0});
+  assert.equal(q.kind, 'checkbox');
+  assert.deepEqual(q.options, ['2', '3', '4']);
+  assert.equal(classifyFormControls({title: 'x', radios: ['A'], boxes: [], listbox: [], text: false, area: false, radiogroups: 2}), null);
 });

@@ -565,8 +565,9 @@ async function handle(message,sender) {
     if (tabId == null) throw new Error("Open the form first.");
     const q = message.question || {};
     let image = null;
-    // Pictures in the question or its choices are read from a crop of the tab.
-    if (q.hasImage && q.rect) {
+    // Always crop the question. Diagrams, charts, and picture choices live
+    // here, and Google Forms often delays loading the <img> until it's on screen.
+    if (q.rect) {
       try { image = await screenshot(tabId, {imageBased: true, rect: q.rect, devicePixelRatio: q.devicePixelRatio}); } catch {}
     }
     return {answer: await formAnswer({kind: q.kind, title: q.title, description: q.description, options: q.options, image: image || undefined})};
