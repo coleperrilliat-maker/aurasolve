@@ -274,3 +274,7 @@ button.row{width:100%;border-left:0;border-right:0;border-bottom:0;background:no
 .fine{margin:0 0 12px;color:var(--ink-3);font-size:11.5px;line-height:1.5}
 .fine a{color:var(--ink-2)}
 #plan-terms{color:var(--ink-2);font-weight:550}
+
+.site-access{display:flex;align-items:center;gap:10px;margin:0 14px 10px;padding:10px 12px;border-radius:12px;background:#fff4e5;color:#7a4b00;font-size:12.5px;line-height:1.4}
+.site-access[hidden]{display:none}
+.site-access button{flex:none;border:0;border-radius:9px;padding:7px 12px;background:#0666f5;color:#fff;font:600 12.5px/1 inherit;cursor:pointer}

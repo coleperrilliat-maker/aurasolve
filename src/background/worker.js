@@ -995,14 +995,16 @@ function startInFrame(pattern) {
   globalThis.__auraReady = import(chrome.runtime.getURL("src/content/app.js")).then(module => module.start());
   globalThis.__auraReady.catch(() => {});
 }
-chrome.runtime.onInstalled?.addListener(async () => {
+async function startInOpenTabs() {
   const pages = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || [])
     .map(match => "^" + match.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")).join("|");
   for (const tab of await chrome.tabs.query({}).catch(() => [])) {
     if (tab.id == null || !/^https?:/.test(tab.url || "")) continue;
     chrome.scripting.executeScript({target: {tabId: tab.id, allFrames: true}, func: startInFrame, args: [pages]}).catch(() => {});
   }
-});
+}
+chrome.runtime.onInstalled?.addListener(startInOpenTabs);
+chrome.permissions?.onAdded?.addListener(startInOpenTabs);
 // Content scripts cannot watch trusted storage, so push button settings to open tabs.
 chrome.storage.onChanged?.addListener(async (changes, area) => {
   if (area !== 'local' || !changes[OVERLAY_KEY]) return;

@@ -654,3 +654,17 @@ try {
   $('cloud').textContent = 'Offline';
   $('cloud').className = 'offline';
 }
+
+// "Ask on every visit" / "On click" site access only unlocks the top page, never
+// MyLab's question frame on another Pearson host, so ask for the sites directly.
+const SITE_ORIGINS = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || []).filter(match => match.startsWith('https://'));
+async function checkSiteAccess() {
+  if (!chrome.permissions?.contains || !SITE_ORIGINS.length) return;
+  const allowed = await chrome.permissions.contains({origins: SITE_ORIGINS}).catch(() => true);
+  $('site-access').hidden = allowed;
+}
+$('allow-sites').onclick = async () => {
+  const granted = await chrome.permissions.request({origins: SITE_ORIGINS}).catch(() => false);
+  if (granted) $('site-access').hidden = true;
+};
+checkSiteAccess();
