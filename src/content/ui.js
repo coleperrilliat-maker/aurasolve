@@ -39,6 +39,20 @@ function placeHost(host, settings, root) {
   } else if (window === window.top) (document.querySelector('main,[role="main"]') || document.body)?.prepend(host);
 }
 
+function shownOnPage(host) {
+  const rect = host.getBoundingClientRect();
+  if (rect.width < 20 || rect.height < 20) return false;
+  for (let el = host.parentElement; el && el !== document.body; el = el.parentElement) {
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+    if (/hidden|clip/.test(style.overflow + style.overflowX + style.overflowY)) {
+      const box = el.getBoundingClientRect();
+      if (rect.right > box.right + 1 || rect.bottom > box.bottom + 1 || rect.left < box.left - 1 || rect.top < box.top - 1) return false;
+    }
+  }
+  return true;
+}
+
 const SHOT_ICON = `<svg class="shot-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15"/><circle cx="12" cy="12.5" r="3"/></svg>`;
 
 export function createUI() {
@@ -119,12 +133,16 @@ export function createUI() {
 
   // Moving the host or rewriting its buttons between mousedown and mouseup
   // cancels the click, so only re-place and repaint when something changed.
-  let placedKey = null, paintedKey = null;
-  function mount() {
+  let placedKey = null, paintedKey = null, pinned = false;
+  function answerable() {
     const root = questionRoot(), current = snapshot();
     const sara = current.fields.some(field => field.adapter === 'sara-choice');
-    const lazy = root && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, .xlFillin, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"], .mq-editable-field')].some(visible);
-    const answering = Boolean(root && current.question && (sara || (!current.fallback && (current.fields.length || lazy))));
+    const lazy = Boolean(root) && [...root.querySelectorAll('span.eqEditor.inputField, span.eqEditor[widgetid], .acctable .inputcell[role="listbox"], .dijitSelect, .xlFillin, [role="listbox"][aria-haspopup], [role="combobox"], [aria-haspopup="listbox"], .mq-editable-field')].some(visible);
+    return {root, current, lazy, answering: Boolean(root && current.question && (sara || (!current.fallback && (current.fields.length || lazy))))};
+  }
+
+  function mount() {
+    const {root, current, lazy, answering} = answerable();
     if (!answering || (!settings.showFill && !settings.showShot)) { if (host.isConnected) host.remove(); return; }
     const frame = [...document.querySelectorAll('iframe')].find(el => el.getBoundingClientRect().width > 400 && el.getBoundingClientRect().height > 250);
     // The question may live in a child frame. Do not put a second toolbar
@@ -133,9 +151,14 @@ export function createUI() {
     const key = JSON.stringify(settings);
     if (!running && paintedKey !== key) { paint(); paintedKey = key; }
     const fixed = settings.zone.startsWith('fixed-') || settings.zone === 'custom';
-    const inPlace = host.isConnected && (fixed ? host.parentNode === (document.body || document.documentElement) : root.contains(host));
+    const pinnedHere = pinned && host.parentNode === (document.body || document.documentElement);
+    const inPlace = host.isConnected && (fixed || pinnedHere ? host.parentNode === (document.body || document.documentElement) : root.contains(host));
     if (inPlace && placedKey === key) return;
     placeHost(host, settings, root);
+    pinned = false;
+    // A prompt box that clips or collapses would swallow the buttons; pin
+    // them to the corner of the question frame instead.
+    if (!fixed && !shownOnPage(host)) { placeHost(host, {...settings, zone: 'fixed-tr'}, root); pinned = true; }
     host.style.visibility = veiled ? 'hidden' : '';
     placedKey = key;
   }
@@ -155,8 +178,8 @@ export function createUI() {
     shot.setAttribute('aria-busy', String(value));
   }
 
-  button.onclick = async () => {
-    if (running || button.hidden) return;
+  async function fill() {
+    if (running) return;
     setBusy(true);
     button.innerHTML = settings.invisible
       ? `<span class="spinner" aria-hidden="true"></span>`
@@ -176,7 +199,31 @@ export function createUI() {
       button.innerHTML = face(settings.label, settings);
       shot.innerHTML = settings.invisible ? `<span class="hit" aria-hidden="true"></span>` : SHOT_ICON;
     }
-  };
+  }
+  button.onclick = () => { if (!button.hidden) fill(); };
+
+  // Highlighting any text in the question (a word, a character, even a
+  // space) solves it and fills the answer, same as Fill answers.
+  let lastPick = '', pickTimer = null;
+  function onPick() {
+    clearTimeout(pickTimer);
+    pickTimer = setTimeout(() => {
+      const selection = getSelection();
+      if (!selection || selection.isCollapsed || !selection.rangeCount || running) return;
+      const node = selection.getRangeAt(0).commonAncestorContainer;
+      const el = node.nodeType === 1 ? node : node.parentElement;
+      if (!el || el.closest('input, textarea, select, [contenteditable="true"], .mq-editable-field, #aurasolve-root, [data-aura-editor]')) return;
+      const {root, answering} = answerable();
+      if (!answering || !root.contains(el)) return;
+      const key = `${selection.toString()}\0${(root.textContent || '').slice(0, 300)}`;
+      if (key === lastPick) return;
+      lastPick = key;
+      selection.removeAllRanges();
+      fill().finally(() => { lastPick = ''; });
+    }, 250);
+  }
+  document.addEventListener('mouseup', onPick, true);
+  document.addEventListener('keyup', event => { if (event.key === 'Shift' || event.shiftKey) onPick(); }, true);
 
   shot.onclick = async () => {
     if (running || shot.hidden) return;
