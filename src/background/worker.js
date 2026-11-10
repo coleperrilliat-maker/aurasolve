@@ -846,10 +846,14 @@ async function handle(message,sender) {
         visualRead = true;
         question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
       } else if (question.visual) {
-        question.image = await screenshot(tabId, question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
-        question.figureImages=await pageFigures(tabId,state.question.documentId,question.image.length);
-        visualRead = Boolean(question.image);
-        if (question.image) question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
+        // Screenshots need activeTab, which the on-page buttons don't grant; the
+        // page's own pictures are enough when the capture is refused.
+        let shotError = null;
+        question.image = await screenshot(tabId, question).catch(error => { shotError = error; return null; });
+        question.figureImages=await pageFigures(tabId,state.question.documentId,question.image?.length || 0);
+        if (!question.image && !question.figureImages.length) throw new Error(`Could not capture the question image: ${shotError?.message || 'no image found'}`);
+        visualRead = Boolean(question.image || question.figureImages.length);
+        if (question.image || question.figureImages.length) question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
       } else {
         // Tick marks, tables and graphs often sit outside the scraped text.
         const image = await screenshot(tabId, question).catch(() => null);

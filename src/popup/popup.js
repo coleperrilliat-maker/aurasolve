@@ -657,7 +657,7 @@ try {
 
 // "Ask on every visit" / "On click" site access only unlocks the top page, never
 // MyLab's question frame on another Pearson host, so ask for the sites directly.
-const SITE_ORIGINS = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || []).filter(match => match.startsWith('https://'));
+const SITE_ORIGINS = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || []).filter(match => match.startsWith('https://')).concat('<all_urls>');
 async function checkSiteAccess() {
   if (!chrome.permissions?.contains || !SITE_ORIGINS.length) return;
   const allowed = await chrome.permissions.contains({origins: SITE_ORIGINS}).catch(() => true);

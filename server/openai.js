@@ -79,8 +79,8 @@ async function solveOnce(snapshot, mode, model, signal, requestedEffort) {
 
   const image = typeof snapshot.image === "string" && snapshot.image.length < 3_500_000 && /^data:image\/(jpeg|png);base64,/.test(snapshot.image) ? snapshot.image : null;
   if(snapshot.image && !image)throw new Error("The question screenshot is invalid or too large. Reduce the browser window size and try again.");
-  if(snapshot.visual && !image)throw new Error("A readable screenshot is required for this diagram.");
   const figures=Array.isArray(snapshot.figureImages)?snapshot.figureImages.slice(0,3).filter(f=>typeof f.image==='string' && f.image.length<=600000 && /^data:image\/(jpeg|png);base64,/.test(f.image)):[];
+  if(snapshot.visual && !image && !figures.length)throw new Error("A readable screenshot is required for this diagram.");
   const text = JSON.stringify({
     mode,
     activePart:snapshot.activePart,
