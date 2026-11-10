@@ -847,14 +847,13 @@ async function handle(message,sender) {
         question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
       } else if (question.visual) {
         question.image = await screenshot(tabId, question).catch(error => { throw new Error(`Could not capture the question image: ${error.message}`); });
-        const figures=await frameCall(tabId,state.question.documentId,'captureFigures').catch(()=>[]);
-        let imageBytes=question.image.length;
-        question.figureImages=Array.isArray(figures)?figures.filter(f=>{imageBytes+=f.image?.length || 0;return imageBytes<3400000;}):[];
+        question.figureImages=await pageFigures(tabId,state.question.documentId,question.image.length);
         visualRead = Boolean(question.image);
         if (question.image) question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
       } else {
         // Tick marks, tables and graphs often sit outside the scraped text.
         const image = await screenshot(tabId, question).catch(() => null);
+        question.figureImages=await pageFigures(tabId,state.question.documentId,image?.length || 0);
         if (image) {
           question.image = image;
           question.limitations = question.limitations.filter(l => !/diagram needs a screenshot|image has no description/.test(l));
@@ -1016,8 +1015,8 @@ const FORM_IMAGE_HOST = /^https:\/\/([a-z0-9-]+\.)*(google\.com|googleuserconten
 
 // Pictures in a Google Form (equations, diagrams, picture choices) are sent
 // as their own labelled images, upscaled so small equations stay legible.
-async function formImage(src) {
-  if (typeof src !== "string" || !FORM_IMAGE_HOST.test(src)) return null;
+async function formImage(src, anyHost = false) {
+  if (typeof src !== "string" || !(anyHost ? /^https?:\/\//i : FORM_IMAGE_HOST).test(src)) return null;
   const response = await fetch(src, {credentials: "include"});
   if (!response.ok) return null;
   const blob = await response.blob();
@@ -1032,13 +1031,28 @@ async function formImage(src) {
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
   let out = await canvas.convertToBlob({type: "image/png"});
-  if (out.size > 900_000) out = await canvas.convertToBlob({type: "image/jpeg", quality: 0.85});
+  if (out.size > 420_000) out = await canvas.convertToBlob({type: "image/jpeg", quality: 0.85});
   const bytes = new Uint8Array(await out.arrayBuffer());
   let binary = "";
   for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
   return `data:${out.type};base64,${btoa(binary)}`;
 }
 
+// The question's pictures, read from the page (fetched here when the page
+// can't hand them over), sent alongside the screenshot.
+async function pageFigures(tabId, documentId, used = 0) {
+  if (!documentId) return [];
+  const found = await frameCall(tabId, documentId, 'captureFigures').catch(() => []);
+  const figures = [];
+  let bytes = used;
+  for (const figure of Array.isArray(found) ? found.slice(0, 3) : []) {
+    const image = figure.image || await formImage(figure.src, true).catch(() => null);
+    if (!image || image.length > 600_000 || bytes + image.length >= 3_400_000) continue;
+    bytes += image.length;
+    figures.push({label: String(figure.label || 'Question figure'), image});
+  }
+  return figures;
+}
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message,
     ...(['not_sent','unknown'].includes(error.submission)?{submission:error.submission}:{})}));

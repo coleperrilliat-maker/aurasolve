@@ -1,1 +1,1 @@
-export const BUILD_VERSION = "1.21.5";
+export const BUILD_VERSION = "1.21.6";
