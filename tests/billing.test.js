@@ -3,7 +3,7 @@ process.env.INSTALL_SECRET = 'unit-test-secret';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {createServer, setBillingDeps} from '../server/index.js';
-import {createChallenge, checkChallenge, issueSession, readSession, createStripe, normalizeEmail} from '../server/billing.js';
+import {createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, pkceChallenge, createStripe, normalizeEmail} from '../server/billing.js';
 
 test('sign-in codes only work for the right code, email, and time', () => {
   const {code, challenge} = createChallenge('a@b.co', 1000);
@@ -23,6 +23,44 @@ test('sessions are signed and expire', () => {
   assert.equal(readSession(session.replace(/.$/, c => c === 'A' ? 'B' : 'A'), 1000), null);
   assert.equal(normalizeEmail(' Me@Example.COM '), 'me@example.com');
   assert.equal(normalizeEmail('nope'), null);
+});
+
+test('a login handoff works only for the extension that started it, and only once', async t => {
+  const verifier = 'verifier-value-verifier-value-verifier';
+  const challenge = pkceChallenge(verifier);
+  const handoff = issueHandoff('a@b.co', challenge, 1000);
+  assert.equal(readHandoff(handoff, verifier, 2000).email, 'a@b.co');
+  assert.equal(readHandoff(handoff, 'not-the-verifier-not-the-verifier', 2000), null);
+  assert.equal(readHandoff(handoff, verifier, 1000 + 3 * 60_000), null);
+
+  delete process.env.STRIPE_SECRET_KEY;
+  let sent = null;
+  setBillingDeps({mailer: async (email, code) => { sent = {email, code}; }});
+  const server = createServer().listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const origin = base;
+  const web = (path, body, cookie) => fetch(base + path, {method: 'POST', body: JSON.stringify(body || {}), headers: {origin, 'content-type': 'application/json', ...(cookie ? {cookie} : {})}});
+  const blocked = await web('/api/v1/auth/web/start', {email: 'a@b.co'});
+  assert.equal(blocked.status, 200);
+  const evil = await fetch(base + '/api/v1/auth/web/start', {method: 'POST', body: JSON.stringify({email: 'a@b.co'}), headers: {origin: 'https://evil.example', 'content-type': 'application/json'}});
+  assert.equal(evil.status, 403);
+  const {challenge: emailChallenge} = await blocked.json();
+  const verified = await web('/api/v1/auth/web/verify', {challenge: emailChallenge, code: sent.code});
+  const body = await verified.json();
+  assert.equal(body.email, 'a@b.co');
+  assert.equal(body.session, undefined);
+  const cookie = (verified.headers.getSetCookie?.() || [verified.headers.get('set-cookie')]).find(Boolean).split(';')[0];
+  assert.match(cookie, /^aura_session=/);
+  const handed = await (await web('/api/v1/auth/handoff', {challenge}, cookie)).json();
+  const {token} = await (await fetch(base + '/api/v1/install', {method: 'POST', body: '{}'})).json();
+  const redeem = (proof) => fetch(base + '/api/v1/auth/redeem', {method: 'POST', body: JSON.stringify({handoff: handed.handoff, verifier: proof}), headers: {authorization: `Bearer ${token}`, 'content-type': 'application/json'}});
+  assert.equal((await redeem('not-the-verifier-not-the-verifier')).status, 400);
+  const ok = await (await redeem(verifier)).json();
+  assert.equal(ok.account.email, 'a@b.co');
+  assert.equal(readSession(ok.session, Date.now()), 'a@b.co');
+  assert.equal((await redeem(verifier)).status, 400);
 });
 
 test('checkout creates prices once and gives the intro price only on a first subscription', async () => {

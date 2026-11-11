@@ -2,12 +2,12 @@ import {assignmentKey,decidePlayer} from '../shared/player-state.js';
 import {expectedPage} from '../shared/pilot-engine.js';
 import {fieldValue} from '../shared/solution.js';
 import {statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
-import {checkBackend, solve, ask, formAnswer, quizAnswer} from "./api.js";
+import {checkBackend, solve, ask, formAnswer, quizAnswer, redeemLogin} from "./api.js";
 import {editorBridge} from './editors.js';
 import {awaitSelection, placeClick, trustedClick, trustedDrag, withDebugger} from './trusted-click.js';
 import {frameCall} from './frame-call.js';
 import {cropBox} from '../shared/capture.js';
-import {DEFAULT_MODEL} from '../shared/config.js';
+import {API_BASE, DEFAULT_MODEL} from '../shared/config.js';
 import {OVERLAY_KEY, readOverlay, writeOverlay} from '../shared/overlay.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map(), regionWaits = new Map(), regionImages = new Map();
 const REGION_PROMPT = `Solve the question in this screenshot. Reply in exactly this shape and nothing else:
@@ -588,6 +588,11 @@ async function handle(message,sender) {
     if (sender.tab) throw new Error("Turn highlight on from the AuraSolve popup.");
     await setHighlight(message.tabId, Boolean(message.on));
     return {on: Boolean(message.on)};
+  }
+  if (message.type === "startWebLogin") {
+    if (sender.tab) throw new Error("Log in from the AuraSolve popup.");
+    await startWebLogin();
+    return {ok: true};
   }
   // Screenshot and chat work on any page, so they skip the practice-page setup.
   if (message.type === "captureScreen") {
@@ -1181,12 +1186,45 @@ async function toggleHighlight(tabId) {
   await chrome.scripting.executeScript({target: {tabId, allFrames: true}, files: ['src/content/bootstrap.js']}).catch(() => {});
   await setHighlight(tabId, on);
 }
+function base64url(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function startWebLogin() {
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const state = base64url(crypto.getRandomValues(new Uint8Array(16)));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  const challenge = base64url(digest);
+  await chrome.storage.session.set({loginPending: {verifier, state, at: Date.now()}});
+  await chrome.tabs.create({url: `${API_BASE}/login?state=${encodeURIComponent(state)}&challenge=${encodeURIComponent(challenge)}`});
+}
+const redeemedLogins = new Set();
+async function finishWebLogin(tabId, url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return; }
+  if (parsed.origin !== new URL(API_BASE).origin || parsed.pathname !== '/auth/done') return;
+  const state = parsed.searchParams.get('state') || '';
+  const handoff = parsed.searchParams.get('handoff') || '';
+  if (!state || !handoff || redeemedLogins.has(handoff)) return;
+  const pending = (await chrome.storage.session.get('loginPending')).loginPending;
+  if (!pending || pending.state !== state || Date.now() - pending.at > 10 * 60_000) return;
+  redeemedLogins.add(handoff);
+  try {
+    await redeemLogin(handoff, pending.verifier);
+    await chrome.storage.session.remove('loginPending');
+    chrome.tabs.remove(tabId).catch(() => {});
+  } catch {
+    redeemedLogins.delete(handoff);
+  }
+}
 chrome.tabs.onUpdated?.addListener((tabId, info, tab) => {
   const next = info.url || (info.status === 'loading' ? tab?.url : '');
   if (!next) return;
   const previous = tabUrls.get(tabId);
   tabUrls.set(tabId, next);
   if (previous && previous !== next) setHighlight(tabId, false);
+  finishWebLogin(tabId, next).catch(() => {});
 });
 chrome.commands.onCommand.addListener(async command => {
   if (command !== 'activate-aurasolve' && command !== 'open-aurasolve') return;

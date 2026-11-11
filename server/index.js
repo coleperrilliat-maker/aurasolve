@@ -5,7 +5,7 @@ import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
 import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, answerQuiz, FORM_KINDS} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
-import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, sendCode, createStripe} from "./billing.js";
+import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, createStripe} from "./billing.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 8_000_000;
@@ -48,6 +48,8 @@ const publicFiles = new Map([
   ["/terms", {file: nodePath.join(docsRoot, "terms.html"), type: "text/html; charset=utf-8"}],
   ["/privacy", {file: nodePath.join(docsRoot, "privacy.html"), type: "text/html; charset=utf-8"}],
   ["/install", {file: nodePath.join(docsRoot, "install.html"), type: "text/html; charset=utf-8"}],
+  ["/login", {file: nodePath.join(docsRoot, "login.html"), type: "text/html; charset=utf-8"}],
+  ["/auth/done", {file: nodePath.join(docsRoot, "auth-done.html"), type: "text/html; charset=utf-8"}],
   ["/style.css", {file: nodePath.join(docsRoot, "style.css"), type: "text/css; charset=utf-8"}],
   ["/script.js", {file: nodePath.join(docsRoot, "script.js"), type: "text/javascript; charset=utf-8"}],
   ["/app-icon.png", {file: nodePath.join(docsRoot, "app-icon.png"), type: "image/png"}],
@@ -88,6 +90,31 @@ function authorize(req, res) {
   return install;
 }
 
+function requestOrigin(req) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  const proto = req.headers["x-forwarded-proto"] || (/^(localhost|127\.)/.test(host) ? "http" : "https");
+  return `${proto}://${host}`;
+}
+const usedHandoffs = new Map();
+function takeHandoff(id, expires) {
+  const now = Date.now();
+  for (const [key, exp] of usedHandoffs) if (exp <= now) usedHandoffs.delete(key);
+  if (!id || usedHandoffs.has(id)) return false;
+  usedHandoffs.set(id, expires);
+  return true;
+}
+function readCookie(req, name) {
+  const header = req.headers.cookie || "";
+  const found = header.split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`));
+  if (!found) return "";
+  try { return decodeURIComponent(found.slice(name.length + 1)); } catch { return ""; }
+}
+function sessionCookie(req, token) {
+  const secure = requestOrigin(req).startsWith("https://") ? "; Secure" : "";
+  const value = token ? encodeURIComponent(token) : "";
+  const maxAge = token ? 90 * 24 * 60 * 60 : 0;
+  return `aura_session=${value}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+}
 function publicBase(req) {
   const configured = process.env.PUBLIC_URL?.trim();
   if (configured) return configured.replace(/\/$/, "");
@@ -148,8 +175,8 @@ function billingPage(res, title, message) {
   res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · AuraSolve</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px -apple-system,Segoe UI,sans-serif;background:#f5f7fb;color:#1d2433}main{background:#fff;border-radius:16px;padding:36px 40px;max-width:420px;text-align:center;box-shadow:0 10px 40px #1d24331a}img{width:56px;height:56px}h1{font-size:22px;margin:14px 0 8px}p{color:#5b6475;line-height:1.5}</style></head><body><main><img src="/icons/icon-128.png" alt=""><h1>${title}</h1><p>${message}</p></main></body></html>`);
 }
 
-function sendJson(res, status, payload) {
-  res.writeHead(status, {"Content-Type": "application/json"});
+function sendJson(res, status, payload, headers = {}) {
+  res.writeHead(status, {"Content-Type": "application/json", ...headers});
   res.end(JSON.stringify(payload));
 }
 
@@ -243,7 +270,9 @@ async function handleRequest(req, res) {
     return;
   }
 
-  if (path.startsWith("/api/") && req.method === "POST" && !trusted) {
+  const webLogin = path === "/api/v1/auth/web/start" || path === "/api/v1/auth/web/verify" || path === "/api/v1/auth/web/logout" || path === "/api/v1/auth/handoff";
+  const ownSite = req.headers.origin === requestOrigin(req);
+  if (path.startsWith("/api/") && req.method === "POST" && !trusted && !(webLogin && ownSite)) {
     sendJson(res, 403, {error: "Not allowed."});
     return;
   }
@@ -263,6 +292,66 @@ async function handleRequest(req, res) {
 
   if (path === "/api/v1/plans" && req.method === "GET") {
     sendJson(res, 200, {paywall: paywallEnabled(), freeTotal: freeSolves(), plans: Object.entries(PLANS).map(([id, plan]) => ({id, title: plan.title, price: plan.price, then: plan.then}))});
+    return;
+  }
+
+  if (path === "/api/v1/auth/session" && req.method === "GET") {
+    const email = readSession(readCookie(req, "aura_session"));
+    sendJson(res, 200, email ? {signedIn: true, email} : {signedIn: false});
+    return;
+  }
+
+  if (path === "/api/v1/auth/web/start" && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const email = normalizeEmail(payload.email);
+    if (!email) { sendJson(res, 400, {error: "Enter a valid email address."}); return; }
+    if (!codesPerIp(clientIp(req)) || !codesPerEmail(email)) { sendJson(res, 429, {error: "Too many codes requested. Wait a bit and try again."}); return; }
+    const {code, challenge} = createChallenge(email);
+    try { await mailer(email, code); }
+    catch (error) { sendJson(res, error.status || 502, {error: error.message}); return; }
+    sendJson(res, 200, {challenge});
+    return;
+  }
+
+  if (path === "/api/v1/auth/web/verify" && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    if (typeof payload.challenge !== "string" || !guessesPerChallenge(payload.challenge.slice(-43))) { sendJson(res, 429, {error: "Too many tries. Request a new code."}); return; }
+    const email = checkChallenge(payload.challenge, payload.code);
+    if (!email) { sendJson(res, 400, {error: "That code is wrong or expired."}); return; }
+    sendJson(res, 200, {ok: true, email}, {"Set-Cookie": sessionCookie(req, issueSession(email))});
+    return;
+  }
+
+  if (path === "/api/v1/auth/web/logout" && req.method === "POST") {
+    sendJson(res, 200, {ok: true}, {"Set-Cookie": sessionCookie(req, "")});
+    return;
+  }
+
+  if (path === "/api/v1/auth/handoff" && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const email = readSession(readCookie(req, "aura_session"));
+    const challenge = String(payload.challenge || "");
+    if (!email) { sendJson(res, 401, {error: "Sign in first."}); return; }
+    if (!/^[A-Za-z0-9_-]{43}$/.test(challenge)) { sendJson(res, 400, {error: "That login link is invalid. Start again from AuraSolve."}); return; }
+    sendJson(res, 200, {handoff: issueHandoff(email, challenge)});
+    return;
+  }
+
+  if (path === "/api/v1/auth/redeem" && req.method === "POST") {
+    if (!authorize(req, res)) return;
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const handoff = readHandoff(payload.handoff, payload.verifier);
+    if (!handoff || !takeHandoff(handoff.id, handoff.expires)) { sendJson(res, 400, {error: "That sign-in expired. Press Log in again."}); return; }
+    let account = null;
+    if (paywallEnabled()) {
+      try { account = await loadAccount(handoff.email, true); }
+      catch { sendJson(res, 503, {error: "Signed in, but AuraSolve couldn't load your plan. Try again in a minute."}); return; }
+    }
+    sendJson(res, 200, {session: issueSession(handoff.email), account: account ? publicAccount(account) : {paywall: false, signedIn: true, email: handoff.email}});
     return;
   }
 

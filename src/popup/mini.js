@@ -2,7 +2,7 @@ import {BUILD_VERSION} from '../shared/version.js';
 import {sendExtension} from '../shared/messaging.js';
 import {answerLines} from '../shared/render.js';
 import {normalizeOverlay, readOverlay, writeOverlay} from '../shared/overlay.js';
-import {account as loadAccount, plans as loadPlans, startSignIn, finishSignIn, signOut, checkoutUrl, portalUrl} from '../background/api.js';
+import {account as loadAccount, plans as loadPlans, signOut, checkoutUrl, portalUrl} from '../background/api.js';
 
 const $ = id => document.getElementById(id);
 $('version').textContent = `v${BUILD_VERSION}`;
@@ -220,6 +220,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     overlay = normalizeOverlay(changes.overlaySettings.newValue);
     drawOverlay();
   }
+  if (area === 'local' && changes.auraSession) refreshAccount();
   const key = tab?.id ? `highlight:${tab.id}` : '';
   if (area === 'session' && key && changes[key]) {
     highlightOn = Boolean(changes[key].newValue);
@@ -248,8 +249,7 @@ function drawPlans() {
 function drawAccount() {
   const state = accountState || {};
   const signedIn = Boolean(state.signedIn);
-  $('signin-email').hidden = signedIn || Boolean(challenge);
-  $('signin-code').hidden = signedIn || !challenge;
+  $('signed-out').hidden = signedIn;
   $('signed-in').hidden = !signedIn;
   if (!signedIn) return;
   $('who-title').textContent = state.email || 'Signed in';
@@ -269,27 +269,11 @@ async function refreshAccount() {
   } catch (error) { profileError(error.message); }
   drawAccount();
 }
-$('signin-email').onsubmit = async event => {
-  event.preventDefault();
+$('log-in').onclick = async () => {
   profileError('');
-  try {
-    challenge = (await startSignIn($('email').value)).challenge;
-    $('code-note').textContent = `Code sent to ${$('email').value.trim()}.`;
-    $('code').value = '';
-    drawAccount();
-    $('code').focus();
-  } catch (error) { profileError(error.message); }
+  try { await sendExtension({type: 'startWebLogin'}); }
+  catch (error) { profileError(error.message); }
 };
-$('signin-code').onsubmit = async event => {
-  event.preventDefault();
-  profileError('');
-  try {
-    accountState = await finishSignIn(challenge, $('code').value);
-    challenge = null;
-    await refreshAccount();
-  } catch (error) { profileError(error.message); }
-};
-$('code-back').onclick = () => { challenge = null; profileError(''); drawAccount(); };
 $('sign-out').onclick = async () => { await signOut(); accountState = null; challenge = null; refreshAccount(); };
 $('subscribe').onclick = async () => {
   profileError('');

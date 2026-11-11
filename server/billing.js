@@ -77,6 +77,31 @@ export function readSession(token, now = Date.now()) {
   } catch { return null; }
 }
 
+// The browser page never receives the session. It gets a two-minute handoff
+// that only the extension which started login can redeem, because only that
+// extension knows the verifier whose hash was sent with the login.
+const HANDOFF_MS = 2 * 60_000;
+export function pkceChallenge(verifier) {
+  return crypto.createHash("sha256").update(String(verifier)).digest("base64url");
+}
+export function issueHandoff(email, challenge, now = Date.now()) {
+  const id = crypto.randomBytes(16).toString("base64url");
+  const body = Buffer.from(JSON.stringify({email, challenge, id, expires: now + HANDOFF_MS})).toString("base64url");
+  return `h1.${body}.${hmac(`handoff.${body}`)}`;
+}
+export function readHandoff(token, verifier, now = Date.now()) {
+  if (typeof token !== "string" || token.length > 900 || typeof verifier !== "string" || verifier.length < 32 || verifier.length > 128) return null;
+  const [version, body, signature] = token.split(".");
+  if (version !== "h1" || !body || !signature || !same(signature, hmac(`handoff.${body}`))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    const email = normalizeEmail(data.email);
+    const expected = pkceChallenge(verifier);
+    if (!email || now > data.expires || typeof data.challenge !== "string" || data.challenge.length !== expected.length || !same(data.challenge, expected)) return null;
+    return {email, id: String(data.id || ""), expires: data.expires};
+  } catch { return null; }
+}
+
 export async function sendCode(email, code, fetcher = fetch) {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) throw Object.assign(new Error("Email sign-in isn't set up yet. Try again later."), {status: 503});

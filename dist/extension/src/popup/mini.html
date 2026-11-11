@@ -137,17 +137,10 @@
       <h1>Profile</h1>
     </header>
     <p id="profile-error" class="note error" hidden></p>
-    <form id="signin-email" class="stack" hidden>
-      <p class="lead">Sign in with a code. No password.</p>
-      <input id="email" type="email" autocomplete="email" placeholder="Email" required>
-      <button class="go" type="submit">Send code</button>
-    </form>
-    <form id="signin-code" class="stack" hidden>
-      <p class="lead" id="code-note">Check your email for a 6-digit code.</p>
-      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" required>
-      <button class="go" type="submit">Sign in</button>
-      <button id="code-back" class="text" type="button">Use a different email</button>
-    </form>
+    <div id="signed-out" class="stack" hidden>
+      <p class="lead">Sign in on the AuraSolve site. You'll come right back here.</p>
+      <button id="log-in" class="go" type="button">Log in</button>
+    </div>
     <div id="signed-in" class="stack" hidden>
       <div class="card who">
         <span class="avatar" aria-hidden="true"></span>

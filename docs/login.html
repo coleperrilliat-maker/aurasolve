@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · AuraSolve</title>
+  <link rel="icon" type="image/png" href="icon.png?v=3">
+  <link rel="stylesheet" href="style.css?v=54">
+</head>
+<body>
+  <main class="login-wrap">
+    <section class="login-card">
+      <a class="brand" href="index.html"><img src="icon.png?v=3" alt="" width="28" height="28"><span>AuraSolve</span></a>
+      <div id="ask">
+        <h1>Get started</h1>
+        <p class="lead">We'll email you a sign-in code. No password.</p>
+        <p id="error" class="login-error" hidden></p>
+        <form id="email-form">
+          <input id="email" type="email" autocomplete="email" placeholder="Email" required>
+          <button class="btn btn-primary btn-lg" type="submit">Send code</button>
+        </form>
+        <form id="code-form" hidden>
+          <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" required>
+          <button class="btn btn-primary btn-lg" type="submit">Sign in</button>
+          <button id="back" class="btn btn-ghost btn-lg" type="button">Use a different email</button>
+        </form>
+      </div>
+      <div id="done" hidden>
+        <h1>You're signed in</h1>
+        <p class="lead" id="done-note"></p>
+        <div class="stack">
+          <a class="btn btn-primary btn-lg" href="install.html">Install the extension</a>
+          <button id="switch" class="btn btn-ghost btn-lg" type="button">Use a different email</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="login.js?v=1"></script>
+</body>
+</html>

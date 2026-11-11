@@ -110,6 +110,11 @@ export async function finishSignIn(challenge, code) {
 export async function signOut() {
   await chrome.storage.local.remove(SESSION_KEY);
 }
+export async function redeemLogin(handoff, verifier) {
+  const data = await accountCall("/api/v1/auth/redeem", {handoff, verifier});
+  await chrome.storage.local.set({[SESSION_KEY]: data.session});
+  return data.account;
+}
 export const checkoutUrl = plan => accountCall("/api/v1/checkout", {plan}).then(data => data.url);
 export const portalUrl = () => accountCall("/api/v1/portal").then(data => data.url);
 
