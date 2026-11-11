@@ -89,7 +89,9 @@ if (demoVideo && demoButtons.length) {
   };
   demoButtons.forEach(button => button.addEventListener("click", () => {
     const next = demos.findIndex(demo => demo.id === button.dataset.demo);
-    if (next >= 0) show(next);
+    if (next < 0) return;
+    demos[next].missing = false;
+    show(next);
   }));
   const nextPlayable = from => {
     for (let hop = 1; hop <= demos.length; hop++) {
@@ -100,6 +102,7 @@ if (demoVideo && demoButtons.length) {
   };
   demoVideo.addEventListener("ended", () => show(nextPlayable(index)));
   demoVideo.addEventListener("error", () => {
+    if (demoVideo.error?.code === 1) return;
     demos[index].missing = true;
     const next = nextPlayable(index);
     if (next !== index) show(next);
