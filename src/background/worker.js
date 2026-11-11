@@ -864,7 +864,7 @@ async function handle(message,sender) {
       if(Array.isArray(message.retryContext))question.retryContext=message.retryContext.slice(-3);
 
       const drawFigure=/draw the next figure|list of figures/i.test(question.question || '');
-      if (question.imageBased || drawFigure || /\bfigures?\b/i.test(question.question || '')) question.visual = true;
+      if (question.imageBased || drawFigure || /\bfigures?\b|\brange of possible values\b|\bhinge\b|\binequalit/i.test(question.question || '')) question.visual = true;
       if (question.imageBased) {
         const revealed = state.question.documentId ? await frameCall(tabId, state.question.documentId, 'revealQuestion').catch(() => null) : null;
         question.rect = revealed?.rect || rect;
