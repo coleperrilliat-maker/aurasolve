@@ -27,7 +27,8 @@ export function congruenceQuestion(snapshot) {
   return CONGRUENCE.test(questionText(snapshot));
 }
 export function hardGeometryQuestion(snapshot) {
-  return HARD_GEOMETRY.test(questionText(snapshot)) || (snapshot?.visual && /\brange\b|\binequalit|\bhinge\b|\bpossible values\b/i.test(questionText(snapshot)));
+  const text = questionText(snapshot);
+  return HARD_GEOMETRY.test(text) || Boolean(snapshot?.visual && /\brange\b|\binequalit|\bhinge\b|\bpossible values\b/i.test(text));
 }
 function radioNote(snapshot) {
   const groups = new Set((snapshot.fields || []).filter(field => field.kind === "radio" && field.adapter !== "sara-choice" && field.group).map(field => field.group));
@@ -207,7 +208,7 @@ export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,reques
  if(snapshot.retryContext?.length || cheap===strong)return solveWith(strongChain,chosen || "high");
  // Hinge / inequality range questions: mini often agrees with itself on a
  // wrong bound that ignores the figure comparison, so skip the cheap vote.
- if(hardGeometryQuestion(snapshot) || congruenceQuestion(snapshot))return solveWith(strongChain,chosen || "high");
+ if(hardGeometryQuestion(snapshot))return solveWith(strongChain,chosen || "high");
  // Mini's own confidence is not trusted; it is often confidently wrong. Two
  // cheap solves with different reasoning budgets must fill every blank the
  // same way. Only a disagreement or failure pays for the strong model.
