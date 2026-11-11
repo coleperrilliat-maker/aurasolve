@@ -15,7 +15,7 @@ export function pickModel(requested) {
 }
 const EFFORTS = ["none", "minimal", "low", "medium", "high"];
 const CONGRUENCE = /\b(ASA|AAS|SAS|SSS|HL)\b|\bcongruen|\bcorresponding\b|\btriangle\b.*\b(proof|postulate|theorem)\b|\b(proof|postulate|theorem)\b.*\btriangle|\bnot enough information\b.*\bcongruen|\bprove(?:s|d|n)?\b.*\bcongruen/i;
-const HARD_GEOMETRY = /\bhinge\b|\bconverse of the hinge\b|\brange of possible values\b|\bpossible values for\b|\bm\s*∠|\bmeasure of angle\b|\btriangle inequalit|\bin equalit(?:y|ies) in (?:two )?triangles\b|\bSAS inequalit|\blonger third side\b|\bincluded angle\b|\bcannot have the labeled dimensions\b|\bfigure cannot\b|\bmake the figure possible\b|\bfigure not drawn to scale\b/i;
+const HARD_GEOMETRY = /\bhinge\b|\bconverse of the hinge\b|\brange of possible values\b|\bpossible values for\b|\bm\s*∠|\bmeasure of angle\b|\btriangle inequalit|\bin equalit(?:y|ies) in (?:two )?triangles\b|\bSAS inequalit|\blonger third side\b|\bincluded angle\b|\bcannot have the labeled dimensions\b|\bfigure cannot\b|\bmake the figure possible\b|\bfigure not drawn to scale\b|\bnot drawn to scale\b|\bleast to greatest\b|\border from least\b/i;
 function questionText(snapshot) {
   const fields = snapshot?.fields || [];
   return [

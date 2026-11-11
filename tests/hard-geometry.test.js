@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {GEOMETRY_CHECKS} from '../server/instructions.js';
 import {congruenceQuestion, hardGeometryQuestion} from '../server/openai.js';
 
 test('range-of-values hinge questions are hard geometry', () => {
@@ -22,6 +23,16 @@ test('ordinary algebra is not hard geometry', () => {
     question: 'Solve 2x + 5 = 17.',
     fields: [{kind: 'text', label: 'x'}],
   }), false);
+});
+
+test('a fan of isosceles triangles is not sorted by the printed angles', () => {
+  assert.match(GEOMETRY_CHECKS, /180° − 2×/);
+  assert.match(GEOMETRY_CHECKS, /AB, CD, EF, DE, BC/);
+  assert.equal(hardGeometryQuestion({
+    question: 'List the lengths of AB, BC, CD, DE, and EF in order from least to greatest. Note the figure is not drawn to scale.',
+    fields: [{kind: 'radio', label: 'A. AB, CD, EF, DE, BC'}],
+    visual: true,
+  }), true);
 });
 
 test('congruence questions still detect ASA/AAS wording', () => {
