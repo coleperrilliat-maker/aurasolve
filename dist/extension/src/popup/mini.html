@@ -6,53 +6,129 @@
   <link rel="stylesheet" href="mini.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <img src="../../icons/icon-48.png" alt="" width="20" height="20">
-      <span>AuraSolve</span>
+  <section class="page" data-page="home">
+    <header class="top">
+      <img src="../../icons/icon-48.png" alt="" width="28" height="28">
+      <div>
+        <strong>AuraSolve</strong>
+        <p class="hint" id="hint">Page buttons · ⌘⇧X</p>
+      </div>
+      <small id="version"></small>
+    </header>
+
+    <div id="site-access" class="banner" role="alert" hidden>
+      <span>Chrome is blocking AuraSolve on homework sites.</span>
+      <button id="allow-sites" type="button">Allow</button>
     </div>
-    <p class="hint">Page buttons · <kbd>⌘</kbd><kbd>⇧</kbd><kbd>X</kbd></p>
-  </header>
 
-  <div id="site-access" class="access" role="alert" hidden>
-    <span>Chrome is blocking AuraSolve on your homework sites.</span>
-    <button id="allow-sites" type="button">Allow</button>
-  </div>
+    <div class="tiles">
+      <button class="tile" type="button" data-go="autopilot">
+        <span class="ic ink" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12 20 5l-6 14-2-6z"/></svg></span>
+        <span><strong>AutoPilot</strong><small id="home-pilot">Work through questions</small></span>
+      </button>
+      <button class="tile" type="button" data-go="chat">
+        <span class="ic blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 17.5 4 20V7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v7A2.5 2.5 0 0 1 17.5 17H8z"/></svg></span>
+        <span><strong>Chat</strong><small>Ask about this page</small></span>
+      </button>
+      <button class="tile" type="button" data-go="settings">
+        <span class="ic slate" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 8h9M18 8h1M5 16h3M12 16h7"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/></svg></span>
+        <span><strong>Settings</strong><small>Buttons &amp; anonymous</small></span>
+      </button>
+      <button class="tile" type="button" data-go="profile">
+        <span class="ic blue" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.2"/><path d="M6 19c.8-2.8 3-4.2 6-4.2s5.2 1.4 6 4.2"/></svg></span>
+        <span><strong>Profile</strong><small id="home-profile">Account &amp; plan</small></span>
+      </button>
+    </div>
 
-  <button id="pilot" class="panel primary" type="button">
-    <span id="pilot-title">Start AutoPilot</span>
-    <small id="pilot-text">Works through unfinished questions</small>
-  </button>
-
-  <div class="row">
-    <button id="solve" class="panel" type="button">Solve this</button>
-    <button id="shot" class="panel" type="button">Screenshot</button>
-  </div>
-
-  <button id="chat" class="panel slim" type="button">Chat</button>
-
-  <div class="panel switch-row">
-    <span>
-      <em>Anonymous</em>
-      <small id="ghost-state">Buttons stay clickable, but invisible</small>
-    </span>
-    <button id="ghost" class="switch" type="button" role="switch" aria-checked="false" aria-label="Anonymous mode"></button>
-  </div>
-
-  <button id="remove" class="panel slim mute" type="button">Remove page buttons</button>
-
-  <p id="note" class="note" aria-live="polite"></p>
-
-  <footer class="foot">
-    <button id="profile" class="profile" type="button">
-      <span class="avatar" aria-hidden="true"></span>
-      <span>
-        <em>Profile</em>
-        <small id="profile-text">Account &amp; plan</small>
-      </span>
+    <button id="solve" class="action" type="button">
+      <span class="ic sm blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3.5 13.8 8 18.5 9.8 13.8 11.6 12 16.2 10.2 11.6 5.5 9.8 10.2 8z"/></svg></span>
+      <span>Solve this</span>
     </button>
-    <small id="version"></small>
-  </footer>
+    <button id="shot" class="action" type="button">
+      <span class="ic sm ink" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6.5 9.2 5h5.6L16 6.5h2A1.5 1.5 0 0 1 19.5 8v9A1.5 1.5 0 0 1 18 18.5H6A1.5 1.5 0 0 1 4.5 17V8A1.5 1.5 0 0 1 6 6.5z"/><circle cx="12" cy="12" r="2.6"/></svg></span>
+      <span>Screenshot</span>
+    </button>
+    <p id="note" class="note" aria-live="polite"></p>
+  </section>
+
+  <section class="page" data-page="autopilot" hidden>
+    <header class="bar">
+      <button class="back" type="button" data-back aria-label="Back">‹</button>
+      <h1>AutoPilot</h1>
+    </header>
+    <p class="lead">Works through unfinished questions. It checks answers and goes next. It never submits the assignment.</p>
+    <button id="pilot" class="go" type="button">
+      <span id="pilot-title">Start AutoPilot</span>
+      <small id="pilot-text">Ready on this tab</small>
+    </button>
+    <label class="row">
+      <span><strong>Speed run</strong><small>No extra wait between questions</small></span>
+      <input id="speed-run" class="check" type="checkbox">
+    </label>
+  </section>
+
+  <section class="page chat-page" data-page="chat" hidden>
+    <header class="bar">
+      <button class="back" type="button" data-back aria-label="Back">‹</button>
+      <h1>Chat</h1>
+    </header>
+    <div id="thread" class="thread">
+      <p class="empty">Ask about the question on this tab.</p>
+    </div>
+    <form id="composer" class="composer">
+      <button id="attach" type="button" aria-pressed="false">Screen</button>
+      <input id="prompt" type="text" placeholder="Ask AuraSolve…" autocomplete="off">
+      <button class="send" type="submit" aria-label="Send">↑</button>
+    </form>
+    <p id="chat-note" class="note" aria-live="polite"></p>
+  </section>
+
+  <section class="page" data-page="settings" hidden>
+    <header class="bar">
+      <button class="back" type="button" data-back aria-label="Back">‹</button>
+      <h1>Settings</h1>
+    </header>
+    <div class="card">
+      <div class="row">
+        <span><strong>Anonymous</strong><small id="ghost-state">Page buttons stay clickable, but invisible</small></span>
+        <button id="ghost" class="switch" type="button" role="switch" aria-checked="false" aria-label="Anonymous mode"></button>
+      </div>
+      <button id="remove" class="row btn" type="button">
+        <span><strong>Page buttons</strong><small id="remove-state">Shown on the question</small></span>
+      </button>
+    </div>
+    <p class="lead" id="shortcut">Press ⌘⇧X on a homework tab to show the buttons and turn on highlight-to-solve.</p>
+    <p id="settings-note" class="note" aria-live="polite"></p>
+  </section>
+
+  <section class="page" data-page="profile" hidden>
+    <header class="bar">
+      <button class="back" type="button" data-back aria-label="Back">‹</button>
+      <h1>Profile</h1>
+    </header>
+    <p id="profile-error" class="note error" hidden></p>
+    <form id="signin-email" class="stack" hidden>
+      <p class="lead">Sign in with a code. No password.</p>
+      <input id="email" type="email" autocomplete="email" placeholder="Email" required>
+      <button class="go" type="submit">Send code</button>
+    </form>
+    <form id="signin-code" class="stack" hidden>
+      <p class="lead" id="code-note">Check your email for a 6-digit code.</p>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" required>
+      <button class="go" type="submit">Sign in</button>
+      <button id="code-back" class="text" type="button">Use a different email</button>
+    </form>
+    <div id="signed-in" class="stack" hidden>
+      <div class="card who">
+        <span class="avatar" aria-hidden="true"></span>
+        <span><strong id="who-title">Account</strong><small id="who-detail"></small></span>
+      </div>
+      <div id="plans" class="stack" hidden></div>
+      <button id="subscribe" class="go" type="button" hidden>Continue</button>
+      <button id="manage" class="go ghost" type="button" hidden>Manage plan</button>
+      <button id="sign-out" class="text" type="button">Sign out</button>
+    </div>
+  </section>
 
   <script type="module" src="mini.js"></script>
 </body>
