@@ -24,11 +24,11 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .tile{
   display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:22px;
-  min-height:128px;padding:18px 16px 16px;border-radius:22px;background:#fff;text-align:left;
+  min-height:138px;padding:18px 16px 16px;border-radius:22px;background:#fff;text-align:left;
   box-shadow:0 10px 28px rgba(24,28,45,.06);
 }
 .tile:active,.bar-btn:active,.go:active{transform:scale(.98)}
-.tile svg,.bar-btn svg{width:28px;height:28px;stroke:#2f6fed;stroke-width:1.7}
+.tile svg,.bar-btn svg{width:52px;height:52px;stroke:#2f6fed;stroke-width:1.55}
 .tile strong{font-size:18px;font-weight:700;letter-spacing:-.03em}
 .tile.running strong{color:#2f6fed}
 .tile:disabled{opacity:.45}
@@ -39,7 +39,7 @@ svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
   padding:12px 16px;border-radius:18px;background:#fff;text-align:left;
   box-shadow:0 8px 22px rgba(24,28,45,.05);
 }
-.bar-btn svg{width:22px;height:22px}
+.bar-btn svg{width:34px;height:34px;stroke-width:1.7}
 .bar-btn strong{font-size:16px;font-weight:700;letter-spacing:-.02em}
 
 .note{min-height:16px;margin:10px 2px 0;color:#6e6e73;font-size:12.5px;white-space:pre-line}
