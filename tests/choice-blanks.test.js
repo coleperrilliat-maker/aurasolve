@@ -73,6 +73,19 @@ test('a blank inside one choice belongs to that radio', () => {
   assert.equal(choiceOwnerRadio(prompt, [a, c]), null);
 });
 
+test('a blank in the label belongs to the radio the label points at', () => {
+  const choice = radio('A', 'Since AB = and AC =');
+  choice.id = 'choice-a';
+  const first = blank();
+  const second = blank();
+  const label = node({tagName:'LABEL', text:'A. Since AB = and AC =', children:[first, second]});
+  label.getAttribute = key => key === 'for' ? 'choice-a' : null;
+  const climb = el => { el.closest = selector => selector === 'label' ? label : null; };
+  climb(first); climb(second);
+  assert.equal(choiceOwnerRadio(first, [choice]), choice);
+  assert.equal(choiceOwnerRadio(second, [choice]), choice);
+});
+
 test('only the selected choice blanks are required', () => {
   const fields = [
     {id:'a', kind:'radio', group:'pick'}, {id:'c', kind:'radio', group:'pick'},

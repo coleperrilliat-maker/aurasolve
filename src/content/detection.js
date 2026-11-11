@@ -14,7 +14,7 @@ export function idFor(el) {
 export const elementFor = id => elements.get(id);
 const clean = value => String(value || "").replace(/\s+/g," ").trim();
 const editorSelector = '[data-aura-editor], .mq-editable-field, .mathquill-editable, span.eqEditor.inputField, span.eqEditor[widgetid]';
-const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [data-aura-editor], [data-aura-graph], [data-aura-draggable], [draggable="true"], .dojoDndItem, [role="slider"]';
+const fieldSelector = 'input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"], [data-aura-editor], [data-aura-graph], [data-aura-draggable], [draggable="true"], .dojoDndItem, [role="slider"]';
 // Pearson matching boxes are dojo drop targets; a box that already holds tiles is the tile bank.
 const dropSelector = '[data-aura-drop], [aria-dropeffect]:not([aria-dropeffect="none"]), .dojoDndTarget:not(:has(.dojoDndItem)), .dojoDndSource:not(:has(.dojoDndItem))';
 const dropLabel = el => clean(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText) || clean(fieldContext(el)).slice(0,200) || labelFor(el);
@@ -88,13 +88,34 @@ function groupAnchor(el, prompts) {
   if (prior.length === 1) return prior[0];
   return el?.name ? `name:${el.name}` : el;
 }
+function precedingText(el) {
+  let text = '';
+  let node = el?.previousSibling;
+  for (let hops = 0; node && hops < 6 && text.length < 80; hops++, node = node.previousSibling) text = `${node.textContent || ''}${text}`;
+  return clean(text).slice(-80);
+}
+// A blank inside "A. Since AB = [ ] and AC = [ ]" often lives in the label,
+// while the radio is the label's sibling. Tie the blank to that radio anyway.
 function choiceOwner(el, radios) {
+  const list = radios || [];
+  const label = el.closest?.('label');
+  if (label) {
+    const linked = list.find(radio => radio.id && label.getAttribute?.('for') === radio.id);
+    if (linked) return {radio: linked, row: label};
+    const insideLabel = list.filter(radio => label.contains?.(radio));
+    if (insideLabel.length === 1) return {radio: insideLabel[0], row: label};
+  }
   let node = el?.parentElement;
   for (let depth = 0; node && depth < 16; depth++, node = node.parentElement) {
-    const inside = (radios || []).filter(radio => node.contains?.(radio));
+    const inside = list.filter(radio => node.contains?.(radio));
     if (inside.length === 1) return {radio: inside[0], row: node};
-    // Once a node holds more than one radio, we've left the individual choice row.
-    if (inside.length > 1) break;
+    if (inside.length > 1) {
+      // Nearest radio before this blank, with no other radio in between.
+      const before = inside.filter(radio => radio.compareDocumentPosition?.(el) & 4);
+      const radio = before.at(-1);
+      if (radio) return {radio, row: label || node};
+      break;
+    }
   }
   return null;
 }
@@ -204,7 +225,8 @@ export function snapshot() {
     if (el.isContentEditable && el.parentElement?.closest('[contenteditable="true"], [contenteditable="plaintext-only"]')) continue;
     const radio = el.type === "radio" ? radioInfo.get(el) : null;
     const rowText = owned ? clean(owned.row?.innerText || owned.row?.textContent || '') : '';
-    const base = {id:idFor(el),label:rowText && !el.getAttribute?.('aria-label') ? rowText.slice(0,180) : labelFor(el),context:radio?.context || rowText || fieldContext(el)};
+    const lead = owned ? precedingText(el) : '';
+    const base = {id:idFor(el),label:(lead || (rowText && !el.getAttribute?.('aria-label') ? rowText.slice(0,180) : labelFor(el))).slice(0,180),context:radio?.context || rowText || fieldContext(el)};
     const choice = owned ? {choice:idFor(owned.radio)} : {};
     if (el.dataset?.auraEditor === 'dojo-select') {
       try {
