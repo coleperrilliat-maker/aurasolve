@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve \u2014 Practice Tutor",
-  "version": "1.21.27",
+  "version": "1.21.28",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "141",
   "permissions": [
@@ -59,6 +59,8 @@
         "https://*.mymathlab.com/*",
         "https://*.raydass.com/*",
         "https://docs.google.com/*",
+        "https://*.instructure.com/*",
+        "https://canvas.wpi.edu/*",
         "http://localhost:4318/*",
         "http://127.0.0.1:4318/*"
       ],
@@ -81,6 +83,8 @@
         "https://*.mymathlab.com/*",
         "https://*.raydass.com/*",
         "https://docs.google.com/*",
+        "https://*.instructure.com/*",
+        "https://canvas.wpi.edu/*",
         "http://localhost:4318/*",
         "http://127.0.0.1:4318/*"
       ],

@@ -4,9 +4,14 @@ import {execute,advance,nextProblem,clickControl,dismissFeedback,stayOnIncomplet
 import {createUI} from "./ui.js";
 import {captureFigures} from './figures.js';
 import {startForms} from './gforms.js';
-import {isGoogleForm} from '../shared/form-answer.js';
+import {isCanvasHost, isCanvasQuiz, isGoogleForm} from '../shared/form-answer.js';
+import {startCanvas} from './canvas.js';
 export async function start() {
   trackSelection();
+  if (isCanvasHost(location.hostname)) {
+    if (isCanvasQuiz(location.href)) startCanvas();
+    return;
+  }
   const forms = isGoogleForm(location.href) || /\/forms\/?$/.test(location.pathname);
   if (forms) startForms();
   const ui = forms ? null : createUI();

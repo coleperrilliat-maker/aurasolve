@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchOption, isGoogleForm} from '../src/shared/form-answer.js';
+import {matchOption, isGoogleForm, isCanvasQuiz} from '../src/shared/form-answer.js';
 import {formSchema} from '../server/openai.js';
 
 test('answers are matched back to the exact Google Forms choice', () => {
@@ -20,6 +20,13 @@ test('only Google Forms answer pages turn on highlight mode', () => {
   assert.equal(isGoogleForm('https://docs.google.com/forms/d/1YkrO63f9a/edit'), false);
   assert.equal(isGoogleForm('https://docs.google.com/document/d/abc/edit'), false);
   assert.equal(isGoogleForm('http://localhost:4318/forms'), true);
+});
+
+test('Canvas quiz pages turn on highlight mode', () => {
+  assert.equal(isCanvasQuiz('https://canvas.wpi.edu/courses/36755/quizzes/53024/take'), true);
+  assert.equal(isCanvasQuiz('https://school.instructure.com/courses/9/quizzes/3/take?preview=1'), true);
+  assert.equal(isCanvasQuiz('https://canvas.wpi.edu/courses/36755/modules'), false);
+  assert.equal(isCanvasQuiz('https://docs.google.com/forms/d/e/abc/viewform'), false);
 });
 
 test('the form answer schema only allows real choices', () => {

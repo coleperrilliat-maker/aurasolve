@@ -12,6 +12,18 @@ export function matchOption(options, wanted) {
   return stripped.length === 1 ? stripped[0] : null;
 }
 
+export function isCanvasHost(hostname) {
+  return /(^|\.)instructure\.com$/i.test(hostname) || /^canvas\./i.test(hostname);
+}
+
+export function isCanvasQuiz(url) {
+  try {
+    const {hostname, pathname} = new URL(url);
+    if (!isCanvasHost(hostname)) return false;
+    return /\/quizzes\/\d+\/take(?:\/|$)/.test(pathname);
+  } catch { return false; }
+}
+
 export function isGoogleForm(url) {
   try {
     const {hostname, pathname, searchParams} = new URL(url);
