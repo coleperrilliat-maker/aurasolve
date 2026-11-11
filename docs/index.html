@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=49">
+  <link rel="stylesheet" href="style.css?v=50">
 </head>
 <body>
   <header class="topbar">
@@ -57,7 +57,20 @@
         </ul>
       </div>
       <figure class="demo" id="demo">
-        <video src="demo.mp4?v=2" autoplay muted loop playsinline preload="auto" aria-label="AuraSolve demo"></video>
+        <div class="demo-apps" role="tablist" aria-label="Choose a demo">
+          <button class="app-btn is-on" type="button" role="tab" data-demo="forms" aria-selected="true" aria-label="Google Forms" style="--ring:#7b3ff2">
+            <img src="apps/forms.png" alt="">
+          </button>
+          <button class="app-btn" type="button" role="tab" data-demo="canvas" aria-selected="false" aria-label="Canvas" style="--ring:#e1242a">
+            <img src="apps/canvas.png" alt="">
+          </button>
+          <button class="app-btn" type="button" role="tab" data-demo="pearson" aria-selected="false" aria-label="Pearson" style="--ring:#0099d8">
+            <img src="apps/pearson.png" alt="">
+          </button>
+        </div>
+        <div class="demo-frame">
+          <video id="demo-video" muted playsinline preload="auto" aria-label="AuraSolve on Google Forms"></video>
+        </div>
       </figure>
     </section>
 
@@ -311,6 +324,6 @@
     <span>© 2026 AuraSolve. Not affiliated with Pearson.</span>
   </footer>
 
-  <script src="script.js?v=2"></script>
+  <script src="script.js?v=3"></script>
 </body>
 </html>
