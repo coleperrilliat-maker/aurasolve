@@ -7,9 +7,11 @@
 </head>
 <body>
   <header class="top">
-    <img src="../../icons/icon-48.png" alt="" width="26" height="26">
-    <strong>AuraSolve</strong>
-    <small id="version"></small>
+    <div class="brand">
+      <img src="../../icons/icon-48.png" alt="" width="22" height="22">
+      <strong>AuraSolve</strong>
+    </div>
+    <p class="hint">Open with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>X</kbd></p>
   </header>
 
   <div id="site-access" class="access" role="alert" hidden>
@@ -17,32 +19,41 @@
     <button id="allow-sites" type="button">Allow</button>
   </div>
 
-  <button id="pilot" class="tile wide" type="button">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8z"/></svg>
-    <span><strong id="pilot-title">Start AutoPilot</strong><small id="pilot-text">Works through unfinished questions</small></span>
+  <button id="pilot" class="primary" type="button">
+    <span id="pilot-title">Start AutoPilot</span>
+    <small id="pilot-text">Works through unfinished questions</small>
   </button>
 
-  <div class="grid">
-    <button id="solve" class="tile" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
-      <strong>Solve this</strong>
-    </button>
-    <button id="shot" class="tile" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15"/></svg>
-      <strong>Screenshot</strong>
-    </button>
-    <button id="ghost" class="tile" type="button" aria-pressed="false">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c5 0 9 5 9 7a10 10 0 0 1-2.4 3.4M6.6 6.6C4.4 8 3 10.3 3 12c0 2 4 7 9 7a9 9 0 0 0 4.4-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
-      <strong>Anonymous</strong>
-      <small id="ghost-state">Buttons visible</small>
-    </button>
-    <button id="settings" class="tile" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
-      <strong>Settings</strong>
-    </button>
+  <div class="actions">
+    <button id="solve" type="button">Solve this</button>
+    <button id="shot" type="button">Screenshot</button>
   </div>
 
+  <button id="chat" class="text" type="button">Chat</button>
+
+  <div class="switch-row">
+    <span>
+      <strong>Anonymous</strong>
+      <small id="ghost-state">Buttons stay clickable, but invisible</small>
+    </span>
+    <button id="ghost" class="switch" type="button" role="switch" aria-checked="false" aria-label="Anonymous mode"></button>
+  </div>
+
+  <button id="remove" class="text" type="button">Remove page buttons</button>
+
   <p id="note" class="note" aria-live="polite"></p>
+
+  <footer class="foot">
+    <button id="profile" class="profile" type="button">
+      <span class="avatar" aria-hidden="true"></span>
+      <span>
+        <strong>Profile</strong>
+        <small id="profile-text">Account &amp; plan</small>
+      </span>
+    </button>
+    <small id="version"></small>
+  </footer>
+
   <script type="module" src="mini.js"></script>
 </body>
 </html>

@@ -5,8 +5,17 @@ import {readOverlay, writeOverlay} from '../shared/overlay.js';
 
 const $ = id => document.getElementById(id);
 $('version').textContent = BUILD_VERSION;
+const mac = /Mac|iPhone|iPad/.test(navigator.platform || '');
+document.querySelector('.hint').innerHTML = mac
+  ? 'Open with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>X</kbd>'
+  : 'Open with <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>X</kbd>';
+
 const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
 const note = (text, error = false) => { $('note').textContent = text || ''; $('note').classList.toggle('error', error); };
+const openPage = hash => {
+  chrome.tabs.create({url: chrome.runtime.getURL(`src/popup/popup.html${hash || ''}`)});
+  window.close();
+};
 
 /* ---------- AutoPilot (runs in the offscreen page, so it survives this popup closing) ---------- */
 function pilotSettings() {
@@ -26,7 +35,7 @@ function drawPilot(status) {
   pilotRunning = Boolean(status?.running);
   $('pilot').classList.toggle('running', pilotRunning);
   $('pilot-title').textContent = pilotRunning ? 'Stop AutoPilot' : 'Start AutoPilot';
-  $('pilot-text').textContent = status?.text || 'Answers every unfinished question';
+  $('pilot-text').textContent = status?.text || 'Works through unfinished questions';
 }
 drawPilot((await chrome.storage.session.get('pilotStatus')).pilotStatus);
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -68,22 +77,40 @@ $('shot').onclick = () => {
   setTimeout(() => { if (!failed) window.close(); }, 700);
 };
 
-/* ---------- Anonymous: on-page buttons stay clickable but invisible ---------- */
+$('chat').onclick = () => openPage('#home');
+$('profile').onclick = () => openPage('#account');
+
+/* ---------- Anonymous switch + remove page buttons ---------- */
 let overlay = await readOverlay();
-function drawGhost() {
-  $('ghost').setAttribute('aria-pressed', String(overlay.invisible));
-  $('ghost-state').textContent = overlay.invisible ? 'Hidden' : 'Buttons visible';
+function drawOverlay() {
+  const removed = !overlay.showFill && !overlay.showShot;
+  $('ghost').setAttribute('aria-checked', String(overlay.invisible));
+  $('ghost-state').textContent = overlay.invisible
+    ? 'Invisible · click zones still work'
+    : 'Buttons stay clickable, but invisible';
+  $('remove').classList.toggle('on', removed);
+  $('remove').textContent = removed ? 'Show page buttons' : 'Remove page buttons';
+  $('ghost').disabled = removed;
 }
-drawGhost();
+drawOverlay();
+
 $('ghost').onclick = async () => {
+  if (!overlay.showFill && !overlay.showShot) return;
   overlay = await writeOverlay({...overlay, invisible: !overlay.invisible});
-  drawGhost();
-  note(overlay.invisible ? 'On-page buttons are invisible. Click where they were, or highlight a word to solve.' : 'On-page buttons are visible again.');
+  drawOverlay();
+  note(overlay.invisible ? 'Page buttons are invisible.' : 'Page buttons are visible again.');
 };
 
-$('settings').onclick = () => {
-  chrome.tabs.create({url: chrome.runtime.getURL('src/popup/popup.html#settings')});
-  window.close();
+$('remove').onclick = async () => {
+  const removed = !overlay.showFill && !overlay.showShot;
+  overlay = await writeOverlay({
+    ...overlay,
+    showFill: removed,
+    showShot: removed,
+    invisible: removed ? overlay.invisible : false,
+  });
+  drawOverlay();
+  note(removed ? 'Page buttons are back.' : 'Page buttons removed from the question.');
 };
 
 /* ---------- Site access ---------- */

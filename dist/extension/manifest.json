@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve \u2014 Practice Tutor",
-  "version": "1.21.11",
+  "version": "1.21.12",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "141",
   "permissions": [
@@ -34,13 +34,21 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "AuraSolve",
+    "default_title": "AuraSolve · ⌘⇧X",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png"
-    },
-    "default_popup": "src/popup/mini.html"
+    }
+  },
+  "commands": {
+    "open-aurasolve": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "Open AuraSolve"
+    }
   },
   "content_scripts": [
     {

@@ -1098,3 +1098,35 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   return true;
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);chrome.storage.session.remove(`pilotRun:${tabId}`);});
+
+// Toolbar click does nothing. AuraSolve opens only from ⌘⇧X / Ctrl+Shift+X.
+const POPUP = 'src/popup/mini.html';
+async function openAuraPopup() {
+  try {
+    await chrome.action.setPopup({popup: POPUP});
+    await chrome.action.openPopup();
+  } catch {
+    const current = await chrome.windows.getCurrent().catch(() => null);
+    await chrome.windows.create({
+      url: chrome.runtime.getURL(POPUP),
+      type: 'popup',
+      width: 340,
+      height: 560,
+      focused: true,
+      ...(current ? {
+        left: Math.max(0, (current.left || 0) + Math.max(0, (current.width || 900) - 360)),
+        top: (current.top || 80) + 60,
+      } : {}),
+    });
+  } finally {
+    await chrome.action.setPopup({popup: ''}).catch(() => {});
+  }
+}
+chrome.commands.onCommand.addListener(command => {
+  if (command === 'open-aurasolve') openAuraPopup();
+});
+chrome.action.onClicked.addListener(() => {
+  chrome.action.setBadgeText({text: '⌘X'});
+  chrome.action.setBadgeBackgroundColor({color: '#2f55e6'});
+  setTimeout(() => chrome.action.setBadgeText({text: ''}), 1600);
+});
