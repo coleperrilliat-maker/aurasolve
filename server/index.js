@@ -5,7 +5,10 @@ import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
 import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, answerQuiz, FORM_KINDS} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
-import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, createStripe} from "./billing.js";
+import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, sendReset, issueOauth, readOauth, issueReset, readReset, randomNonce, createStripe} from "./billing.js";
+import {createMemoryUsers, createPostgresUsers} from "./users.js";
+import {hashPassword, verifyPassword, passwordOk, sameText, dummyPasswordHash} from "./passwords.js";
+import {googleConfigured, googleStartUrl, googleIdentity} from "./google.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 8_000_000;
@@ -16,14 +19,30 @@ const installsPerIp = createLimiter(10, 60 * 60_000);
 const codesPerEmail = createLimiter(5, 60 * 60_000);
 const codesPerIp = createLimiter(20, 60 * 60_000);
 const guessesPerChallenge = createLimiter(5, 15 * 60_000);
+const loginsPerIp = createLimiter(30, 15 * 60_000);
+const loginsPerEmail = createLimiter(10, 15 * 60_000);
 const accountCache = new Map();
 let stripe = createStripe();
 let mailer = sendCode;
-// Tests swap in fakes for Stripe and email.
-export function setBillingDeps({stripe: nextStripe, mailer: nextMailer} = {}) {
+let resetMailer = sendReset;
+let users = createMemoryUsers();
+let googleFetcher = fetch;
+// Tests swap in fakes for Stripe, email, and the account directory.
+export function setBillingDeps({stripe: nextStripe, mailer: nextMailer, resetMailer: nextReset, users: nextUsers, googleFetcher: nextGoogle} = {}) {
   if (nextStripe) stripe = nextStripe;
   if (nextMailer) mailer = nextMailer;
+  if (nextReset) resetMailer = nextReset;
+  if (nextUsers) users = nextUsers;
+  if (nextGoogle) googleFetcher = nextGoogle;
   accountCache.clear();
+}
+async function openUsers() {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) {
+    console.error("DATABASE_URL is not set. Password and Google accounts will reset when the server restarts.");
+    return;
+  }
+  users = await createPostgresUsers(url);
 }
 // Extensions released before per-install tokens send this old public value.
 // It is accepted only until store users have had time to update.
@@ -115,6 +134,29 @@ function sessionCookie(req, token) {
   const maxAge = token ? 90 * 24 * 60 * 60 : 0;
   return `aura_session=${value}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
 }
+function oauthCookie(req, token) {
+  const secure = requestOrigin(req).startsWith("https://") ? "; Secure" : "";
+  const value = token ? encodeURIComponent(token) : "";
+  const maxAge = token ? 10 * 60 : 0;
+  return `aura_oauth=${value}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+}
+function redirect(res, location, cookies = []) {
+  res.writeHead(302, {"Location": location, "Cache-Control": "no-store", ...(cookies.length ? {"Set-Cookie": cookies} : {})});
+  res.end();
+}
+function queryOf(req) {
+  return new URL(req.url || "/", "http://localhost").searchParams;
+}
+const WEB_LOGIN = new Set([
+  "/api/v1/auth/web/start",
+  "/api/v1/auth/web/verify",
+  "/api/v1/auth/web/logout",
+  "/api/v1/auth/web/register",
+  "/api/v1/auth/web/login",
+  "/api/v1/auth/web/forgot",
+  "/api/v1/auth/web/reset",
+  "/api/v1/auth/handoff",
+]);
 function publicBase(req) {
   const configured = process.env.PUBLIC_URL?.trim();
   if (configured) return configured.replace(/\/$/, "");
@@ -263,6 +305,7 @@ async function handleRequest(req, res) {
       version: BUILD_VERSION,
       model: pickModel(),
       keyConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+      signIn: {password: Boolean(process.env.DATABASE_URL?.trim()), google: googleConfigured()},
       // Prompts, model routing, and answer checks live here. Push to main to
       // change them on Railway without a Chrome Web Store resubmission.
       answering: "server",
@@ -270,7 +313,7 @@ async function handleRequest(req, res) {
     return;
   }
 
-  const webLogin = path === "/api/v1/auth/web/start" || path === "/api/v1/auth/web/verify" || path === "/api/v1/auth/web/logout" || path === "/api/v1/auth/handoff";
+  const webLogin = WEB_LOGIN.has(path);
   const ownSite = req.headers.origin === requestOrigin(req);
   if (path.startsWith("/api/") && req.method === "POST" && !trusted && !(webLogin && ownSite)) {
     sendJson(res, 403, {error: "Not allowed."});
@@ -326,6 +369,118 @@ async function handleRequest(req, res) {
 
   if (path === "/api/v1/auth/web/logout" && req.method === "POST") {
     sendJson(res, 200, {ok: true}, {"Set-Cookie": sessionCookie(req, "")});
+    return;
+  }
+
+  if ((path === "/api/v1/auth/web/register" || path === "/api/v1/auth/web/login") && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const email = normalizeEmail(payload.email);
+    const creating = path.endsWith("/register");
+    if (!email || !passwordOk(payload.password)) {
+      sendJson(res, 400, {error: creating ? "Use a valid email and a password of at least 8 characters." : "Wrong email or password."});
+      return;
+    }
+    if (!loginsPerIp(clientIp(req)) || !loginsPerEmail(email)) {
+      sendJson(res, 429, {error: "Too many sign-in attempts. Wait a bit and try again."});
+      return;
+    }
+    const existing = await users.getByEmail(email);
+    const passwordMatches = await verifyPassword(payload.password, existing?.passwordHash || await dummyPasswordHash);
+    if (creating) {
+      if (existing?.passwordHash) { sendJson(res, 409, {error: "An account with that email already exists. Sign in."}); return; }
+      if (existing?.googleSub) { sendJson(res, 409, {error: "That email uses Google. Continue with Google."}); return; }
+      try { await users.create({email, passwordHash: await hashPassword(payload.password)}); }
+      catch (error) { sendJson(res, error.status || 500, {error: error.status === 409 ? "An account with that email already exists. Sign in." : "Couldn't create the account. Try again."}); return; }
+    } else if (!existing?.passwordHash || !passwordMatches) {
+      sendJson(res, 400, {error: existing?.googleSub && !existing.passwordHash ? "That email uses Google. Continue with Google." : "Wrong email or password."});
+      return;
+    }
+    sendJson(res, 200, {ok: true, email}, {"Set-Cookie": sessionCookie(req, issueSession(email))});
+    return;
+  }
+
+  if (path === "/api/v1/auth/web/forgot" && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const email = normalizeEmail(payload.email);
+    if (!email) { sendJson(res, 400, {error: "Enter a valid email address."}); return; }
+    if (!codesPerIp(clientIp(req)) || !codesPerEmail(email)) { sendJson(res, 429, {error: "Too many reset emails. Wait a bit and try again."}); return; }
+    const existing = await users.getByEmail(email);
+    if (existing?.passwordHash) {
+      const nonce = randomNonce();
+      await users.setResetNonce(email, nonce);
+      const link = `${publicBase(req)}/login?reset=${encodeURIComponent(issueReset(email, nonce))}`;
+      try { await resetMailer(email, link); }
+      catch (error) { sendJson(res, error.status || 502, {error: error.message}); return; }
+    }
+    sendJson(res, 200, {ok: true});
+    return;
+  }
+
+  if (path === "/api/v1/auth/web/reset" && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const parsed = readReset(payload.token);
+    if (!parsed || !passwordOk(payload.password) || !loginsPerIp(clientIp(req))) {
+      sendJson(res, 400, {error: "That reset link is invalid or expired."});
+      return;
+    }
+    const existing = await users.getByEmail(parsed.email);
+    if (!existing || !sameText(existing.resetNonce, parsed.nonce)) {
+      sendJson(res, 400, {error: "That reset link is invalid or expired."});
+      return;
+    }
+    await users.setPassword(parsed.email, await hashPassword(payload.password));
+    sendJson(res, 200, {ok: true, email: parsed.email}, {"Set-Cookie": sessionCookie(req, issueSession(parsed.email))});
+    return;
+  }
+
+  if (path === "/api/v1/auth/google" && req.method === "GET") {
+    const query = queryOf(req);
+    const extState = query.get("state") || "";
+    const challenge = query.get("challenge") || "";
+    const back = "/login?error=google";
+    if (!googleConfigured()) { redirect(res, back); return; }
+    if ((extState || challenge) && (!/^[A-Za-z0-9_-]{16,128}$/.test(extState) || !/^[A-Za-z0-9_-]{43}$/.test(challenge))) {
+      redirect(res, back);
+      return;
+    }
+    const nonce = randomNonce();
+    const redirectUri = `${requestOrigin(req)}/api/v1/auth/google/callback`;
+    redirect(res, googleStartUrl({redirectUri, state: nonce}), [oauthCookie(req, issueOauth({nonce, extState, challenge}))]);
+    return;
+  }
+
+  if (path === "/api/v1/auth/google/callback" && req.method === "GET") {
+    const query = queryOf(req);
+    const fail = code => redirect(res, `/login?error=${code}`, [oauthCookie(req, "")]);
+    const saved = readOauth(readCookie(req, "aura_oauth"));
+    if (!saved || !sameText(saved.nonce, query.get("state") || "")) { fail("google"); return; }
+    if (query.get("error")) { fail(query.get("error") === "access_denied" ? "google_denied" : "google"); return; }
+    const redirectUri = `${requestOrigin(req)}/api/v1/auth/google/callback`;
+    let identity;
+    try { identity = await googleIdentity(query.get("code") || "", redirectUri, googleFetcher); }
+    catch { fail("google"); return; }
+    const email = normalizeEmail(identity?.email);
+    const sub = typeof identity?.sub === "string" ? identity.sub.slice(0, 255) : "";
+    if (!sub || !email || identity.email_verified !== true) { fail("google_unverified"); return; }
+    let accountEmail = email;
+    try {
+      const byGoogle = await users.getByGoogle(sub);
+      if (byGoogle) accountEmail = byGoogle.email;
+      else {
+        const existing = await users.getByEmail(email);
+        if (existing?.passwordHash) { fail("google_linked"); return; }
+        if (existing?.googleSub && existing.googleSub !== sub) { fail("google_used"); return; }
+        if (existing) await users.linkGoogle(email, sub);
+        else await users.create({email, googleSub: sub});
+      }
+    } catch { fail("google"); return; }
+    const next = saved.extState && saved.challenge
+      ? `/login?state=${encodeURIComponent(saved.extState)}&challenge=${encodeURIComponent(saved.challenge)}`
+      : "/login";
+    redirect(res, next, [sessionCookie(req, issueSession(accountEmail)), oauthCookie(req, "")]);
     return;
   }
 
@@ -559,7 +714,12 @@ export function createServer() {
 }
 
 if (process.argv[1] && nodePath.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  createServer().listen(PORT, "0.0.0.0", () => {
-    console.log(`AuraSolve API listening on 0.0.0.0:${PORT}`);
+  openUsers().then(() => {
+    createServer().listen(PORT, "0.0.0.0", () => {
+      console.log(`AuraSolve API listening on 0.0.0.0:${PORT}`);
+    });
+  }).catch(error => {
+    console.error(`AuraSolve couldn't open the account database. ${error instanceof Error ? error.message : ""}`);
+    process.exit(1);
   });
 }

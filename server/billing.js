@@ -102,21 +102,71 @@ export function readHandoff(token, verifier, now = Date.now()) {
   } catch { return null; }
 }
 
-export async function sendCode(email, code, fetcher = fetch) {
+export function randomNonce() {
+  return crypto.randomBytes(16).toString("base64url");
+}
+
+const OAUTH_MS = 10 * 60_000;
+export function issueOauth(payload, now = Date.now()) {
+  const body = Buffer.from(JSON.stringify({...payload, expires: now + OAUTH_MS})).toString("base64url");
+  return `o1.${body}.${hmac(`oauth.${body}`)}`;
+}
+export function readOauth(token, now = Date.now()) {
+  if (typeof token !== "string" || token.length > 1500) return null;
+  const [version, body, signature] = token.split(".");
+  if (version !== "o1" || !body || !signature || !same(signature, hmac(`oauth.${body}`))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (!(now < data.expires) || typeof data.nonce !== "string" || !data.nonce) return null;
+    return data;
+  } catch { return null; }
+}
+
+const RESET_MS = 30 * 60_000;
+export function issueReset(email, nonce, now = Date.now()) {
+  const body = Buffer.from(JSON.stringify({email, nonce, expires: now + RESET_MS})).toString("base64url");
+  return `r1.${body}.${hmac(`reset.${body}`)}`;
+}
+export function readReset(token, now = Date.now()) {
+  if (typeof token !== "string" || token.length > 900) return null;
+  const [version, body, signature] = token.split(".");
+  if (version !== "r1" || !body || !signature || !same(signature, hmac(`reset.${body}`))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    const email = normalizeEmail(data.email);
+    if (!email || !(now < data.expires) || typeof data.nonce !== "string" || !data.nonce) return null;
+    return {email, nonce: data.nonce};
+  } catch { return null; }
+}
+
+export async function sendMail({to, subject, text, html}, fetcher = fetch) {
   const key = process.env.RESEND_API_KEY?.trim();
-  if (!key) throw Object.assign(new Error("Email sign-in isn't set up yet. Try again later."), {status: 503});
+  if (!key) throw Object.assign(new Error("Email isn't set up yet. Try again later."), {status: 503});
   const from = process.env.EMAIL_FROM?.trim() || "AuraSolve <login@aurasolve.io>";
   const response = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: {"Authorization": `Bearer ${key}`, "Content-Type": "application/json"},
-    body: JSON.stringify({
-      from, to: [email],
-      subject: `Your AuraSolve code: ${code}`,
-      text: `Your AuraSolve sign-in code is ${code}\n\nIt expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.`,
-      html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;color:#1d2433"><p>Your AuraSolve sign-in code is</p><p style="font-size:30px;font-weight:700;letter-spacing:6px">${code}</p><p style="color:#667">It expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.</p></div>`,
-    }),
+    body: JSON.stringify({from, to: [to], subject, text, html}),
   });
-  if (!response.ok) throw Object.assign(new Error("We couldn't send the email. Check the address and try again."), {status: 502});
+  if (!response.ok) throw Object.assign(new Error("We couldn't send the email. Try again."), {status: 502});
+}
+
+export async function sendCode(email, code, fetcher = fetch) {
+  await sendMail({
+    to: email,
+    subject: `Your AuraSolve code: ${code}`,
+    text: `Your AuraSolve sign-in code is ${code}\n\nIt expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.`,
+    html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;color:#1d2433"><p>Your AuraSolve sign-in code is</p><p style="font-size:30px;font-weight:700;letter-spacing:6px">${code}</p><p style="color:#667">It expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.</p></div>`,
+  }, fetcher);
+}
+
+export async function sendReset(email, link, fetcher = fetch) {
+  await sendMail({
+    to: email,
+    subject: "Reset your AuraSolve password",
+    text: `Reset your AuraSolve password:\n\n${link}\n\nThis link expires in 30 minutes. If you didn't ask for this, you can ignore this email.`,
+    html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;color:#1d2433"><p>Reset your AuraSolve password.</p><p><a href="${link}">Choose a new password</a></p><p style="color:#667">This link expires in 30 minutes. If you didn't ask for this, you can ignore this email.</p></div>`,
+  }, fetcher);
 }
 
 /* ---------- Stripe ---------- */

@@ -5,24 +5,52 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · AuraSolve</title>
   <link rel="icon" type="image/png" href="icon.png?v=3">
-  <link rel="stylesheet" href="style.css?v=54">
+  <link rel="stylesheet" href="style.css?v=55">
 </head>
 <body>
   <main class="login-wrap">
     <section class="login-card">
       <a class="brand" href="index.html"><img src="icon.png?v=3" alt="" width="28" height="28"><span>AuraSolve</span></a>
+      <p id="error" class="login-error" hidden></p>
       <div id="ask">
-        <h1>Get started</h1>
-        <p class="lead">We'll email you a sign-in code. No password.</p>
-        <p id="error" class="login-error" hidden></p>
-        <form id="email-form">
-          <input id="email" type="email" autocomplete="email" placeholder="Email" required>
-          <button class="btn btn-primary btn-lg" type="submit">Send code</button>
+        <h1 id="title">Sign in</h1>
+        <p class="lead" id="lead">Use Google, or your email and password.</p>
+        <a id="google" class="btn btn-ghost btn-lg google" href="/api/v1/auth/google">
+          <svg class="g-mark" viewBox="0 0 18 18" aria-hidden="true">
+            <path style="fill:#4285F4;stroke:none" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/>
+            <path style="fill:#34A853;stroke:none" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/>
+            <path style="fill:#FBBC05;stroke:none" d="M3.95 10.7A5.41 5.41 0 0 1 3.66 9c0-.59.1-1.16.29-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.03l2.99-2.33z"/>
+            <path style="fill:#EA4335;stroke:none" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/>
+          </svg>
+          Continue with Google
+        </a>
+        <p id="or" class="or">or</p>
+        <form id="password-form">
+          <input id="email" type="email" autocomplete="username" placeholder="Email" required>
+          <input id="password" type="password" autocomplete="current-password" placeholder="Password" minlength="8" required>
+          <button id="submit" class="btn btn-primary btn-lg" type="submit">Sign in</button>
         </form>
-        <form id="code-form" hidden>
-          <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" required>
-          <button class="btn btn-primary btn-lg" type="submit">Sign in</button>
-          <button id="back" class="btn btn-ghost btn-lg" type="button">Use a different email</button>
+        <p class="login-links">
+          <button id="forgot" type="button">Forgot password?</button>
+          <button id="mode" type="button">Create an account</button>
+        </p>
+      </div>
+      <div id="forgot-panel" hidden>
+        <h1>Reset password</h1>
+        <p class="lead">We'll email you a link to choose a new password.</p>
+        <form id="forgot-form">
+          <input id="forgot-email" type="email" autocomplete="username" placeholder="Email" required>
+          <button class="btn btn-primary btn-lg" type="submit">Send reset link</button>
+          <button id="forgot-back" class="btn btn-ghost btn-lg" type="button">Back</button>
+        </form>
+        <p id="forgot-note" class="login-note" hidden>If that email has a password, we sent a reset link.</p>
+      </div>
+      <div id="reset" hidden>
+        <h1>Choose a new password</h1>
+        <p class="lead">Use at least 8 characters.</p>
+        <form id="reset-form">
+          <input id="reset-password" type="password" autocomplete="new-password" placeholder="New password" minlength="8" required>
+          <button class="btn btn-primary btn-lg" type="submit">Save password</button>
         </form>
       </div>
       <div id="done" hidden>
@@ -30,11 +58,11 @@
         <p class="lead" id="done-note"></p>
         <div class="stack">
           <a class="btn btn-primary btn-lg" href="install.html">Install the extension</a>
-          <button id="switch" class="btn btn-ghost btn-lg" type="button">Use a different email</button>
+          <button id="switch" class="btn btn-ghost btn-lg" type="button">Use a different account</button>
         </div>
       </div>
     </section>
   </main>
-  <script src="login.js?v=2"></script>
+  <script src="login.js?v=3"></script>
 </body>
 </html>

@@ -1203,7 +1203,8 @@ const redeemedLogins = new Set();
 async function finishWebLogin(tabId, url) {
   let parsed;
   try { parsed = new URL(url); } catch { return; }
-  if (parsed.origin !== new URL(API_BASE).origin || parsed.pathname !== '/auth/done') return;
+  const loginHosts = new Set([new URL(API_BASE).origin, 'https://aurasolve.io', 'https://aurasolve-production.up.railway.app']);
+  if (!loginHosts.has(parsed.origin) || parsed.pathname !== '/auth/done') return;
   const state = parsed.searchParams.get('state') || '';
   const handoff = parsed.searchParams.get('handoff') || '';
   if (!state || !handoff || redeemedLogins.has(handoff)) return;

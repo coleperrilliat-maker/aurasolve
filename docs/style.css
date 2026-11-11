@@ -79,6 +79,14 @@ em{font-style:normal}
 .login-card input{height:52px;padding:0 16px;border:0;border-radius:12px;background:#f3f5fa;font:500 16px Inter,system-ui,sans-serif;color:var(--ink)}
 .login-card input:focus{outline:2px solid rgba(59,108,255,.45);outline-offset:1px}
 .login-card .btn{width:100%}
+.login-card .google{margin-top:26px;text-decoration:none}
+.login-card .google .g-mark{width:18px;height:18px;stroke:none}
+.login-card .or{display:flex;align-items:center;gap:12px;margin:18px 0 0;color:#8b93a7;font-size:13px;font-weight:600}
+.login-card .or::before,.login-card .or::after{content:"";height:1px;flex:1;background:var(--line)}
+.login-links{display:flex;justify-content:space-between;gap:12px;margin-top:14px}
+.login-links button{border:0;background:none;padding:0;color:#5b6475;font:600 14px Inter,system-ui,sans-serif;cursor:pointer}
+.login-links button:hover{color:var(--ink)}
+.login-note{margin:16px 0 0;font-weight:600}
 .login-error{margin:16px 0 0;color:#c2414b;font-weight:600}
 
 main{max-width:calc(var(--wrap) + 2 * var(--pad));margin:0 auto;padding:0 var(--pad)}
