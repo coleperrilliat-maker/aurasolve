@@ -7,31 +7,6 @@
     document.getElementById('aurasolve-region-result')?.remove();
   }
 
-  function rich(text) {
-    const box = document.createElement('div');
-    for (const raw of String(text || '').split(/\n+/)) {
-      const line = raw.trim();
-      if (!line) continue;
-      const item = line.match(/^(?:[-•*]|\d+[.)])\s+(.*)$/);
-      const node = document.createElement(item ? 'li' : 'p');
-      const source = item ? item[1] : line;
-      source.split(/\*\*(.+?)\*\*/g).forEach((part, index) => {
-        if (!part) return;
-        if (index % 2) {
-          const strong = document.createElement('strong');
-          strong.textContent = part;
-          node.append(strong);
-        } else node.append(part);
-      });
-      if (item) {
-        let list = box.querySelector(':scope > ul:last-child');
-        if (!list) { list = document.createElement('ul'); box.append(list); }
-        list.append(node);
-      } else box.append(node);
-    }
-    return box;
-  }
-
   const plainMath = text => String(text || '')
     .replace(/\\[()[\]]/g, '')
     .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)')
