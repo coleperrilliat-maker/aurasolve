@@ -53,10 +53,14 @@ function selectLabel(select, index) {
 }
 
 function textFields(root) {
-  return [...root.querySelectorAll('input.question_input, input[type="text"], input[type="number"], textarea.question_input, textarea')].filter(el => {
-    if (el.closest('.answer, .answers')) return false;
-    if (el.type === 'radio' || el.type === 'checkbox' || el.type === 'hidden') return false;
-    return el.getClientRects().length;
+  // Short-answer boxes live inside .answers. Only skip a text field that is
+  // sitting in a multiple-choice row next to a radio or checkbox.
+  return [...root.querySelectorAll('input.question_input, input[type="text"], input[type="number"], input:not([type]), textarea')].filter(el => {
+    const type = String(el.type || '').toLowerCase();
+    if (['radio', 'checkbox', 'hidden', 'button', 'submit', 'file', 'image'].includes(type)) return false;
+    const choice = el.closest('.answer');
+    if (choice?.querySelector('input[type="radio"], input[type="checkbox"]')) return false;
+    return true;
   });
 }
 
@@ -124,8 +128,8 @@ function pack(id, read) {
   if (read.kind === 'dropdown' && read.controls.length) {
     return {id, kind: 'dropdowns', title: read.title, options: [], blanks: read.controls.map((select, index) => ({label: selectLabel(select, index), options: selectOptions(select)}))};
   }
-  if (read.kind === 'text' && read.controls.length > 1) {
-    return {id, kind: 'blanks', title: read.title, options: [], blanks: read.controls.map((_, index) => ({label: `Blank ${index + 1}`, options: []}))};
+  if (read.kind === 'text' || read.kind === 'paragraph') {
+    return {id, kind: read.kind, title: read.title, options: [], blanks: read.controls.map((_, index) => ({label: read.controls.length === 1 ? 'Answer' : `Blank ${index + 1}`, options: []}))};
   }
   return {id, kind: read.kind, title: read.title, options: read.options || [], blanks: []};
 }
@@ -197,7 +201,7 @@ async function answer(root) {
     } else {
       const blanks = cached?.blanks || [];
       for (let index = 0; index < controls.length; index++) {
-        const text = blanks[index] || (index === 0 ? cached?.text : '');
+        const text = blanks[index] || (index === 0 ? (cached?.text || cached?.choices?.[0]) : '');
         const result = text ? {text} : await solveOne({
           ...question,
           title: controls.length === 1 ? question.title : `${question.title}\nAnswer only blank ${index + 1} of ${controls.length}.`,
