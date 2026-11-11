@@ -8,7 +8,7 @@
 <body>
   <section class="page" data-page="home">
     <header class="top">
-      <img src="../../icons/icon-48.png" alt="" width="32" height="32">
+      <img src="../../icons/icon-48.png" alt="" width="28" height="28">
       <strong>AuraSolve</strong>
       <small id="version"></small>
     </header>
@@ -55,15 +55,29 @@
       <button class="back" type="button" data-back aria-label="Back">‹</button>
       <h1>AutoPilot</h1>
     </header>
-    <p class="lead">Works through unfinished questions. It checks answers and goes next. It never submits the assignment.</p>
     <button id="pilot" class="go" type="button">
       <span id="pilot-title">Start AutoPilot</span>
       <small id="pilot-text">Ready on this tab</small>
     </button>
-    <label class="row">
-      <span><strong>Speed run</strong><small>No extra wait between questions</small></span>
-      <input id="speed-run" class="check" type="checkbox">
-    </label>
+    <div class="panel">
+      <div class="row">
+        <span><strong>Speed run</strong><small>No wait between questions</small></span>
+        <button id="speed-run" class="switch" type="button" role="switch" aria-checked="false" aria-label="Speed run"></button>
+      </div>
+    </div>
+    <div class="panel" id="timing-settings">
+      <div class="row">
+        <span><strong>Randomize timing</strong><small>Vary the wait between questions</small></span>
+        <button id="random-timing" class="switch" type="button" role="switch" aria-checked="true" aria-label="Randomize timing"></button>
+      </div>
+      <label class="row" for="time-min"><span><strong>Minimum</strong></span><select id="time-min"></select></label>
+      <label class="row" id="max-label" for="time-max"><span><strong>Maximum</strong></span><select id="time-max"></select></label>
+    </div>
+    <div class="panel">
+      <label class="row" for="question-limit"><span><strong>Questions per run</strong></span><select id="question-limit"><option value="0" selected>All unfinished</option><option>1</option><option>5</option><option>10</option><option>20</option></select></label>
+      <label class="row" for="solve-budget"><span><strong>AI solves</strong><small>Stops at this limit</small></span><select id="solve-budget"><option>50</option><option selected>200</option><option>500</option></select></label>
+    </div>
+    <p class="lead">Checks the answer and goes next. Never submits the assignment.</p>
   </section>
 
   <section class="page chat-page" data-page="chat" hidden>
@@ -74,7 +88,15 @@
     <div id="thread" class="thread">
       <p class="empty">Ask about the question on this tab.</p>
     </div>
+    <div id="preview" class="preview" hidden>
+      <img id="preview-img" alt="Image that will be sent">
+      <button id="preview-clear" type="button" aria-label="Remove image">×</button>
+    </div>
     <form id="composer" class="composer">
+      <button id="upload-btn" type="button" aria-label="Upload an image">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V6M8 9l4-4 4 4"/><path d="M5 16.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5"/></svg>
+      </button>
+      <input id="upload" type="file" accept="image/*" hidden>
       <button id="attach" type="button" aria-pressed="false">Screen</button>
       <input id="prompt" type="text" placeholder="Ask AuraSolve…" autocomplete="off">
       <button class="send" type="submit" aria-label="Send">↑</button>
@@ -87,16 +109,24 @@
       <button class="back" type="button" data-back aria-label="Back">‹</button>
       <h1>Settings</h1>
     </header>
-    <div class="card">
+    <div class="panel">
       <div class="row">
-        <span><strong>Anonymous</strong><small id="ghost-state">Page buttons stay clickable, but invisible</small></span>
+        <span><strong>Page buttons</strong><small id="buttons-state">Shown on the question</small></span>
+        <button id="buttons-switch" class="switch" type="button" role="switch" aria-checked="true" aria-label="Page buttons"></button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row">
+        <span><strong>Anonymous</strong><small id="ghost-state">Buttons look normal</small></span>
         <button id="ghost" class="switch" type="button" role="switch" aria-checked="false" aria-label="Anonymous mode"></button>
       </div>
-      <button id="remove" class="row btn" type="button">
-        <span><strong>Page buttons</strong><small id="remove-state">Shown on the question</small></span>
-      </button>
     </div>
-    <p class="lead" id="shortcut">Press ⌘⇧X to turn highlight-to-solve on or off. It does not change the page buttons.</p>
+    <div class="panel">
+      <div class="row">
+        <span><strong>Highlight</strong><small id="highlight-state">Off</small></span>
+        <button id="highlight-switch" class="switch" type="button" role="switch" aria-checked="false" aria-label="Highlight to solve"></button>
+      </div>
+    </div>
     <p id="settings-note" class="note" aria-live="polite"></p>
   </section>
 

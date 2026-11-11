@@ -1,14 +1,13 @@
 import {BUILD_VERSION} from '../shared/version.js';
 import {sendExtension} from '../shared/messaging.js';
 import {answerLines} from '../shared/render.js';
-import {readOverlay, writeOverlay} from '../shared/overlay.js';
+import {normalizeOverlay, readOverlay, writeOverlay} from '../shared/overlay.js';
 import {account as loadAccount, plans as loadPlans, startSignIn, finishSignIn, signOut, checkoutUrl, portalUrl} from '../background/api.js';
 
 const $ = id => document.getElementById(id);
 $('version').textContent = `v${BUILD_VERSION}`;
 const mac = /Mac|iPhone|iPad/.test(navigator.platform || '');
 const keys = mac ? '⌘⇧X' : 'Ctrl+Shift+X';
-$('shortcut').textContent = `Press ${keys} to turn highlight-to-solve on or off. It does not change the page buttons.`;
 
 const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
 const say = (id, text, error = false) => {
@@ -29,21 +28,49 @@ document.querySelectorAll('[data-back]').forEach(button => { button.onclick = ()
 function savedPilot() {
   try { return JSON.parse(localStorage.getItem('pilotSettings') || '{}'); } catch { return {}; }
 }
+function savePilot(patch) {
+  localStorage.setItem('pilotSettings', JSON.stringify({...savedPilot(), ...patch}));
+}
+for (const id of ['time-min', 'time-max']) {
+  for (let seconds = 10; seconds <= 120; seconds += 10) $(id).add(new Option(`${seconds}s`, String(seconds)));
+}
+const savedPace = savedPilot();
+const switched = (id, on) => $(id).setAttribute('aria-checked', String(on));
+switched('speed-run', Boolean(savedPace['speed-run']));
+switched('random-timing', savedPace['random-timing'] ?? true);
+$('time-min').value = String(savedPace['time-min'] ?? 20);
+$('time-max').value = String(savedPace['time-max'] ?? 40);
+$('question-limit').value = String(savedPace['question-limit'] ?? 0);
+$('solve-budget').value = String(savedPace['solve-budget'] ?? 200);
+function drawTiming() {
+  const speed = $('speed-run').getAttribute('aria-checked') === 'true';
+  const random = $('random-timing').getAttribute('aria-checked') === 'true';
+  $('timing-settings').hidden = speed;
+  $('max-label').hidden = !random;
+  if (Number($('time-max').value) < Number($('time-min').value)) $('time-max').value = $('time-min').value;
+}
+drawTiming();
 function pilotSettings() {
-  const saved = savedPilot();
-  const min = Number(saved['time-min'] ?? 20), max = Number(saved['time-max'] ?? 40);
+  const min = Number($('time-min').value), max = Number($('time-max').value);
   return {
-    speed: $('speed-run').checked,
-    random: saved['random-timing'] ?? true,
+    speed: $('speed-run').getAttribute('aria-checked') === 'true',
+    random: $('random-timing').getAttribute('aria-checked') === 'true',
     min, max: Math.max(min, max),
-    limit: Number(saved['question-limit'] ?? 0),
-    budget: Number(saved['solve-budget'] ?? 200),
+    limit: Number($('question-limit').value),
+    budget: Number($('solve-budget').value),
   };
 }
-$('speed-run').checked = Boolean(savedPilot()['speed-run']);
-$('speed-run').onchange = () => {
-  localStorage.setItem('pilotSettings', JSON.stringify({...savedPilot(), 'speed-run': $('speed-run').checked}));
-};
+function toggleSwitch(id, key) {
+  const on = $(id).getAttribute('aria-checked') !== 'true';
+  switched(id, on);
+  savePilot({[key]: on});
+  drawTiming();
+}
+$('speed-run').onclick = () => toggleSwitch('speed-run', 'speed-run');
+$('random-timing').onclick = () => toggleSwitch('random-timing', 'random-timing');
+for (const id of ['time-min', 'time-max', 'question-limit', 'solve-budget']) {
+  $(id).onchange = () => { drawTiming(); savePilot({[id]: $(id).value}); };
+}
 let pilotRunning = false;
 function drawPilot(status) {
   pilotRunning = Boolean(status?.running);
@@ -93,19 +120,61 @@ $('shot').onclick = () => {
 const thread = $('thread');
 const chat = [];
 let attached = null;
-function bubble(role, text) {
+function bubble(role, text, image) {
   thread.querySelector('.empty')?.remove();
   const node = document.createElement('div');
   node.className = `bubble ${role}`;
-  node.textContent = text;
+  if (image) {
+    const img = document.createElement('img');
+    img.src = image;
+    img.alt = '';
+    node.append(img);
+  }
+  if (text) node.append(document.createTextNode(text));
   thread.append(node);
   thread.scrollTop = thread.scrollHeight;
 }
+function showPreview(image) {
+  attached = image;
+  $('preview').hidden = !image;
+  if (image) $('preview-img').src = image;
+  $('attach').setAttribute('aria-pressed', 'false');
+  $('attach').textContent = 'Screen';
+}
+function fileToImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that image.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read that image.'));
+      img.onload = () => {
+        const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+$('upload-btn').onclick = () => $('upload').click();
+$('upload').onchange = async () => {
+  const file = $('upload').files?.[0];
+  $('upload').value = '';
+  if (!file) return;
+  try { showPreview(await fileToImage(file)); }
+  catch (error) { say('chat-note', error.message, true); }
+};
+$('preview-clear').onclick = () => showPreview(null);
 $('attach').onclick = async () => {
-  if (attached) { attached = null; $('attach').setAttribute('aria-pressed', 'false'); $('attach').textContent = 'Screen'; return; }
+  if (attached && $('attach').getAttribute('aria-pressed') === 'true') { showPreview(null); return; }
   $('attach').disabled = true;
   try {
-    attached = (await sendExtension({type: 'captureScreen'})).image;
+    showPreview((await sendExtension({type: 'captureScreen'})).image);
     $('attach').setAttribute('aria-pressed', 'true');
     $('attach').textContent = 'Screen on';
   } catch (error) { say('chat-note', error.message, true); }
@@ -114,17 +183,15 @@ $('attach').onclick = async () => {
 $('composer').onsubmit = async event => {
   event.preventDefault();
   const text = $('prompt').value.trim();
-  if (!text) return;
+  if (!text && !attached) return;
   const image = attached;
-  attached = null;
-  $('attach').setAttribute('aria-pressed', 'false');
-  $('attach').textContent = 'Screen';
+  showPreview(null);
   $('prompt').value = '';
-  bubble('user', text);
+  bubble('user', text, image);
   say('chat-note', 'Thinking…');
   try {
-    const reply = (await sendExtension({type: 'ask', messages: [...chat.slice(-8), {role: 'user', content: text}], image})).reply;
-    chat.push({role: 'user', content: image ? `${text} (screenshot attached)` : text}, {role: 'assistant', content: reply});
+    const reply = (await sendExtension({type: 'ask', messages: [...chat.slice(-8), {role: 'user', content: text || 'What is in this image?'}], image})).reply;
+    chat.push({role: 'user', content: image ? `${text || 'What is in this image?'} (image attached)` : text}, {role: 'assistant', content: reply});
     bubble('bot', reply);
     say('chat-note', '');
   } catch (error) { say('chat-note', error.message, true); }
@@ -133,27 +200,34 @@ $('composer').onsubmit = async event => {
 /* ---------- Settings ---------- */
 let overlay = await readOverlay();
 function drawOverlay() {
-  const removed = !overlay.showFill && !overlay.showShot;
-  $('ghost').setAttribute('aria-checked', String(overlay.invisible && !removed));
-  $('ghost').disabled = removed;
-  $('ghost-state').textContent = removed ? 'Turn the page buttons back on first' : overlay.invisible ? 'Invisible. Click zones still work.' : 'Page buttons stay clickable, but invisible';
-  $('remove-state').textContent = removed ? 'Removed from the question' : 'Shown on the question';
-  $('remove').querySelector('strong').classList.toggle('on', removed);
-  $('remove').querySelector('strong').textContent = removed ? 'Show page buttons' : 'Remove page buttons';
+  const buttons = overlay.showFill || overlay.showShot;
+  $('buttons-switch').setAttribute('aria-checked', String(buttons));
+  $('buttons-state').textContent = buttons ? 'On' : 'Off';
+  $('ghost').setAttribute('aria-checked', String(overlay.invisible));
+  $('ghost-state').textContent = overlay.invisible ? 'On · buttons stay clickable' : 'Off';
+  $('highlight-switch').setAttribute('aria-checked', String(overlay.highlight));
+  $('highlight-state').textContent = overlay.highlight ? `On · ${keys}` : `Off · ${keys}`;
 }
 drawOverlay();
+$('buttons-switch').onclick = async () => {
+  const show = !(overlay.showFill || overlay.showShot);
+  overlay = await writeOverlay({...overlay, showFill: show, showShot: show});
+  drawOverlay();
+};
 $('ghost').onclick = async () => {
-  if (!overlay.showFill && !overlay.showShot) return;
   overlay = await writeOverlay({...overlay, invisible: !overlay.invisible});
   drawOverlay();
-  say('settings-note', overlay.invisible ? 'Page buttons are invisible.' : 'Page buttons are visible.');
 };
-$('remove').onclick = async () => {
-  const removed = !overlay.showFill && !overlay.showShot;
-  overlay = await writeOverlay({...overlay, showFill: removed, showShot: removed, invisible: removed ? overlay.invisible : false});
+$('highlight-switch').onclick = async () => {
+  overlay = await writeOverlay({...overlay, highlight: !overlay.highlight});
   drawOverlay();
-  say('settings-note', removed ? 'Page buttons are back.' : 'Page buttons removed.');
 };
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.overlaySettings) {
+    overlay = normalizeOverlay(changes.overlaySettings.newValue);
+    drawOverlay();
+  }
+});
 
 /* ---------- Profile ---------- */
 let challenge = null, accountState = null, planList = null, chosenPlan = 'monthly';
