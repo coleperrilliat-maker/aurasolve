@@ -18,17 +18,30 @@
     .replace(/\\(left|right)\b/g, '')
     .replace(/[ \t]{2,}/g, ' ');
 
-  function shortReply(reply) {
+  const cleanLine = line => plainMath(line).replace(/\*\*/g, '').replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').trim();
+
+  function parseReply(reply) {
+    if (reply && typeof reply === 'object') {
+      return {
+        fills: (reply.fills || []).map(cleanLine).filter(Boolean).slice(0, 8),
+        steps: (reply.steps || []).map(cleanLine).filter(Boolean).slice(0, 6),
+      };
+    }
     const text = plainMath(reply).replace(/\*\*/g, '').trim();
-    if (/^Filled in\b/i.test(text)) return text.split('\n')[0].trim();
-    const answerMatch = text.match(/(?:^|\n)\s*Answer:\s*([\s\S]*?)(?=\n(?:Explanation|Filled in)|$)/i);
-    const answer = (answerMatch ? answerMatch[1] : text.split('\n')[0] || '').trim();
-    return answer.slice(0, 160) || 'Done.';
+    const fillBlock = text.match(/(?:^|\n)\s*Fill:\s*([\s\S]*?)(?=\n\s*Steps:|$)/i);
+    const stepBlock = text.match(/(?:^|\n)\s*Steps:\s*([\s\S]*)$/i);
+    if (fillBlock) {
+      return {
+        fills: fillBlock[1].split(/\n+/).map(cleanLine).filter(Boolean).slice(0, 8),
+        steps: (stepBlock?.[1] || '').split(/\n+/).map(cleanLine).filter(Boolean).slice(0, 6),
+      };
+    }
+    return {fills: [], steps: text ? [text] : []};
   }
 
-  function placeToast(card, point) {
-    const left = Math.min(window.innerWidth - 280, Math.max(12, (point?.x || window.innerWidth / 2) - 120));
-    const top = Math.min(window.innerHeight - 56, Math.max(12, (point?.y || 80) + 8));
+  function placeCard(card, point) {
+    const left = Math.min(window.innerWidth - 320, Math.max(12, (point?.x || window.innerWidth - 340)));
+    const top = Math.min(window.innerHeight - 80, Math.max(12, (point?.y || 72)));
     card.style.left = left + 'px';
     card.style.top = top + 'px';
     document.documentElement.append(card);
@@ -39,20 +52,46 @@
 
   function showResult(reply, point) {
     clear();
+    const {fills, steps} = parseReply(reply);
     const card = document.createElement('div');
     card.id = 'aurasolve-region-result';
     card.innerHTML = `
       <style>
-        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;max-width:min(320px,calc(100vw - 24px));display:inline-flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#11141c;color:#fff;font:600 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 10px 28px rgba(0,0,0,.28)}
+        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;width:min(320px,calc(100vw - 24px));max-height:min(70vh,520px);overflow:auto;display:flex;flex-direction:column;gap:12px;padding:14px 14px 16px;border-radius:18px;background:#fff;color:#111;font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 16px 40px rgba(20,24,40,.18)}
         #aurasolve-region-result *{box-sizing:border-box}
-        #aurasolve-region-result .msg{min-width:0;overflow-wrap:anywhere}
-        #aurasolve-region-result .x{flex:none;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:rgba(255,255,255,.7);font-size:16px;line-height:1;cursor:pointer}
+        #aurasolve-region-result .head{display:flex;align-items:center;justify-content:space-between}
+        #aurasolve-region-result .head strong{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#8b909e}
+        #aurasolve-region-result .x{width:28px;height:28px;border:0;border-radius:8px;background:#f3f4f6;color:#333;font-size:18px;line-height:1;cursor:pointer}
+        #aurasolve-region-result .fills{margin:0;font-size:16px;font-weight:650}
+        #aurasolve-region-result .mark{display:inline;padding:1px 6px;border-radius:6px;background:#ffe56a;color:#1a1a1a;font-weight:750}
+        #aurasolve-region-result ol{margin:0;padding-left:18px;color:#2a2e38;font-size:14px;font-weight:450}
+        #aurasolve-region-result li{margin:0 0 6px}
+        #aurasolve-region-result .steps strong{display:block;margin-bottom:6px;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#8b909e}
       </style>
-      <span class="msg"></span><button class="x" type="button" aria-label="Close">×</button>`;
-    card.querySelector('.msg').textContent = shortReply(reply);
+      <div class="head"><strong>Answer</strong><button class="x" type="button" aria-label="Close">×</button></div>
+      <p class="fills"></p>
+      <div class="steps" hidden><strong>Steps</strong><ol></ol></div>`;
+    const fillsNode = card.querySelector('.fills');
+    fills.forEach((value, index) => {
+      if (index) fillsNode.append(' ');
+      const mark = document.createElement('span');
+      mark.className = 'mark';
+      mark.textContent = value;
+      fillsNode.append(mark);
+    });
+    if (!fills.length) fillsNode.textContent = 'Could not read an answer.';
+    const stepsNode = card.querySelector('.steps');
+    if (steps.length) {
+      stepsNode.hidden = false;
+      const list = stepsNode.querySelector('ol');
+      for (const step of steps) {
+        const item = document.createElement('li');
+        item.textContent = step;
+        list.append(item);
+      }
+    }
     card.querySelector('.x').onclick = () => card.remove();
-    placeToast(card, point);
-    setTimeout(() => card.isConnected && card.remove(), 6000);
+    placeCard(card, point);
   }
 
   function showWaiting(point) {
@@ -67,7 +106,7 @@
         @keyframes aura-spin{to{transform:rotate(360deg)}}
       </style>
       <div class="wait"><span class="spin"></span><span>Solving…</span></div>`;
-    placeToast(card, point);
+    placeCard(card, point);
   }
 
   async function crop(imageUrl, box) {

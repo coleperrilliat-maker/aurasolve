@@ -10,7 +10,14 @@ import {cropBox} from '../shared/capture.js';
 import {DEFAULT_MODEL} from '../shared/config.js';
 import {OVERLAY_KEY, readOverlay, writeOverlay} from '../shared/overlay.js';
 const plans = new Map(), jobs = new Map(), revisions = new Map(), regionWaits = new Map(), regionImages = new Map();
-const REGION_PROMPT = 'Solve the question in this screenshot. If it has several blanks or parts, answer every one.';
+const REGION_PROMPT = `Solve the question in this screenshot. Reply in exactly this shape and nothing else:
+Fill:
+A
+x = 5 - 7
+Steps:
+- one short step
+- one short step
+Fill lists only what to enter. If the correct choice is "A) x = 5 - 7", the first Fill line is just A and the next line is x = 5 - 7. Use one Fill line per box. Steps are 2 to 5 short sentences.`;
 const storageReady = chrome.storage.local.setAccessLevel({accessLevel:"TRUSTED_CONTEXTS"}).then(async()=>{
   const {settings={}}=await chrome.storage.local.get("settings");
   if(!settings.modelUpgrade5){
@@ -501,11 +508,33 @@ async function fillFromSelection(tabId, image) {
   const result = await handle({type: 'solve', mode: 'field', image}, self);
   const {solution} = result;
   if (!solution?.supported || solution.confidence < .85 || !solution.actions?.length) return null;
-  let note = 'Filled in.';
+  let note = '';
   try { await handle({type: 'apply', planId: result.planId, fillOnly: true}, self); }
   catch (error) { note = `Could not fill: ${error.message}`; }
-  const answer = String(solution.answer || '').trim();
-  return {reply: answer ? `${note} ${answer}` : note};
+  const card = cardFromSolution(solution, state.question);
+  if (note) card.steps = [note, ...card.steps];
+  return {reply: card.fills.join('\n'), card};
+}
+function cardFromSolution(solution, question) {
+  const fields = question?.fields || [];
+  const actions = solution?.actions || [];
+  const fills = [];
+  const typed = actions.filter(action => action.kind === 'text' || action.kind === 'select').map(action => String(action.value || '').trim()).filter(Boolean);
+  for (const action of actions.filter(item => item.kind === 'radio' || item.kind === 'checkbox')) {
+    const label = String(fields.find(field => field.id === action.target)?.label || action.value || '').trim();
+    const split = label.match(/^\(?([A-Za-z])\)?[).:\s]+([\s\S]+)$/);
+    fills.push(split ? split[1].toUpperCase() : label);
+    if (!typed.length && split?.[2]) fills.push(split[2].trim());
+  }
+  fills.push(...typed);
+  if (!fills.length) {
+    const answer = String(solution?.answer || '').trim();
+    const split = answer.match(/^\(?([A-Za-z])\)?[).:\s]+([\s\S]+)$/);
+    if (split) fills.push(split[1].toUpperCase(), split[2].trim());
+    else if (answer) fills.push(answer);
+  }
+  const steps = String(solution?.explanation || '').split(/\n+/).map(line => line.replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim()).filter(Boolean).slice(0, 6);
+  return {fills: [...new Set(fills.filter(Boolean))].slice(0, 8), steps};
 }
 async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");
@@ -659,7 +688,7 @@ async function handle(message,sender) {
     }
     try {
       const filled = await fillFromSelection(tabId, message.image).catch(() => null);
-      const reply = filled?.reply || await ask([{role:'user', content:REGION_PROMPT}], message.image, true, AbortSignal.timeout(120000));
+      const reply = filled?.card || filled?.reply || await ask([{role:'user', content:REGION_PROMPT}], message.image, true, AbortSignal.timeout(120000));
       await chrome.scripting.executeScript({
         target:{tabId, frameIds:[0]},
         func:(text, point)=>globalThis.__auraRegionPick?.showResult(text, point),
