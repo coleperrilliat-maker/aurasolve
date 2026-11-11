@@ -8,11 +8,8 @@
 <body>
   <section class="page" data-page="home">
     <header class="top">
-      <img src="../../icons/icon-48.png" alt="" width="28" height="28">
-      <div>
-        <strong>AuraSolve</strong>
-        <p class="hint" id="hint">Page buttons · ⌘⇧X</p>
-      </div>
+      <img src="../../icons/icon-48.png" alt="" width="32" height="32">
+      <strong>AuraSolve</strong>
       <small id="version"></small>
     </header>
 
@@ -23,31 +20,33 @@
 
     <div class="tiles">
       <button class="tile" type="button" data-go="autopilot">
-        <span class="ic ink" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12 20 5l-6 14-2-6z"/></svg></span>
-        <span><strong>AutoPilot</strong><small id="home-pilot">Work through questions</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 11.2 20.2 4.2 13.4 20.4 11 13.4z"/></svg>
+        <strong>AutoPilot</strong>
       </button>
       <button class="tile" type="button" data-go="chat">
-        <span class="ic blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 17.5 4 20V7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v7A2.5 2.5 0 0 1 17.5 17H8z"/></svg></span>
-        <span><strong>Chat</strong><small>Ask about this page</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 16.8 5.2 19.2V7.4A2.2 2.2 0 0 1 7.4 5.2h9.2A2.2 2.2 0 0 1 18.8 7.4v6.1a2.2 2.2 0 0 1-2.2 2.2H8.4z"/></svg>
+        <strong>Chat</strong>
       </button>
-      <button class="tile" type="button" data-go="settings">
-        <span class="ic slate" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 8h9M18 8h1M5 16h3M12 16h7"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/></svg></span>
-        <span><strong>Settings</strong><small>Buttons &amp; anonymous</small></span>
+      <button id="solve" class="tile" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2c.35 2.7 1.15 4.1 3.9 4.7-2.75.6-3.55 2-3.9 4.7-.35-2.7-1.15-4.1-3.9-4.7 2.75-.6 3.55-2 3.9-4.7z"/><path d="M17.6 14.2c.2 1.35.6 2.05 1.95 2.35-1.35.3-1.75 1-1.95 2.35-.2-1.35-.6-2.05-1.95-2.35 1.35-.3 1.75-1 1.95-2.35z"/></svg>
+        <strong>Solve this</strong>
       </button>
-      <button class="tile" type="button" data-go="profile">
-        <span class="ic blue" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.2"/><path d="M6 19c.8-2.8 3-4.2 6-4.2s5.2 1.4 6 4.2"/></svg></span>
-        <span><strong>Profile</strong><small id="home-profile">Account &amp; plan</small></span>
+      <button id="shot" class="tile" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 7.4 9.3 5.6h5.4l1.1 1.8h2A1.7 1.7 0 0 1 19.5 9.1v7.2a1.7 1.7 0 0 1-1.7 1.7H6.2a1.7 1.7 0 0 1-1.7-1.7V9.1a1.7 1.7 0 0 1 1.7-1.7z"/><circle cx="12" cy="12.4" r="2.5"/></svg>
+        <strong>Screenshot</strong>
       </button>
     </div>
 
-    <button id="solve" class="action" type="button">
-      <span class="ic sm blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3.5 13.8 8 18.5 9.8 13.8 11.6 12 16.2 10.2 11.6 5.5 9.8 10.2 8z"/></svg></span>
-      <span>Solve this</span>
-    </button>
-    <button id="shot" class="action" type="button">
-      <span class="ic sm ink" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6.5 9.2 5h5.6L16 6.5h2A1.5 1.5 0 0 1 19.5 8v9A1.5 1.5 0 0 1 18 18.5H6A1.5 1.5 0 0 1 4.5 17V8A1.5 1.5 0 0 1 6 6.5z"/><circle cx="12" cy="12" r="2.6"/></svg></span>
-      <span>Screenshot</span>
-    </button>
+    <div class="bars">
+      <button class="bar-btn" type="button" data-go="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h8.5M16.5 8H20M4 16h3.5M11.5 16H20"/><circle cx="14.5" cy="8" r="2"/><circle cx="9.5" cy="16" r="2"/></svg>
+        <strong>Settings</strong>
+      </button>
+      <button class="bar-btn" type="button" data-go="profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="3"/><path d="M6.2 18.6c.9-2.7 3-4 5.8-4s4.9 1.3 5.8 4"/></svg>
+        <strong>Profile</strong>
+      </button>
+    </div>
     <p id="note" class="note" aria-live="polite"></p>
   </section>
 

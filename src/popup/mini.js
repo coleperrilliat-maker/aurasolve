@@ -5,10 +5,9 @@ import {readOverlay, writeOverlay} from '../shared/overlay.js';
 import {account as loadAccount, plans as loadPlans, startSignIn, finishSignIn, signOut, checkoutUrl, portalUrl} from '../background/api.js';
 
 const $ = id => document.getElementById(id);
-$('version').textContent = BUILD_VERSION;
+$('version').textContent = `v${BUILD_VERSION}`;
 const mac = /Mac|iPhone|iPad/.test(navigator.platform || '');
 const keys = mac ? '⌘⇧X' : 'Ctrl+Shift+X';
-$('hint').textContent = `Page buttons · ${keys}`;
 $('shortcut').textContent = `Press ${keys} to turn highlight-to-solve on or off. It does not change the page buttons.`;
 
 const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
@@ -51,8 +50,7 @@ function drawPilot(status) {
   $('pilot').classList.toggle('running', pilotRunning);
   $('pilot-title').textContent = pilotRunning ? 'Stop AutoPilot' : 'Start AutoPilot';
   $('pilot-text').textContent = status?.text || 'Ready on this tab';
-  $('home-pilot').textContent = pilotRunning ? 'Running' : 'Work through questions';
-  $('home-pilot').classList.toggle('on', pilotRunning);
+  document.querySelector('[data-go="autopilot"]')?.classList.toggle('running', pilotRunning);
 }
 drawPilot((await chrome.storage.session.get('pilotStatus')).pilotStatus);
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -191,7 +189,6 @@ function drawAccount() {
   $('subscribe').hidden = !needsPlan;
   $('manage').hidden = !state.paid;
   if (needsPlan) drawPlans();
-  $('home-profile').textContent = state.email || 'Account & plan';
 }
 async function refreshAccount() {
   profileError('');
@@ -221,7 +218,7 @@ $('signin-code').onsubmit = async event => {
   } catch (error) { profileError(error.message); }
 };
 $('code-back').onclick = () => { challenge = null; profileError(''); drawAccount(); };
-$('sign-out').onclick = async () => { await signOut(); accountState = null; challenge = null; $('home-profile').textContent = 'Account & plan'; refreshAccount(); };
+$('sign-out').onclick = async () => { await signOut(); accountState = null; challenge = null; refreshAccount(); };
 $('subscribe').onclick = async () => {
   profileError('');
   try { chrome.tabs.create({url: await checkoutUrl(chosenPlan)}); }
