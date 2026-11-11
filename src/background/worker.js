@@ -677,6 +677,38 @@ async function handle(message,sender) {
     }
     return {};
   }
+  if (message.type === "pilotStart") {
+    if (sender.tab) throw new Error("Start AutoPilot from the AuraSolve popup.");
+    const tab = Number.isInteger(message.tabId) ? await chrome.tabs.get(message.tabId).catch(() => null) : null;
+    if (!tab?.id || !/^https?:/.test(tab.url || "")) throw new Error("Open your assignment first.");
+    await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},files:["src/content/bootstrap.js"]}).catch(() => {});
+    if (!(await chrome.offscreen.hasDocument?.())) {
+      await chrome.offscreen.createDocument({url:"src/popup/pilot.html",reasons:["WORKERS"],justification:"Runs AutoPilot while the popup is closed."}).catch(error => { if (!/single offscreen/i.test(error.message)) throw error; });
+    }
+    await chrome.storage.session.set({pilotStatus:{running:true,text:"Starting…",tabId:tab.id}});
+    for (let attempt = 0; ; attempt++) {
+      try { await chrome.runtime.sendMessage({target:"pilot",action:"start",tabId:tab.id,settings:message.settings}); break; }
+      catch (error) { if (attempt >= 10) throw error; await new Promise(resolve => setTimeout(resolve, 100)); }
+    }
+    return {};
+  }
+  if (message.type === "pilotStop") {
+    if (sender.tab) throw new Error("Stop AutoPilot from the AuraSolve popup.");
+    await chrome.runtime.sendMessage({target:"pilot",action:"stop"}).catch(() => {});
+    const {pilotStatus} = await chrome.storage.session.get("pilotStatus");
+    if (Number.isInteger(pilotStatus?.tabId)) {
+      cancel(pilotStatus.tabId);
+      await chrome.storage.session.remove([`grant:${pilotStatus.tabId}`,`pilotRun:${pilotStatus.tabId}`]);
+    }
+    await chrome.storage.session.set({pilotStatus:{running:false,text:"Stopped. Start again to continue."}});
+    return {};
+  }
+  if (message.type === "pilotStatus") {
+    if (sender.tab) throw new Error("Unknown request.");
+    const {pilotStatus} = await chrome.storage.session.get("pilotStatus");
+    await chrome.storage.session.set({pilotStatus:{...message.status,tabId:pilotStatus?.tabId}});
+    return {};
+  }
   if (message.type === "ask") {
     if (sender.tab) throw new Error("Ask from the AuraSolve panel.");
     if (!Array.isArray(message.messages) || !message.messages.length) throw new Error("Ask a question first.");
@@ -1060,12 +1092,9 @@ async function pageFigures(tabId, documentId, used = 0) {
   return figures;
 }
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
+  if (message?.target === "pilot") return false;
   storageReady.then(()=>handle(message,sender)).then(data=>reply({ok:true,data})).catch(error=>reply({ok:false,error:error.name === "AbortError"?"Request stopped or timed out. Nothing else will be submitted.":error.message,
     ...(['not_sent','unknown'].includes(error.submission)?{submission:error.submission}:{})}));
   return true;
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);chrome.storage.session.remove(`pilotRun:${tabId}`);});
-
-
-// Keep the extension open while the user interacts with the question.
-chrome.sidePanel?.setPanelBehavior({openPanelOnActionClick:true}).catch(console.error);

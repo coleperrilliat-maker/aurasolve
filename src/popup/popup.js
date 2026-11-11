@@ -642,9 +642,9 @@ window.addEventListener('focus', () => { if (!document.querySelector('[data-view
 /* ---------- Close and cloud status ---------- */
 $('close').onclick = async () => {
   if (busy) { token++; await send({type: 'stop'}).catch(() => {}); }
-  const win = await chrome.windows.getCurrent();
-  await chrome.sidePanel.close({windowId: win.id});
+  window.close();
 };
+if (document.querySelector(`.view[data-view="${location.hash.slice(1)}"]`)) show(location.hash.slice(1));
 growPrompt();
 try {
   const health = await send({type: 'settingsStatus'});

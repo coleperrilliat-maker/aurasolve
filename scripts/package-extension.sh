@@ -16,17 +16,20 @@ mkdir -p "$BUILD/src/background" "$BUILD/src/content" "$BUILD/src/popup" "$BUILD
 
 cp manifest.json "$BUILD/"
 cp -R icons "$BUILD/"
-cp src/popup/popup.html "$BUILD/src/popup/"
+cp src/popup/popup.html src/popup/mini.html src/popup/pilot.html "$BUILD/src/popup/"
 cp src/options/index.html "$BUILD/src/options/"
 cp -R src/vendor/katex/fonts src/vendor/katex/LICENSE "$BUILD/src/vendor/katex/"
 
 $ESBUILD src/background/worker.js --bundle --format=esm $FLAGS --outfile="$BUILD/src/background/worker.js"
 $ESBUILD src/content/app.js --bundle --format=esm $FLAGS --outfile="$BUILD/src/content/app.js"
 $ESBUILD src/popup/popup.js --bundle --format=esm $FLAGS --outfile="$BUILD/src/popup/popup.js"
+$ESBUILD src/popup/mini.js --bundle --format=esm $FLAGS --outfile="$BUILD/src/popup/mini.js"
+$ESBUILD src/popup/pilot.js --bundle --format=esm $FLAGS --outfile="$BUILD/src/popup/pilot.js"
 $ESBUILD src/options/options.js --bundle --format=esm $FLAGS --outfile="$BUILD/src/options/options.js"
 $ESBUILD src/content/bootstrap.js $FLAGS --outfile="$BUILD/src/content/bootstrap.js"
 $ESBUILD src/content/region-pick.js $FLAGS --outfile="$BUILD/src/content/region-pick.js"
 $ESBUILD src/popup/popup.css $FLAGS --loader:.css=css --outfile="$BUILD/src/popup/popup.css"
+$ESBUILD src/popup/mini.css $FLAGS --loader:.css=css --outfile="$BUILD/src/popup/mini.css"
 $ESBUILD src/options/options.css $FLAGS --loader:.css=css --outfile="$BUILD/src/options/options.css"
 cp src/vendor/katex/katex.min.css "$BUILD/src/vendor/katex/"
 
