@@ -9,7 +9,7 @@ $('version').textContent = BUILD_VERSION;
 const mac = /Mac|iPhone|iPad/.test(navigator.platform || '');
 const keys = mac ? '⌘⇧X' : 'Ctrl+Shift+X';
 $('hint').textContent = `Page buttons · ${keys}`;
-$('shortcut').textContent = `Press ${keys} on a homework tab to show the buttons and turn on highlight-to-solve.`;
+$('shortcut').textContent = `Press ${keys} to turn highlight-to-solve on or off. It does not change the page buttons.`;
 
 const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
 const say = (id, text, error = false) => {

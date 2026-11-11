@@ -55,7 +55,7 @@ test('a dropdown proof keeps its diagram so the model can read the marks',async(
         {id:'FL2',kind:'select',options:[{value:'FL2-0',label:'Definition of midpoint'}]}
       ]
     },'field');
-    assert.equal(calls,2);
+    assert.equal(calls,1);
     assert.deepEqual(solution.actions.map(a=>[a.target,a.value]),[['FL1','FL1-0'],['FL2','FL2-0']]);
   } finally {globalThis.fetch=original;if(previous===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=previous;}
 });

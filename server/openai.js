@@ -214,9 +214,9 @@ export async function solveWithOpenAI(snapshot,mode,requestedModel,signal,reques
  if(mode==="explain" || !(snapshot.fields || []).length)return solveWith(cheapChain,chosen);
  // Pearson already rejected an answer, so pay for the strong model.
  if(snapshot.retryContext?.length || cheap===strong)return solveWith(strongChain,chosen || "high");
- // Hinge / inequality range questions: mini often agrees with itself on a
- // wrong bound that ignores the figure comparison, so skip the cheap vote.
- if(hardGeometryQuestion(snapshot))return solveWith(strongChain,chosen || "high");
+ // Diagram questions: two cheap solves often agree on a misread figure.
+ // Use the strong model instead of trusting that agreement.
+ if(snapshot.visual || snapshot.imageBased || snapshot.figureImages?.length || hardGeometryQuestion(snapshot))return solveWith(strongChain,chosen || "high");
  // Mini's own confidence is not trusted; it is often confidently wrong. Two
  // cheap solves with different reasoning budgets must fill every blank the
  // same way. Only a disagreement or failure pays for the strong model.

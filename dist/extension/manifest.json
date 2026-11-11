@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AuraSolve \u2014 Practice Tutor",
-  "version": "1.21.18",
+  "version": "1.21.19",
   "description": "Explain questions, fill supported practice fields, and work through ungraded practice with a tutor.",
   "minimum_chrome_version": "141",
   "permissions": [
@@ -48,7 +48,7 @@
         "default": "Ctrl+Shift+X",
         "mac": "Command+Shift+X"
       },
-      "description": "Show page buttons and enable highlight-to-solve"
+      "description": "Turn highlight-to-solve on or off"
     }
   },
   "content_scripts": [

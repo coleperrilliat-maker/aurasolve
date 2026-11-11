@@ -1098,20 +1098,21 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);chrome.storage.session.remove(`pilotRun:${tabId}`);});
 
-// Toolbar icon opens the popup. ⌘⇧X / Ctrl+Shift+X arms the open tab: shows
-// the on-page buttons and turns on highlight-to-solve.
-async function activateAuraOnTab(tabId) {
+// Toolbar icon opens the popup. ⌘⇧X / Ctrl+Shift+X only toggles highlight-to-solve.
+// It does not show, hide, or move the on-page buttons.
+async function toggleHighlight(tabId) {
   if (tabId == null) return;
-  const settings = await writeOverlay({...(await readOverlay()), showFill: true, showShot: true, invisible: false});
+  const current = await readOverlay();
+  const settings = await writeOverlay({...current, highlight: !current.highlight});
   await chrome.scripting.executeScript({target: {tabId, allFrames: true}, files: ['src/content/bootstrap.js']}).catch(() => {});
-  await chrome.tabs.sendMessage(tabId, {type: 'auraActivate', settings}).catch(() => {});
-  chrome.action.setBadgeText({tabId, text: 'ON'});
-  chrome.action.setBadgeBackgroundColor({tabId, color: '#1d1d1f'});
+  await chrome.tabs.sendMessage(tabId, {type: 'overlayChanged', settings}).catch(() => {});
+  chrome.action.setBadgeText({tabId, text: settings.highlight ? 'ON' : 'OFF'});
+  chrome.action.setBadgeBackgroundColor({tabId, color: settings.highlight ? '#1d1d1f' : '#8e8e93'});
   setTimeout(() => chrome.action.setBadgeText({tabId, text: ''}), 1400);
 }
 chrome.commands.onCommand.addListener(async command => {
   if (command !== 'activate-aurasolve' && command !== 'open-aurasolve') return;
   const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
   if (!tab?.id || !/^https?:/.test(tab.url || '')) return;
-  await activateAuraOnTab(tab.id);
+  await toggleHighlight(tab.id);
 });

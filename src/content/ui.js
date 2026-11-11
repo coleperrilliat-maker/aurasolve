@@ -165,6 +165,7 @@ export function createUI() {
 
   async function refresh(next) {
     const fresh = normalizeOverlay(next || await fetchOverlay());
+    armed = Boolean(fresh.highlight);
     if (JSON.stringify(fresh) === JSON.stringify(settings) && host.isConnected) return;
     settings = fresh;
     mount();
@@ -202,8 +203,8 @@ export function createUI() {
   }
   button.onclick = () => { if (!button.hidden) fill(); };
 
-  // Highlight-to-solve stays off until ⌘⇧X arms this tab, so casual selecting
-  // text does not trigger fills. Buttons can still be clicked anytime.
+  // ⌘⇧X toggles this. Selecting question text only solves while it is on.
+  // Button visibility is a separate setting and is left alone.
   let armed = false, lastPick = '', pickTimer = null;
   function onPick() {
     if (!armed) return;
@@ -282,13 +283,6 @@ export function createUI() {
   try {
     chrome.runtime.onMessage.addListener(message => {
       if (message?.type === 'overlayChanged') refresh(message.settings);
-      if (message?.type === 'auraActivate') {
-        armed = true;
-        veiled = false;
-        refresh(message.settings);
-        host.style.visibility = '';
-        try { button.focus(); } catch {}
-      }
     });
   } catch {}
   setInterval(() => { if (!running && !document.hidden) refresh(); }, 5000);
@@ -302,13 +296,6 @@ export function createUI() {
   return {
     open: () => button.focus(),
     veil: hidden => { veiled = hidden; host.style.visibility = hidden ? 'hidden' : ''; },
-    activate: next => {
-      armed = true;
-      veiled = false;
-      refresh(next);
-      host.style.visibility = '';
-      try { button.focus(); } catch {}
-    },
     refresh,
   };
 }
