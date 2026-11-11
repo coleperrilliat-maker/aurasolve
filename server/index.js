@@ -118,7 +118,7 @@ function sessionCookie(req, token) {
 function publicBase(req) {
   const configured = process.env.PUBLIC_URL?.trim();
   if (configured) return configured.replace(/\/$/, "");
-  const host = req.headers["x-forwarded-host"] || req.headers.host || "aurasolve-production.up.railway.app";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "aurasolve.io";
   const proto = req.headers["x-forwarded-proto"] || (/^(localhost|127\.)/.test(host) ? "http" : "https");
   return `${proto}://${host}`;
 }

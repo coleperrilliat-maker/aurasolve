@@ -1,6 +1,10 @@
-const API = "https://aurasolve-production.up.railway.app";
-if (location.origin !== API && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(location.origin)) {
-  location.replace(`${API}/login${location.search}`);
+const API_HOSTS = new Set([
+  "https://aurasolve.io",
+  "https://www.aurasolve.io",
+  "https://aurasolve-production.up.railway.app",
+]);
+if (!API_HOSTS.has(location.origin) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(location.origin)) {
+  location.replace(`https://aurasolve-production.up.railway.app/login${location.search}`);
 }
 
 const params = new URLSearchParams(location.search);
