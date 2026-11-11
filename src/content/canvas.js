@@ -46,11 +46,49 @@ function selectOptions(select) {
   return [...select.options].map(option => clean(option.text || option.value)).filter(value => value && !/^(select|\[ select \])$/i.test(value));
 }
 
-function selectLabel(select, index) {
+function sideText(node, select) {
+  if (!node || node === select || node.contains?.(select)) return '';
+  if (node.querySelector?.('select, input, textarea')) return '';
+  return clean(textWithEquations(node) || node.textContent);
+}
+
+// Canvas matching puts the left item beside the dropdown, not in the question
+// sentence. The label has to be that item or every row looks the same.
+export function premiseText(select) {
+  const ids = String(select.getAttribute?.('aria-labelledby') || '').split(/\s+/).filter(Boolean);
+  if (ids.length && select.ownerDocument?.getElementById) {
+    const text = clean(ids.map(id => select.ownerDocument.getElementById(id)?.textContent).filter(Boolean).join(' '));
+    if (text) return text;
+  }
+  const row = select.closest?.('tr, .answer_match, fieldset, li');
+  if (row) {
+    const left = [...row.querySelectorAll('.answer_match_left, .matching_answer_text, .answer_text, legend, td, th')].map(node => sideText(node, select)).find(Boolean);
+    if (left) return left;
+  }
+  const answer = select.closest?.('.answer');
+  if (answer && answer.querySelectorAll('select').length === 1) {
+    const left = [...answer.querySelectorAll('.answer_match_left, .matching_answer_text, .answer_text, legend')].map(node => sideText(node, select)).find(Boolean);
+    if (left) return left;
+  }
+  return '';
+}
+
+function siblingText(select) {
   let text = '';
   let node = select.previousSibling;
-  for (let hops = 0; node && hops < 4 && text.length < 80; hops++, node = node.previousSibling) text = `${node.textContent || ''}${text}`;
-  return clean(text) || clean(select.getAttribute('aria-label')) || `Dropdown ${index + 1}`;
+  for (let hops = 0; node && hops < 4 && text.length < 160; hops++, node = node.previousSibling) text = `${node.textContent || ''}${text}`;
+  return clean(text);
+}
+
+function selectLabel(select, index) {
+  return premiseText(select) || siblingText(select) || clean(select.getAttribute('aria-label')) || `Item ${index + 1}`;
+}
+
+function matchingQuestion(selects) {
+  const lists = selects.map(selectOptions);
+  if (lists.length < 2 || lists.some(list => list.length < 2)) return false;
+  const key = list => list.join('\n');
+  return lists.every(list => key(list) === key(lists[0]));
 }
 
 function textFields(root) {
@@ -66,7 +104,9 @@ function textFields(root) {
 }
 
 function questionImages(root) {
-  const box = root.querySelector('.question_text') || root;
+  const boxes = [root.querySelector('.question_text'), root.querySelector('.answers')].filter(Boolean);
+  if (!boxes.length) boxes.push(root);
+  const box = {querySelectorAll: selector => boxes.flatMap(item => [...item.querySelectorAll(selector)])};
   const seen = new Set();
   const images = [];
   for (const img of box.querySelectorAll('img')) {
@@ -142,7 +182,11 @@ async function solveOne(question) {
 
 function pack(id, read) {
   if (read.kind === 'dropdown' && read.controls.length) {
-    return {id, kind: 'dropdowns', title: read.title, options: [], blanks: read.controls.map((select, index) => ({label: selectLabel(select, index), options: selectOptions(select)}))};
+    const matching = matchingQuestion(read.controls);
+    const title = matching
+      ? `${read.title}\nMatching: each blank label is the left item. Put the matching right item in that blank, copied from its options. Use each option at most once. Extra options are distractors.`
+      : read.title;
+    return {id, kind: 'dropdowns', title, options: [], images: read.images, blanks: read.controls.map((select, index) => ({label: selectLabel(select, index), options: selectOptions(select)}))};
   }
   if (read.kind === 'text' || read.kind === 'paragraph') {
     const label = needsFullEquation(read.title) ? 'Full equation' : 'Answer';
@@ -201,18 +245,31 @@ async function answer(root) {
         controls.forEach((el, index) => setChecked(el, wanted.has(labels[index])));
       }
     } else if (question.kind === 'dropdown') {
-      const blanks = cached?.blanks || [];
+      let blanks = Array.isArray(cached?.blanks) ? cached.blanks : [];
+      const matching = matchingQuestion(controls);
+      const filled = blanks.map(clean).filter(Boolean);
+      const repeated = matching && filled.length >= controls.length && new Set(filled).size < filled.length;
+      if (controls.length > 1 && (filled.length < controls.length || repeated)) {
+        try {
+          const data = await sendExtension({type: 'quizPrefetch', questions: [pack(idFor(root) || 'match', read)]});
+          if (Array.isArray(data?.answers?.[0]?.blanks) && data.answers[0].blanks.length) blanks = data.answers[0].blanks;
+        } catch {}
+      }
       for (let index = 0; index < controls.length; index++) {
         const select = controls[index];
         const options = selectOptions(select);
         const picked = blanks[index] || (controls.length === 1 ? cached?.choices?.[0] : '');
+        const used = controls.slice(0, index).map((_, earlier) => clean(blanks[earlier])).filter(Boolean);
         const result = picked ? {choices: [picked]} : await solveOne({
           ...question,
           kind: 'dropdown',
-          title: `${question.title}\nFill only this dropdown: ${selectLabel(select, index)}`,
-          options,
+          title: matching
+            ? `${question.title}\nMatching row "${selectLabel(select, index)}". Choose one option and do not repeat: ${used.join(', ') || 'none yet'}.`
+            : `${question.title}\nFill only this dropdown: ${selectLabel(select, index)}`,
+          options: matching ? options.filter(option => !used.includes(option)) : options,
         });
         chooseSelect(select, result.choices?.[0]);
+        blanks[index] = result.choices?.[0] || picked;
         await pause(40);
       }
     } else {

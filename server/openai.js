@@ -343,6 +343,7 @@ export async function answerQuiz(questions, signal) {
     "For checkbox, put every correct option in choices, copied exactly, and no wrong ones. " +
     "For text or paragraph, leave choices empty and put the answer in blanks (one string per blank, in order). " +
     "For dropdowns, leave choices empty and put one blanks string per dropdown, in order, each copied from that dropdown's options. " +
+    "A matching question is several dropdowns that share the same options. The blank label is the left item; the blank string is the right item that matches it. Use each option at most once, and leave distractors unused. " +
     "For a grid, leave choices empty and put one blanks string per row, in order, each copied from options. " +
     `${EQUATION_ANSWER_RULE} ` +
     "Attached images are the equations or figures for the question id named with them. Read those images; the words alone are often missing the equation. " +
