@@ -39,7 +39,8 @@ export function answerSlotsSchema(slots, dropTargets = []) {
       description: 'Multiple choice group. Pick the one correct option.'};
     else if (slot.kind === 'select') properties[slot.key] = {type: 'string', enum: numbered(open(field), option => option.label || option.value),
       description: `Dropdown. Pick the correct choice. ${describe(field)}`};
-    else if (slot.kind === 'checkbox') properties[slot.key] = {type: 'boolean', description: `Checkbox. true means check it. ${describe(field)}`};
+    else if (slot.kind === 'checkbox') properties[slot.key] = {type: 'boolean',
+      description: `Checkbox in a select-all / mark-all list. true = this option is a correct statement or valid fix; false = leave it unchecked. Judge this option on its own. ${describe(field)}`};
     else if (slot.kind === 'text') properties[slot.key] = {type: 'string',
       description: `Answer box. Only the exact value to type, ${field.format === 'latex' ? 'as LaTeX without delimiters' : 'as plain text with slash fractions like 1/3'}, no "x =" unless the box needs it. ${field.choice ? 'This box sits inside one multiple-choice option. If that option is chosen, this blank is REQUIRED (for example ">" or "<"). Use "" only when a different option is chosen. Never pick a choice and leave its inner blank empty. ' : ''}${describe(field)}`};
     else if (slot.kind === 'point') properties[slot.key] = {type: 'object', additionalProperties: false,
