@@ -7,8 +7,8 @@ const $ = id => document.getElementById(id);
 $('version').textContent = BUILD_VERSION;
 const mac = /Mac|iPhone|iPad/.test(navigator.platform || '');
 document.querySelector('.hint').innerHTML = mac
-  ? 'Open with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>X</kbd>'
-  : 'Open with <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>X</kbd>';
+  ? 'Page buttons · <kbd>⌘</kbd><kbd>⇧</kbd><kbd>X</kbd>'
+  : 'Page buttons · <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>X</kbd>';
 
 const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
 const note = (text, error = false) => { $('note').textContent = text || ''; $('note').classList.toggle('error', error); };

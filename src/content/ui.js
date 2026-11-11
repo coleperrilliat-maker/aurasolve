@@ -189,7 +189,7 @@ export function createUI() {
       await sendExtension({type: 'prepareField'});
       const result = await sendExtension({type: 'solve', mode: 'field'});
       if (!result.solution.supported || result.solution.confidence < .85 || !result.solution.actions.length) throw new Error(result.solution.limitation || 'Could not fill this answer. Open AuraSolve and choose Explain now.');
-      await sendExtension({type: 'apply', planId: result.planId, confirmIncorrect: true});
+      await sendExtension({type: 'apply', planId: result.planId, fillOnly: true, confirmIncorrect: true});
       notice.hidden = true;
     } catch (error) {
       if (!settings.invisible) { notice.textContent = error.message; notice.hidden = false; }
@@ -202,10 +202,11 @@ export function createUI() {
   }
   button.onclick = () => { if (!button.hidden) fill(); };
 
-  // Highlighting any text in the question (a word, a character, even a
-  // space) solves it and fills the answer, same as Fill answers.
-  let lastPick = '', pickTimer = null;
+  // Highlight-to-solve stays off until ⌘⇧X arms this tab, so casual selecting
+  // text does not trigger fills. Buttons can still be clicked anytime.
+  let armed = false, lastPick = '', pickTimer = null;
   function onPick() {
+    if (!armed) return;
     clearTimeout(pickTimer);
     pickTimer = setTimeout(() => {
       const selection = getSelection();
@@ -281,6 +282,13 @@ export function createUI() {
   try {
     chrome.runtime.onMessage.addListener(message => {
       if (message?.type === 'overlayChanged') refresh(message.settings);
+      if (message?.type === 'auraActivate') {
+        armed = true;
+        veiled = false;
+        refresh(message.settings);
+        host.style.visibility = '';
+        try { button.focus(); } catch {}
+      }
     });
   } catch {}
   setInterval(() => { if (!running && !document.hidden) refresh(); }, 5000);
@@ -294,6 +302,13 @@ export function createUI() {
   return {
     open: () => button.focus(),
     veil: hidden => { veiled = hidden; host.style.visibility = hidden ? 'hidden' : ''; },
+    activate: next => {
+      armed = true;
+      veiled = false;
+      refresh(next);
+      host.style.visibility = '';
+      try { button.focus(); } catch {}
+    },
     refresh,
   };
 }

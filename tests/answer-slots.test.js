@@ -18,7 +18,7 @@ test('a mixed question gets one required typed slot per blank',()=>{
   assert.deepEqual(schema.properties.choice_1.enum,['1) A. SAS','2) B. SSS']);
   assert.deepEqual(schema.properties.blank_5.enum,['1) Given','2) SAS Postulate']);
   assert.equal(schema.properties.blank_6.type,'boolean');
-  assert.match(schema.properties.blank_2.description,/use "" unless that option is chosen/);
+  assert.match(schema.properties.blank_2.description,/this blank is REQUIRED/i);
 });
 
 test('slot answers become one action per blank, skipping boxes of unchosen choices',()=>{

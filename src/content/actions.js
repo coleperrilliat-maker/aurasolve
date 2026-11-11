@@ -110,7 +110,14 @@ export async function execute(plan) {
       choice.click();
       if(choice!==el)el.click();
       if (!el.checked) throw new Error("The radio answer was not accepted by the page.");
-      if (current.fields.some(f => f.choice === field.id)) await new Promise(resolve => setTimeout(resolve, 120));
+      // Inner blanks often stay disabled until the choice finishes enabling them.
+      if (current.fields.some(f => f.choice === field.id)) {
+        for (let attempt = 0; attempt < 12; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, attempt ? 60 : 120));
+          const blanks = current.fields.filter(f => f.choice === field.id).map(f => elementFor(f.id));
+          if (blanks.every(blank => blank && writable(blank))) break;
+        }
+      }
     }
     else if (a.kind === "checkbox") { if (el.checked !== (a.value === "true")) el.click(); if (el.checked !== (a.value === "true")) throw new Error("Checkbox state was not retained."); }
     else if (a.kind === "point" && field.adapter === 'aria-number-line') {

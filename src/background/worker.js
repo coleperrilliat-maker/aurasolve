@@ -1098,34 +1098,20 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
 });
 chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);chrome.storage.session.remove(`pilotRun:${tabId}`);});
 
-// Toolbar click does nothing. AuraSolve opens only from ⌘⇧X / Ctrl+Shift+X.
-const POPUP = 'src/popup/mini.html';
-async function openAuraPopup() {
-  try {
-    await chrome.action.setPopup({popup: POPUP});
-    await chrome.action.openPopup();
-  } catch {
-    const current = await chrome.windows.getCurrent().catch(() => null);
-    await chrome.windows.create({
-      url: chrome.runtime.getURL(POPUP),
-      type: 'popup',
-      width: 340,
-      height: 560,
-      focused: true,
-      ...(current ? {
-        left: Math.max(0, (current.left || 0) + Math.max(0, (current.width || 900) - 360)),
-        top: (current.top || 80) + 60,
-      } : {}),
-    });
-  } finally {
-    await chrome.action.setPopup({popup: ''}).catch(() => {});
-  }
+// Toolbar icon opens the popup. ⌘⇧X / Ctrl+Shift+X arms the open tab: shows
+// the on-page buttons and turns on highlight-to-solve.
+async function activateAuraOnTab(tabId) {
+  if (tabId == null) return;
+  const settings = await writeOverlay({...(await readOverlay()), showFill: true, showShot: true, invisible: false});
+  await chrome.scripting.executeScript({target: {tabId, allFrames: true}, files: ['src/content/bootstrap.js']}).catch(() => {});
+  await chrome.tabs.sendMessage(tabId, {type: 'auraActivate', settings}).catch(() => {});
+  chrome.action.setBadgeText({tabId, text: 'ON'});
+  chrome.action.setBadgeBackgroundColor({tabId, color: '#1d1d1f'});
+  setTimeout(() => chrome.action.setBadgeText({tabId, text: ''}), 1400);
 }
-chrome.commands.onCommand.addListener(command => {
-  if (command === 'open-aurasolve') openAuraPopup();
-});
-chrome.action.onClicked.addListener(() => {
-  chrome.action.setBadgeText({text: '⌘X'});
-  chrome.action.setBadgeBackgroundColor({color: '#2f55e6'});
-  setTimeout(() => chrome.action.setBadgeText({text: ''}), 1600);
+chrome.commands.onCommand.addListener(async command => {
+  if (command !== 'activate-aurasolve' && command !== 'open-aurasolve') return;
+  const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+  if (!tab?.id || !/^https?:/.test(tab.url || '')) return;
+  await activateAuraOnTab(tab.id);
 });

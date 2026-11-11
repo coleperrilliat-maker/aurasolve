@@ -63,7 +63,13 @@ export function coversEveryField(solution, snapshot) {
   return true;
 }
 export function keepCoveredSolution(solution, snapshot) {
-  if (!solution || solution.supported || !coversEveryField(solution, snapshot)) return solution;
+  if (!solution) return solution;
+  // A radio pick with an empty inner blank looks "supported" to the model but
+  // still leaves the page unfinished. Reject that before any fill.
+  if (solution.supported && solution.actions?.length && !coversEveryField(solution, snapshot)) {
+    return reject(solution, 'The selected choice still has an empty answer box. Fill that blank too.');
+  }
+  if (solution.supported || !coversEveryField(solution, snapshot)) return solution;
   const excuse = /cover every|nothing was filled|did not cover|active blank/i.test(solution.limitation || '');
   if (solution.confidence < 0.85 && !excuse) return solution;
   return {...solution, supported:true, confidence:Math.max(solution.confidence || 0, 0.9), limitation:excuse ? '' : (solution.limitation || '')};

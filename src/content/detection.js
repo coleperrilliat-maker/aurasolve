@@ -90,9 +90,11 @@ function groupAnchor(el, prompts) {
 }
 function choiceOwner(el, radios) {
   let node = el?.parentElement;
-  for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+  for (let depth = 0; node && depth < 16; depth++, node = node.parentElement) {
     const inside = (radios || []).filter(radio => node.contains?.(radio));
     if (inside.length === 1) return {radio: inside[0], row: node};
+    // Once a node holds more than one radio, we've left the individual choice row.
+    if (inside.length > 1) break;
   }
   return null;
 }

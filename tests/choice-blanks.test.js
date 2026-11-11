@@ -65,7 +65,7 @@ globalThis.document = {
 
 const {snapshot, choiceOwnerRadio} = await import('../src/content/detection.js');
 const {execute} = await import('../src/content/actions.js');
-const {coversEveryField} = await import('../server/verification.js');
+const {coversEveryField, keepCoveredSolution} = await import('../server/verification.js');
 
 test('a blank inside one choice belongs to that radio', () => {
   assert.equal(choiceOwnerRadio(add, [a, c]), c);
@@ -82,6 +82,20 @@ test('only the selected choice blanks are required', () => {
   assert.equal(coversEveryField({actions:[act('radio','c'), act('text','c1','9'), act('text','c2','1/30')]}, {fields}), true);
   assert.equal(coversEveryField({actions:[act('radio','c'), act('text','c1','9')]}, {fields}), false);
   assert.equal(coversEveryField({actions:[act('radio','a'), act('text','a1','1/30')]}, {fields}), true);
+});
+
+test('a radio pick with an empty inner blank is rejected', () => {
+  const fields = [
+    {id:'a', kind:'radio', group:'pick'}, {id:'b', kind:'radio', group:'pick'},
+    {id:'a1', kind:'text', choice:'a'}
+  ];
+  const rejected = keepCoveredSolution({
+    answer:'A', explanation:'Picked A.', confidence:.99, supported:true, limitation:'',
+    actions:[{kind:'radio', target:'a', value:'A', destination:'', x:null, y:null}],
+  }, {fields});
+  assert.equal(rejected.supported, false);
+  assert.equal(rejected.actions.length, 0);
+  assert.match(rejected.limitation, /empty answer box/i);
 });
 
 test('fill selects the choice before writing the blanks that were closed', async () => {
