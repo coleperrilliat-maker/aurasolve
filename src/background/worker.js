@@ -579,6 +579,16 @@ async function handle(message,sender) {
   }
   if (message.type === "getOverlay") return {settings: await readOverlay()};
   if (message.type === "setOverlay") return {settings: await writeOverlay(message.settings)};
+  if (message.type === "highlightStatus") {
+    if (sender.tab) throw new Error("Open AuraSolve from its popup.");
+    const key = highlightKey(message.tabId);
+    return {on: Boolean((await chrome.storage.session.get(key))[key])};
+  }
+  if (message.type === "setHighlight") {
+    if (sender.tab) throw new Error("Turn highlight on from the AuraSolve popup.");
+    await setHighlight(message.tabId, Boolean(message.on));
+    return {on: Boolean(message.on)};
+  }
   // Screenshot and chat work on any page, so they skip the practice-page setup.
   if (message.type === "captureScreen") {
     if (sender.tab) throw new Error("Use the AuraSolve panel to take a screenshot.");
@@ -1125,20 +1135,36 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     ...(['not_sent','unknown'].includes(error.submission)?{submission:error.submission}:{})}));
   return true;
 });
-chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove(`grant:${tabId}`);chrome.storage.session.remove(`pilotRun:${tabId}`);});
+chrome.tabs.onRemoved.addListener(tabId=>{cancel(tabId);chrome.storage.session.remove([`grant:${tabId}`,`pilotRun:${tabId}`,highlightKey(tabId)]);tabUrls.delete(tabId);});
 
-// Toolbar icon opens the popup. ⌘⇧X / Ctrl+Shift+X only toggles highlight-to-solve.
-// It does not show, hide, or move the on-page buttons.
-async function toggleHighlight(tabId) {
+// Highlight lasts only for the current page of one tab. A new page or a
+// closed tab turns it off so a later visit cannot spend another solve.
+const highlightKey = tabId => `highlight:${tabId}`;
+const tabUrls = new Map();
+async function setHighlight(tabId, on) {
   if (tabId == null) return;
-  const current = await readOverlay();
-  const settings = await writeOverlay({...current, highlight: !current.highlight});
-  await chrome.scripting.executeScript({target: {tabId, allFrames: true}, files: ['src/content/bootstrap.js']}).catch(() => {});
-  await chrome.tabs.sendMessage(tabId, {type: 'overlayChanged', settings}).catch(() => {});
-  chrome.action.setBadgeText({tabId, text: settings.highlight ? 'ON' : 'OFF'});
-  chrome.action.setBadgeBackgroundColor({tabId, color: settings.highlight ? '#1d1d1f' : '#8e8e93'});
+  const key = highlightKey(tabId);
+  if (on) await chrome.storage.session.set({[key]: true});
+  else await chrome.storage.session.remove(key);
+  await chrome.tabs.sendMessage(tabId, {type: 'highlightChanged', on: Boolean(on)}).catch(() => {});
+  chrome.action.setBadgeText({tabId, text: on ? 'ON' : 'OFF'});
+  chrome.action.setBadgeBackgroundColor({tabId, color: on ? '#1d1d1f' : '#8e8e93'});
   setTimeout(() => chrome.action.setBadgeText({tabId, text: ''}), 1400);
 }
+async function toggleHighlight(tabId) {
+  if (tabId == null) return;
+  const key = highlightKey(tabId);
+  const on = !Boolean((await chrome.storage.session.get(key))[key]);
+  await chrome.scripting.executeScript({target: {tabId, allFrames: true}, files: ['src/content/bootstrap.js']}).catch(() => {});
+  await setHighlight(tabId, on);
+}
+chrome.tabs.onUpdated?.addListener((tabId, info, tab) => {
+  const next = info.url || (info.status === 'loading' ? tab?.url : '');
+  if (!next) return;
+  const previous = tabUrls.get(tabId);
+  tabUrls.set(tabId, next);
+  if (previous && previous !== next) setHighlight(tabId, false);
+});
 chrome.commands.onCommand.addListener(async command => {
   if (command !== 'activate-aurasolve' && command !== 'open-aurasolve') return;
   const [tab] = await chrome.tabs.query({active: true, currentWindow: true});

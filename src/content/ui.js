@@ -165,7 +165,6 @@ export function createUI() {
 
   async function refresh(next) {
     const fresh = normalizeOverlay(next || await fetchOverlay());
-    armed = Boolean(fresh.highlight);
     if (JSON.stringify(fresh) === JSON.stringify(settings) && host.isConnected) return;
     settings = fresh;
     mount();
@@ -224,6 +223,10 @@ export function createUI() {
       fill().finally(() => { lastPick = ''; });
     }, 250);
   }
+  let href = location.href;
+  const dropHighlight = () => { if (location.href === href) return; href = location.href; armed = false; };
+  window.addEventListener('hashchange', dropHighlight);
+  window.addEventListener('popstate', dropHighlight);
   document.addEventListener('mouseup', onPick, true);
   document.addEventListener('keyup', event => { if (event.key === 'Shift' || event.shiftKey) onPick(); }, true);
 
@@ -283,6 +286,7 @@ export function createUI() {
   try {
     chrome.runtime.onMessage.addListener(message => {
       if (message?.type === 'overlayChanged') refresh(message.settings);
+      if (message?.type === 'highlightChanged') armed = Boolean(message.on);
     });
   } catch {}
   setInterval(() => { if (!running && !document.hidden) refresh(); }, 5000);

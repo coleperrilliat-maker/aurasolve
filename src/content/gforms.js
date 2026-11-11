@@ -1,5 +1,4 @@
 import {sendExtension} from '../shared/messaging.js';
-import {fetchOverlay} from '../shared/overlay.js';
 import {matchOption, selectionLooksActive, classifyFormControls, parseFormDate, parseFormTime} from '../shared/form-answer.js';
 
 // Google Forms: highlight anything in a question (even a space between words)
@@ -120,7 +119,7 @@ export function readQuestion(item) {
 }
 
 function typeInto(el, value) {
-  el.focus();
+  el.focus({preventScroll: true});
   const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
   setter ? setter.call(el, value) : (el.value = value);
   el.dispatchEvent(new Event('input', {bubbles: true}));
@@ -213,8 +212,6 @@ async function answer(item) {
   if (busy.has(item)) return;
   busy.add(item);
   try {
-    item.scrollIntoView({block: 'center', inline: 'nearest'});
-    await pause(120);
     const question = readQuestion(item);
     if (!question) return;
     const {answer: result} = await sendExtension({type: 'formSolve', question});
@@ -260,9 +257,14 @@ function onSelect() {
 
 export function startForms() {
   globalThis.__auraFormsStop?.();
-  const apply = settings => { highlight = Boolean(settings?.highlight); };
-  fetchOverlay().then(apply);
-  const onSettings = message => { if (message?.type === 'overlayChanged') apply(message.settings); };
+  // Highlight starts off on every page. It only turns on for this document.
+  let href = location.href;
+  const drop = () => { if (location.href === href) return; href = location.href; highlight = false; };
+  const onSettings = message => {
+    if (message?.type === 'highlightChanged') highlight = Boolean(message.on);
+  };
+  window.addEventListener('hashchange', drop);
+  window.addEventListener('popstate', drop);
   try { chrome.runtime.onMessage.addListener(onSettings); } catch {}
   const keyup = event => { if (event.key === 'Shift' || event.shiftKey) onSelect(); };
   document.addEventListener('mouseup', onSelect, true);
@@ -274,6 +276,8 @@ export function startForms() {
     document.removeEventListener('pointerup', onSelect, true);
     document.removeEventListener('selectionchange', onSelect);
     document.removeEventListener('keyup', keyup, true);
+    window.removeEventListener('hashchange', drop);
+    window.removeEventListener('popstate', drop);
     try { chrome.runtime.onMessage.removeListener(onSettings); } catch {}
   };
 }

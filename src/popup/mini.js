@@ -194,9 +194,12 @@ function drawOverlay() {
   $('buttons-state').textContent = buttons ? 'On' : 'Off';
   $('ghost').setAttribute('aria-checked', String(overlay.invisible));
   $('ghost-state').textContent = overlay.invisible ? 'On · buttons stay clickable' : 'Off';
-  $('highlight-switch').setAttribute('aria-checked', String(overlay.highlight));
-  $('highlight-state').textContent = overlay.highlight ? `On · ${keys}` : `Off · ${keys}`;
+  $('highlight-switch').setAttribute('aria-checked', String(highlightOn));
+  $('highlight-state').textContent = highlightOn ? `On · ${keys}` : `Off · ${keys}`;
 }
+let highlightOn = false;
+drawOverlay();
+if (tab?.id) highlightOn = Boolean((await sendExtension({type: 'highlightStatus', tabId: tab.id}).catch(() => ({on: false}))).on);
 drawOverlay();
 $('buttons-switch').onclick = async () => {
   const show = !(overlay.showFill || overlay.showShot);
@@ -208,12 +211,18 @@ $('ghost').onclick = async () => {
   drawOverlay();
 };
 $('highlight-switch').onclick = async () => {
-  overlay = await writeOverlay({...overlay, highlight: !overlay.highlight});
+  if (!tab?.id) return;
+  highlightOn = Boolean((await sendExtension({type: 'setHighlight', tabId: tab.id, on: !highlightOn})).on);
   drawOverlay();
 };
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.overlaySettings) {
     overlay = normalizeOverlay(changes.overlaySettings.newValue);
+    drawOverlay();
+  }
+  const key = tab?.id ? `highlight:${tab.id}` : '';
+  if (area === 'session' && key && changes[key]) {
+    highlightOn = Boolean(changes[key].newValue);
     drawOverlay();
   }
 });
