@@ -501,12 +501,11 @@ async function fillFromSelection(tabId, image) {
   const result = await handle({type: 'solve', mode: 'field', image}, self);
   const {solution} = result;
   if (!solution?.supported || solution.confidence < .85 || !solution.actions?.length) return null;
-  let note = 'Filled in. Review it, then press Check answer.';
+  let note = 'Filled in.';
   try { await handle({type: 'apply', planId: result.planId, fillOnly: true}, self); }
-  catch (error) { note = `Could not fill it in: ${error.message}`; }
+  catch (error) { note = `Could not fill: ${error.message}`; }
   const answer = String(solution.answer || '').trim();
-  const explanation = String(solution.explanation || '').trim();
-  return {reply: `**Answer:** ${answer}\n\n${explanation}\n\n${note}`.trim()};
+  return {reply: answer ? `${note} ${answer}` : note};
 }
 async function handle(message,sender) {
   if (sender.id !== chrome.runtime.id) throw new Error("Invalid extension sender.");

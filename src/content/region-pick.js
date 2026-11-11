@@ -36,64 +36,48 @@
     .replace(/\\[()[\]]/g, '')
     .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)')
     .replace(/\\sqrt\{([^{}]*)\}/g, '√($1)')
-    .replace(/\\(times|cdot|div|pm|leq?|geq?|neq?|approx|infty|pi|theta|degree)\b/g, (_, name) => ({times:'×', cdot:'·', div:'÷', pm:'±', le:'≤', leq:'≤', ge:'≥', geq:'≥', ne:'≠', neq:'≠', approx:'≈', infty:'∞', pi:'π', theta:'θ', degree:'°'})[name])
+    .replace(/\\(times|cdot|div|pm|leq?|geq?|neq?|approx|infty|pi|theta|degree|circ)\b/g, (_, name) => ({times:'×', cdot:'·', div:'÷', pm:'±', le:'≤', leq:'≤', ge:'≥', geq:'≥', ne:'≠', neq:'≠', approx:'≈', infty:'∞', pi:'π', theta:'θ', degree:'°', circ:'°'})[name])
+    .replace(/\^\{\\?circ\}/g, '°')
+    .replace(/\^\\circ/g, '°')
     .replace(/\^\{([^{}]*)\}/g, '^$1')
     .replace(/\\(left|right)\b/g, '')
     .replace(/[ \t]{2,}/g, ' ');
 
+  function shortReply(reply) {
+    const text = plainMath(reply).replace(/\*\*/g, '').trim();
+    if (/^Filled in\b/i.test(text)) return text.split('\n')[0].trim();
+    const answerMatch = text.match(/(?:^|\n)\s*Answer:\s*([\s\S]*?)(?=\n(?:Explanation|Filled in)|$)/i);
+    const answer = (answerMatch ? answerMatch[1] : text.split('\n')[0] || '').trim();
+    return answer.slice(0, 160) || 'Done.';
+  }
+
+  function placeToast(card, point) {
+    const left = Math.min(window.innerWidth - 280, Math.max(12, (point?.x || window.innerWidth / 2) - 120));
+    const top = Math.min(window.innerHeight - 56, Math.max(12, (point?.y || 80) + 8));
+    card.style.left = left + 'px';
+    card.style.top = top + 'px';
+    document.documentElement.append(card);
+    const rect = card.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - 12) card.style.top = Math.max(12, window.innerHeight - 12 - rect.height) + 'px';
+    if (rect.right > window.innerWidth - 12) card.style.left = Math.max(12, window.innerWidth - 12 - rect.width) + 'px';
+  }
+
   function showResult(reply, point) {
     clear();
-    reply = plainMath(reply);
-    const answerMatch = String(reply || '').match(/\*\*Answer:\*\*\s*([\s\S]*?)(?=\n-|\n\n|$)/i);
-    const answer = (answerMatch ? answerMatch[1] : String(reply || '').split('\n')[0] || '').replace(/\*\*/g, '').trim();
-    const explanation = String(reply || '')
-      .replace(/\*\*Answer:\*\*\s*[\s\S]*?(?=\n-|\n\n|$)/i, '')
-      .trim() || reply;
     const card = document.createElement('div');
     card.id = 'aurasolve-region-result';
     card.innerHTML = `
       <style>
-        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;width:min(340px,calc(100vw - 24px));min-width:220px;min-height:140px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:16px;background:#fff;box-shadow:0 12px 40px rgba(15,18,34,.22),0 0 0 1px rgba(15,18,34,.08);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0e1120;overflow:auto}
+        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;max-width:min(320px,calc(100vw - 24px));display:inline-flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#11141c;color:#fff;font:600 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 10px 28px rgba(0,0,0,.28)}
         #aurasolve-region-result *{box-sizing:border-box}
-        #aurasolve-region-result .head{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:move;user-select:none;touch-action:none}
-        #aurasolve-region-result .head strong{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#3b6cff}
-        #aurasolve-region-result .x{width:28px;height:28px;border:0;border-radius:8px;background:#f1f3f8;color:#474e63;font-size:18px;cursor:pointer;line-height:1}
-        #aurasolve-region-result .box{padding:12px 14px;border-radius:12px;background:#f7f8fb;box-shadow:inset 0 0 0 1px rgba(15,18,34,.06)}
-        #aurasolve-region-result .box h3{margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8b91a4}
-        #aurasolve-region-result .box .body{font-size:15px;font-weight:650;overflow-wrap:anywhere}
-        #aurasolve-region-result .box.explain .body{font-size:13.5px;font-weight:450;color:#22273a}
-        #aurasolve-region-result ul{margin:0;padding-left:18px}
-        #aurasolve-region-result p{margin:0 0 6px}
-        #aurasolve-region-result p:last-child{margin-bottom:0}
+        #aurasolve-region-result .msg{min-width:0;overflow-wrap:anywhere}
+        #aurasolve-region-result .x{flex:none;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:rgba(255,255,255,.7);font-size:16px;line-height:1;cursor:pointer}
       </style>
-      <div class="head"><strong>AuraSolve</strong><button class="x" type="button" aria-label="Close">×</button></div>
-      <div class="box"><h3>Answer</h3><div class="body" data-answer></div></div>
-      <div class="box explain"><h3>Explanation</h3><div class="body" data-explain></div></div>`;
-    const left = Math.min(window.innerWidth - 360, Math.max(12, (point?.x || window.innerWidth / 2) - 160));
-    const top = Math.min(window.innerHeight - 80, Math.max(12, (point?.y || 80) + 12));
-    card.style.left = left + 'px';
-    card.style.top = top + 'px';
-    document.documentElement.append(card);
-    card.querySelector('[data-answer]').append(rich(answer || '…'));
-    card.querySelector('[data-explain]').append(rich(explanation));
+      <span class="msg"></span><button class="x" type="button" aria-label="Close">×</button>`;
+    card.querySelector('.msg').textContent = shortReply(reply);
     card.querySelector('.x').onclick = () => card.remove();
-    const head = card.querySelector('.head');
-    head.addEventListener('pointerdown', event => {
-      if (event.target.closest('.x')) return;
-      event.preventDefault();
-      const start = card.getBoundingClientRect(), ox = event.clientX - start.left, oy = event.clientY - start.top;
-      head.setPointerCapture(event.pointerId);
-      const move = e => {
-        card.style.left = Math.min(window.innerWidth - 40, Math.max(0, e.clientX - ox)) + 'px';
-        card.style.top = Math.min(window.innerHeight - 40, Math.max(0, e.clientY - oy)) + 'px';
-      };
-      const up = () => { head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); };
-      head.addEventListener('pointermove', move);
-      head.addEventListener('pointerup', up);
-    });
-    const rect = card.getBoundingClientRect();
-    if (rect.bottom > window.innerHeight - 12) card.style.top = Math.max(12, window.innerHeight - 12 - rect.height) + 'px';
-    if (rect.right > window.innerWidth - 12) card.style.left = Math.max(12, window.innerWidth - 12 - rect.width) + 'px';
+    placeToast(card, point);
+    setTimeout(() => card.isConnected && card.remove(), 6000);
   }
 
   function showWaiting(point) {
@@ -102,15 +86,13 @@
     card.id = 'aurasolve-region-result';
     card.innerHTML = `
       <style>
-        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;padding:14px 16px;border-radius:14px;background:#fff;box-shadow:0 12px 40px rgba(15,18,34,.22);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0e1120}
+        #aurasolve-region-result{all:initial;position:fixed;z-index:2147483647;padding:10px 12px;border-radius:12px;background:#11141c;color:#fff;font:600 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 10px 28px rgba(0,0,0,.28)}
         #aurasolve-region-result .wait{display:flex;align-items:center;gap:10px}
-        #aurasolve-region-result .spin{width:14px;height:14px;border:2px solid #c9d7ff;border-top-color:#3b6cff;border-radius:50%;animation:aura-spin .8s linear infinite}
+        #aurasolve-region-result .spin{width:12px;height:12px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:aura-spin .8s linear infinite}
         @keyframes aura-spin{to{transform:rotate(360deg)}}
       </style>
-      <div class="wait"><span class="spin"></span><span>Solving this area…</span></div>`;
-    card.style.left = Math.min(window.innerWidth - 220, Math.max(12, (point?.x || 24))) + 'px';
-    card.style.top = Math.min(window.innerHeight - 60, Math.max(12, (point?.y || 24))) + 'px';
-    document.documentElement.append(card);
+      <div class="wait"><span class="spin"></span><span>Solving…</span></div>`;
+    placeToast(card, point);
   }
 
   async function crop(imageUrl, box) {
