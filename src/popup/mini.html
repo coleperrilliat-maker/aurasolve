@@ -8,8 +8,8 @@
 <body>
   <header class="top">
     <div class="brand">
-      <img src="../../icons/icon-48.png" alt="" width="22" height="22">
-      <strong>AuraSolve</strong>
+      <img src="../../icons/icon-48.png" alt="" width="20" height="20">
+      <span>AuraSolve</span>
     </div>
     <p class="hint">Open with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>X</kbd></p>
   </header>
@@ -19,27 +19,27 @@
     <button id="allow-sites" type="button">Allow</button>
   </div>
 
-  <button id="pilot" class="primary" type="button">
+  <button id="pilot" class="panel primary" type="button">
     <span id="pilot-title">Start AutoPilot</span>
     <small id="pilot-text">Works through unfinished questions</small>
   </button>
 
-  <div class="actions">
-    <button id="solve" type="button">Solve this</button>
-    <button id="shot" type="button">Screenshot</button>
+  <div class="row">
+    <button id="solve" class="panel" type="button">Solve this</button>
+    <button id="shot" class="panel" type="button">Screenshot</button>
   </div>
 
-  <button id="chat" class="text" type="button">Chat</button>
+  <button id="chat" class="panel slim" type="button">Chat</button>
 
-  <div class="switch-row">
+  <div class="panel switch-row">
     <span>
-      <strong>Anonymous</strong>
+      <em>Anonymous</em>
       <small id="ghost-state">Buttons stay clickable, but invisible</small>
     </span>
     <button id="ghost" class="switch" type="button" role="switch" aria-checked="false" aria-label="Anonymous mode"></button>
   </div>
 
-  <button id="remove" class="text" type="button">Remove page buttons</button>
+  <button id="remove" class="panel slim mute" type="button">Remove page buttons</button>
 
   <p id="note" class="note" aria-live="polite"></p>
 
@@ -47,7 +47,7 @@
     <button id="profile" class="profile" type="button">
       <span class="avatar" aria-hidden="true"></span>
       <span>
-        <strong>Profile</strong>
+        <em>Profile</em>
         <small id="profile-text">Account &amp; plan</small>
       </span>
     </button>
