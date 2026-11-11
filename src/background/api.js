@@ -75,6 +75,13 @@ export async function ask(messages, image, solve, signal) {
   return data.reply;
 }
 
+export async function quizAnswer(questions, signal) {
+  const response = await callApi("/api/v1/quiz", {questions}, signal);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || (response.status === 429 ? "AuraSolve is busy. Wait a moment and try again." : `AuraSolve request failed (${response.status}).`));
+  return data.answers || [];
+}
+
 export async function formAnswer(question, signal) {
   const response = await callApi("/api/v1/form", question, signal);
   const data = await response.json().catch(() => ({}));

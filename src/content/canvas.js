@@ -1,5 +1,6 @@
 import {sendExtension} from '../shared/messaging.js';
 import {matchOption, selectionLooksActive} from '../shared/form-answer.js';
+import {asFormAnswer, createQuizCache} from './quiz-cache.js';
 
 // Canvas classic quizzes: highlight a question and fill its radios, checkboxes,
 // dropdowns, or text boxes. No on-page button, and nothing scrolls the page.
@@ -9,11 +10,30 @@ const busy = new WeakSet();
 let lastKey = '';
 let highlight = false;
 
-const QUESTION = '.question_holder, .display_question.question, .question.display_question';
+const QUESTION = '.question_holder, .display_question, .question';
+const cache = createQuizCache();
+const nodes = new Map();
+let primed = false;
+let tries = 0;
+
+export function questionRoots() {
+  const holders = [...document.querySelectorAll('.question_holder')];
+  if (holders.length) return holders;
+  const named = [...document.querySelectorAll('[name^="question_"]')];
+  const seen = new Set();
+  const roots = [];
+  for (const el of named) {
+    const id = el.name?.match(/question_\d+/)?.[0];
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    roots.push(el.closest('.question_holder, .display_question, .question') || el.parentElement);
+  }
+  return roots.filter(Boolean);
+}
 
 export function questionBlock(node) {
   const el = node?.nodeType === 1 ? node : node?.parentElement;
-  return el?.closest?.(QUESTION) || null;
+  return el?.closest?.('.question_holder') || el?.closest?.(QUESTION) || null;
 }
 
 function choiceText(input) {
@@ -43,9 +63,10 @@ function textFields(root) {
 export function readCanvas(root) {
   const title = clean(root.querySelector('.question_text, .question_text.user_content')?.innerText || root.innerText).slice(0, 4000);
   if (!title) return null;
-  const radios = [...root.querySelectorAll('input[type="radio"]')].filter(el => el.getClientRects().length);
-  const boxes = [...root.querySelectorAll('input[type="checkbox"]')].filter(el => el.getClientRects().length);
-  const selects = [...root.querySelectorAll('select')].filter(el => el.getClientRects().length && selectOptions(el).length);
+  const usable = el => el && el.type !== 'hidden' && !el.closest('[hidden]');
+  const radios = [...root.querySelectorAll('input[type="radio"]')].filter(usable);
+  const boxes = [...root.querySelectorAll('input[type="checkbox"]')].filter(usable);
+  const selects = [...root.querySelectorAll('select')].filter(el => usable(el) && selectOptions(el).length);
   const texts = textFields(root);
   const rect = root.getBoundingClientRect();
   const base = {
@@ -99,6 +120,43 @@ async function solveOne(question) {
   return answer || {};
 }
 
+function pack(id, read) {
+  if (read.kind === 'dropdown' && read.controls.length) {
+    return {id, kind: 'dropdowns', title: read.title, options: [], blanks: read.controls.map((select, index) => ({label: selectLabel(select, index), options: selectOptions(select)}))};
+  }
+  if (read.kind === 'text' && read.controls.length > 1) {
+    return {id, kind: 'blanks', title: read.title, options: [], blanks: read.controls.map((_, index) => ({label: `Blank ${index + 1}`, options: []}))};
+  }
+  return {id, kind: read.kind, title: read.title, options: read.options || [], blanks: []};
+}
+
+function collect() {
+  nodes.clear();
+  const payload = [];
+  questionRoots().forEach((root, index) => {
+    const read = readCanvas(root);
+    if (!read) return;
+    const id = root.id || `c${index}`;
+    nodes.set(id, root);
+    payload.push(pack(id, read));
+  });
+  return payload;
+}
+
+function prime() {
+  if (primed || !highlight) return;
+  const questions = collect();
+  if (!questions.length && tries++ < 8) { setTimeout(prime, 400); return; }
+  if (!questions.length) return;
+  primed = true;
+  cache.prime(questions);
+}
+
+function idFor(root) {
+  for (const [id, node] of nodes) if (node === root) return id;
+  return null;
+}
+
 async function answer(root) {
   if (busy.has(root)) return;
   busy.add(root);
@@ -106,8 +164,9 @@ async function answer(root) {
     const read = readCanvas(root);
     if (!read) return;
     const {controls, ...question} = read;
+    const cached = await cache.get(idFor(root) || '');
     if (question.kind === 'radio' || question.kind === 'checkbox') {
-      const result = await solveOne(question);
+      const result = cached ? asFormAnswer(cached) : await solveOne(question);
       const choices = Array.isArray(result.choices) ? result.choices : [];
       const labels = controls.map(choiceText);
       if (question.kind === 'radio') {
@@ -121,10 +180,12 @@ async function answer(root) {
         controls.forEach((el, index) => setChecked(el, wanted.has(labels[index])));
       }
     } else if (question.kind === 'dropdown') {
+      const blanks = cached?.blanks || [];
       for (let index = 0; index < controls.length; index++) {
         const select = controls[index];
         const options = selectOptions(select);
-        const result = await solveOne({
+        const picked = blanks[index] || (controls.length === 1 ? cached?.choices?.[0] : '');
+        const result = picked ? {choices: [picked]} : await solveOne({
           ...question,
           kind: 'dropdown',
           title: `${question.title}\nFill only this dropdown: ${selectLabel(select, index)}`,
@@ -134,8 +195,10 @@ async function answer(root) {
         await pause(40);
       }
     } else {
+      const blanks = cached?.blanks || [];
       for (let index = 0; index < controls.length; index++) {
-        const result = await solveOne({
+        const text = blanks[index] || (index === 0 ? cached?.text : '');
+        const result = text ? {text} : await solveOne({
           ...question,
           title: controls.length === 1 ? question.title : `${question.title}\nAnswer only blank ${index + 1} of ${controls.length}.`,
         });
@@ -175,7 +238,15 @@ export function startCanvas() {
   globalThis.__auraCanvasStop?.();
   let href = location.href;
   const drop = () => { if (location.href === href) return; href = location.href; highlight = false; };
-  const onMessage = message => { if (message?.type === 'highlightChanged') highlight = Boolean(message.on); };
+  const onMessage = message => {
+    if (message?.type !== 'highlightChanged') return;
+    highlight = Boolean(message.on);
+    if (highlight) prime();
+  };
+  sendExtension({type: 'highlightHere'}).then(data => {
+    highlight = Boolean(data?.on);
+    if (highlight) prime();
+  }).catch(() => {});
   window.addEventListener('hashchange', drop);
   window.addEventListener('popstate', drop);
   const keyup = event => { if (event.key === 'Shift' || event.shiftKey) onSelect(); };

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {matchOption, isGoogleForm, isCanvasQuiz} from '../src/shared/form-answer.js';
-import {formSchema} from '../server/openai.js';
+import {formSchema, quizSchema} from '../server/openai.js';
 
 test('answers are matched back to the exact Google Forms choice', () => {
   const options = ['Allele', 'Genotype', '3:1', 'B) Phenotype'];
@@ -27,6 +27,12 @@ test('Canvas quiz pages turn on highlight mode', () => {
   assert.equal(isCanvasQuiz('https://school.instructure.com/courses/9/quizzes/3/take?preview=1'), true);
   assert.equal(isCanvasQuiz('https://canvas.wpi.edu/courses/36755/modules'), false);
   assert.equal(isCanvasQuiz('https://docs.google.com/forms/d/e/abc/viewform'), false);
+});
+
+test('a whole quiz is answered as one list', () => {
+  const schema = quizSchema();
+  assert.deepEqual(schema.required, ['answers']);
+  assert.deepEqual(schema.properties.answers.items.required, ['id', 'choices', 'blanks']);
 });
 
 test('the form answer schema only allows real choices', () => {

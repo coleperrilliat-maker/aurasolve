@@ -3,7 +3,7 @@ import http from "node:http";
 import {readFile, stat} from "node:fs/promises";
 import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
-import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, FORM_KINDS} from "./openai.js";
+import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, answerQuiz, FORM_KINDS} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
 import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, sendCode, createStripe} from "./billing.js";
 
@@ -378,6 +378,38 @@ async function handleRequest(req, res) {
       const answer = await answerFormQuestion({kind, title, description: String(payload.description || "").slice(0, 4000), options, rows, images, image: payload.image}, controller.signal);
       await spendFree(grant);
       sendJson(res, 200, {answer});
+    } catch (error) {
+      sendJson(res, 502, {error: error.name === "AbortError" ? "Request timed out." : error.message});
+    } finally {
+      clearTimeout(timeout);
+    }
+    return;
+  }
+
+  if (path === "/api/v1/quiz" && req.method === "POST") {
+    if (!authorize(req, res)) return;
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    const questions = (Array.isArray(payload.questions) ? payload.questions : []).slice(0, 40).map((question, index) => ({
+      id: String(question?.id || index).slice(0, 40),
+      kind: String(question?.kind || "text").slice(0, 20),
+      title: String(question?.title || "").slice(0, 2000),
+      options: Array.isArray(question?.options) ? question.options.map(value => String(value).slice(0, 300)).filter(Boolean).slice(0, 40) : [],
+      blanks: Array.isArray(question?.blanks) ? question.blanks.slice(0, 12).map(blank => ({
+        label: String(blank?.label || "").slice(0, 200),
+        options: Array.isArray(blank?.options) ? blank.options.map(value => String(value).slice(0, 200)).filter(Boolean).slice(0, 30) : [],
+      })) : [],
+    })).filter(question => question.title.trim());
+    if (!questions.length) { sendJson(res, 400, {error: "No quiz questions to answer."}); return; }
+    const grant = await entitle(req, res);
+    if (!grant) return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+    try {
+      const answers = await answerQuiz(questions, controller.signal);
+      await spendFree(grant);
+      sendJson(res, 200, {answers});
     } catch (error) {
       sendJson(res, 502, {error: error.name === "AbortError" ? "Request timed out." : error.message});
     } finally {

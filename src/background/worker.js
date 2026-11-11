@@ -2,7 +2,7 @@ import {assignmentKey,decidePlayer} from '../shared/player-state.js';
 import {expectedPage} from '../shared/pilot-engine.js';
 import {fieldValue} from '../shared/solution.js';
 import {statementMatches, HONOR_STATEMENT} from "../shared/policy.js";
-import {checkBackend, solve, ask, formAnswer} from "./api.js";
+import {checkBackend, solve, ask, formAnswer, quizAnswer} from "./api.js";
 import {editorBridge} from './editors.js';
 import {awaitSelection, placeClick, trustedClick, trustedDrag, withDebugger} from './trusted-click.js';
 import {frameCall} from './frame-call.js';
@@ -598,6 +598,19 @@ async function handle(message,sender) {
     try { return {image:await screenshot(tab.id,{})}; }
     catch (error) { throw new Error(`Could not take a screenshot: ${error.message}`); }
   }
+  if (message.type === "highlightHere") {
+    const tab = sender.tab;
+    if (!tab?.id) return {on: false};
+    const stored = (await chrome.storage.session.get(highlightKey(tab.id)))[highlightKey(tab.id)];
+    const strip = value => String(value || "").split("#")[0];
+    return {on: Boolean(stored) && (stored === true || strip(stored) === strip(tab.url))};
+  }
+  if (message.type === "quizPrefetch") {
+    if (!sender.tab) throw new Error("Open the quiz first.");
+    const questions = Array.isArray(message.questions) ? message.questions.slice(0, 40) : [];
+    if (!questions.length) return {answers: []};
+    return {answers: await quizAnswer(questions, AbortSignal.timeout(120000))};
+  }
   if (message.type === "formSolve") {
     const tabId = sender.tab?.id;
     if (tabId == null) throw new Error("Open the form first.");
@@ -1144,8 +1157,10 @@ const tabUrls = new Map();
 async function setHighlight(tabId, on) {
   if (tabId == null) return;
   const key = highlightKey(tabId);
-  if (on) await chrome.storage.session.set({[key]: true});
-  else await chrome.storage.session.remove(key);
+  if (on) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    await chrome.storage.session.set({[key]: tab?.url || true});
+  } else await chrome.storage.session.remove(key);
   await chrome.tabs.sendMessage(tabId, {type: 'highlightChanged', on: Boolean(on)}).catch(() => {});
   chrome.action.setBadgeText({tabId, text: on ? 'ON' : 'OFF'});
   chrome.action.setBadgeBackgroundColor({tabId, color: on ? '#1d1d1f' : '#8e8e93'});

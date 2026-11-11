@@ -1,12 +1,17 @@
 import {sendExtension} from '../shared/messaging.js';
 import {matchOption, selectionLooksActive, classifyFormControls, parseFormDate, parseFormTime} from '../shared/form-answer.js';
+import {asFormAnswer, createQuizCache} from './quiz-cache.js';
 
 // Google Forms: highlight anything in a question (even a space between words)
 // and AuraSolve answers that whole question. No on-page button.
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const busy = new WeakSet();
+const cache = createQuizCache();
+const nodes = new Map();
 let lastKey = '';
+let primed = false;
+let tries = 0;
 
 function inFrame() {
   try { return globalThis !== globalThis.top; }
@@ -208,13 +213,49 @@ async function fill(item, question, answer) {
   typeInto(field, String(answer.text).trim());
 }
 
+function formItems() {
+  return [...document.querySelectorAll('[role="listitem"]')].filter(item => {
+    if (!item.querySelector('[role="heading"]')) return false;
+    const parent = item.parentElement?.closest?.('[role="listitem"]');
+    return !parent?.querySelector('[role="heading"]');
+  });
+}
+
+function prime() {
+  if (primed || !highlight) return;
+  nodes.clear();
+  const questions = [];
+  formItems().forEach((item, index) => {
+    const question = readQuestion(item);
+    if (!question) return;
+    const id = `f${index}`;
+    nodes.set(id, item);
+    questions.push({
+      id, kind: question.kind, title: question.title, options: question.options || [],
+      blanks: (question.rows || []).map(row => ({label: row, options: question.options || []})),
+    });
+  });
+  if (!questions.length && tries++ < 8) { setTimeout(prime, 400); return; }
+  if (!questions.length) return;
+  primed = true;
+  cache.prime(questions);
+}
+
+function idFor(item) {
+  for (const [id, node] of nodes) if (node === item) return id;
+  return null;
+}
+
 async function answer(item) {
   if (busy.has(item)) return;
   busy.add(item);
   try {
     const question = readQuestion(item);
     if (!question) return;
-    const {answer: result} = await sendExtension({type: 'formSolve', question});
+    const cached = await cache.get(idFor(item) || '');
+    const result = cached
+      ? asFormAnswer(cached, question.rows || [])
+      : (await sendExtension({type: 'formSolve', question})).answer;
     await fill(item, question, result);
     getSelection()?.removeAllRanges();
   } catch (error) {
@@ -261,8 +302,14 @@ export function startForms() {
   let href = location.href;
   const drop = () => { if (location.href === href) return; href = location.href; highlight = false; };
   const onSettings = message => {
-    if (message?.type === 'highlightChanged') highlight = Boolean(message.on);
+    if (message?.type !== 'highlightChanged') return;
+    highlight = Boolean(message.on);
+    if (highlight) prime();
   };
+  sendExtension({type: 'highlightHere'}).then(data => {
+    highlight = Boolean(data?.on);
+    if (highlight) prime();
+  }).catch(() => {});
   window.addEventListener('hashchange', drop);
   window.addEventListener('popstate', drop);
   try { chrome.runtime.onMessage.addListener(onSettings); } catch {}
