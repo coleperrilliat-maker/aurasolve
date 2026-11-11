@@ -609,7 +609,15 @@ async function handle(message,sender) {
     if (!sender.tab) throw new Error("Open the quiz first.");
     const questions = Array.isArray(message.questions) ? message.questions.slice(0, 40) : [];
     if (!questions.length) return {answers: []};
-    return {answers: await quizAnswer(questions, AbortSignal.timeout(120000))};
+    const ready = await Promise.all(questions.map(async question => {
+      const sources = Array.isArray(question.images) ? question.images.slice(0, 4) : [];
+      const images = (await Promise.all(sources.map(async item => {
+        const data = typeof item?.image === "string" && item.image.startsWith("data:image/") ? item.image : await formImage(item?.src, true).catch(() => null);
+        return data ? {label: String(item?.label || "Equation"), image: data} : null;
+      }))).filter(Boolean);
+      return {...question, images};
+    }));
+    return {answers: await quizAnswer(ready, AbortSignal.timeout(120000))};
   }
   if (message.type === "formSolve") {
     const tabId = sender.tab?.id;
@@ -625,7 +633,7 @@ async function handle(message,sender) {
     } catch {}
     const sources = Array.isArray(q.images) ? q.images.slice(0, 10) : [];
     const images = (await Promise.all(sources.map(async item => {
-      const data = await formImage(item?.src).catch(() => null);
+      const data = await formImage(item?.src, true).catch(() => null);
       return data ? {label: String(item.label || "Image"), image: data} : null;
     }))).filter(Boolean);
     return {answer: await formAnswer({kind: q.kind, title: q.title, description: q.description, options: q.options, rows: q.rows || [], images, image: image || undefined})};

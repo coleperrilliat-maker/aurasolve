@@ -399,6 +399,10 @@ async function handleRequest(req, res) {
         label: String(blank?.label || "").slice(0, 200),
         options: Array.isArray(blank?.options) ? blank.options.map(value => String(value).slice(0, 200)).filter(Boolean).slice(0, 30) : [],
       })) : [],
+      images: Array.isArray(question?.images) ? question.images.slice(0, 4).map(item => ({
+        label: String(item?.label || "Equation").slice(0, 80),
+        image: typeof item?.image === "string" ? item.image : "",
+      })).filter(item => item.image) : [],
     })).filter(question => question.title.trim());
     if (!questions.length) { sendJson(res, 400, {error: "No quiz questions to answer."}); return; }
     const grant = await entitle(req, res);

@@ -1,5 +1,6 @@
 import {sendExtension} from '../shared/messaging.js';
 import {matchOption, selectionLooksActive} from '../shared/form-answer.js';
+import {equationAnswerOk, needsFullEquation, spaceEquation, textWithEquations} from '../shared/equation-text.js';
 import {asFormAnswer, createQuizCache} from './quiz-cache.js';
 
 // Canvas classic quizzes: highlight a question and fill its radios, checkboxes,
@@ -64,8 +65,23 @@ function textFields(root) {
   });
 }
 
+function questionImages(root) {
+  const box = root.querySelector('.question_text') || root;
+  const seen = new Set();
+  const images = [];
+  for (const img of box.querySelectorAll('img')) {
+    const src = img.currentSrc || img.src || '';
+    if (!/^https?:/i.test(src) || seen.has(src) || images.length >= 4) continue;
+    if (img.naturalWidth && img.naturalWidth < 12 && img.naturalHeight < 12) continue;
+    seen.add(src);
+    images.push({label: images.length ? `Equation ${images.length + 1}` : 'Equation', src});
+  }
+  return images;
+}
+
 export function readCanvas(root) {
-  const title = clean(root.querySelector('.question_text, .question_text.user_content')?.innerText || root.innerText).slice(0, 4000);
+  const box = root.querySelector('.question_text');
+  const title = clean(box ? textWithEquations(box) : root.innerText).slice(0, 4000);
   if (!title) return null;
   const usable = el => el && el.type !== 'hidden' && !el.closest('[hidden]');
   const radios = [...root.querySelectorAll('input[type="radio"]')].filter(usable);
@@ -79,7 +95,7 @@ export function readCanvas(root) {
     fullTab: false,
     rect: {x: Math.max(0, rect.left), y: Math.max(0, rect.top), width: Math.max(40, rect.width), height: Math.max(40, rect.height)},
     devicePixelRatio: globalThis.devicePixelRatio || 1,
-    images: [],
+    images: questionImages(root),
     rows: [],
   };
   if (radios.length) return {...base, kind: 'radio', options: radios.map(choiceText), controls: radios};
@@ -129,7 +145,8 @@ function pack(id, read) {
     return {id, kind: 'dropdowns', title: read.title, options: [], blanks: read.controls.map((select, index) => ({label: selectLabel(select, index), options: selectOptions(select)}))};
   }
   if (read.kind === 'text' || read.kind === 'paragraph') {
-    return {id, kind: read.kind, title: read.title, options: [], blanks: read.controls.map((_, index) => ({label: read.controls.length === 1 ? 'Answer' : `Blank ${index + 1}`, options: []}))};
+    const label = needsFullEquation(read.title) ? 'Full equation' : 'Answer';
+    return {id, kind: read.kind, title: read.title, options: [], images: read.images, blanks: read.controls.map((_, index) => ({label: read.controls.length === 1 ? label : `Blank ${index + 1}`, options: []}))};
   }
   return {id, kind: read.kind, title: read.title, options: read.options || [], blanks: []};
 }
@@ -201,13 +218,15 @@ async function answer(root) {
     } else {
       const blanks = cached?.blanks || [];
       for (let index = 0; index < controls.length; index++) {
-        const text = blanks[index] || (index === 0 ? (cached?.text || cached?.choices?.[0]) : '');
+        const cachedText = blanks[index] || (index === 0 ? (cached?.text || cached?.choices?.[0]) : '');
+        const text = equationAnswerOk(question.title, cachedText) ? cachedText : '';
         const result = text ? {text} : await solveOne({
           ...question,
           title: controls.length === 1 ? question.title : `${question.title}\nAnswer only blank ${index + 1} of ${controls.length}.`,
         });
-        if (!clean(result.text)) throw new Error('AuraSolve didn\'t return an answer.');
-        typeInto(controls[index], String(result.text).trim());
+        const written = String(result.text || '').trim();
+        if (!equationAnswerOk(question.title, written)) throw new Error('AuraSolve didn\'t return an answer.');
+        typeInto(controls[index], /=/.test(written) ? spaceEquation(written) : written);
       }
     }
     getSelection()?.removeAllRanges();
