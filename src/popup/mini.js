@@ -121,7 +121,8 @@ const thread = $('thread');
 const chat = [];
 let attached = null;
 function bubble(role, text, image) {
-  thread.querySelector('.empty')?.remove();
+  $('chat-mark').hidden = true;
+  thread.classList.add('live');
   const node = document.createElement('div');
   node.className = `bubble ${role}`;
   if (image) {
@@ -138,8 +139,6 @@ function showPreview(image) {
   attached = image;
   $('preview').hidden = !image;
   if (image) $('preview-img').src = image;
-  $('attach').setAttribute('aria-pressed', 'false');
-  $('attach').textContent = 'Screen';
 }
 function fileToImage(file) {
   return new Promise((resolve, reject) => {
@@ -170,16 +169,6 @@ $('upload').onchange = async () => {
   catch (error) { say('chat-note', error.message, true); }
 };
 $('preview-clear').onclick = () => showPreview(null);
-$('attach').onclick = async () => {
-  if (attached && $('attach').getAttribute('aria-pressed') === 'true') { showPreview(null); return; }
-  $('attach').disabled = true;
-  try {
-    showPreview((await sendExtension({type: 'captureScreen'})).image);
-    $('attach').setAttribute('aria-pressed', 'true');
-    $('attach').textContent = 'Screen on';
-  } catch (error) { say('chat-note', error.message, true); }
-  finally { $('attach').disabled = false; }
-};
 $('composer').onsubmit = async event => {
   event.preventDefault();
   const text = $('prompt').value.trim();

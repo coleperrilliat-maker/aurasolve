@@ -86,20 +86,21 @@
       <h1>Chat</h1>
     </header>
     <div id="thread" class="thread">
-      <p class="empty">Ask about the question on this tab.</p>
+      <img id="chat-mark" class="mark" src="../../icons/icon-128.png" alt="">
     </div>
     <div id="preview" class="preview" hidden>
       <img id="preview-img" alt="Image that will be sent">
       <button id="preview-clear" type="button" aria-label="Remove image">×</button>
     </div>
     <form id="composer" class="composer">
-      <button id="upload-btn" type="button" aria-label="Upload an image">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V6M8 9l4-4 4 4"/><path d="M5 16.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5"/></svg>
+      <button id="upload-btn" type="button" aria-label="Add an image">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.2 7.4v8.1a3.2 3.2 0 0 1-6.4 0V6.8a2 2 0 0 1 4 0v8"/></svg>
       </button>
       <input id="upload" type="file" accept="image/*" hidden>
-      <button id="attach" type="button" aria-pressed="false">Screen</button>
-      <input id="prompt" type="text" placeholder="Ask AuraSolve…" autocomplete="off">
-      <button class="send" type="submit" aria-label="Send">↑</button>
+      <input id="prompt" type="text" placeholder="Ask a question..." autocomplete="off">
+      <button class="send" type="submit" aria-label="Send">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 20.2 4.4 13.2 20.2 11 13.2z"/></svg>
+      </button>
     </form>
     <p id="chat-note" class="note" aria-live="polite"></p>
   </section>
