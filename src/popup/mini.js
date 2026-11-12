@@ -188,14 +188,23 @@ $('composer').onsubmit = async event => {
 
 /* ---------- Settings ---------- */
 let overlay = await readOverlay();
+function drawHighlight() {
+  const label = highlightOn ? `On · ${keys}` : `Off · ${keys}`;
+  for (const id of ['highlight-switch', 'home-highlight']) {
+    $(id)?.setAttribute('aria-checked', String(highlightOn));
+  }
+  $('highlight-state').textContent = label;
+  $('home-highlight-state').textContent = highlightOn
+    ? `On · ${keys} · tap a question`
+    : `Off · ${keys}`;
+}
 function drawOverlay() {
   const buttons = overlay.showFill || overlay.showShot;
   $('buttons-switch').setAttribute('aria-checked', String(buttons));
   $('buttons-state').textContent = buttons ? 'On' : 'Off';
   $('ghost').setAttribute('aria-checked', String(overlay.invisible));
   $('ghost-state').textContent = overlay.invisible ? 'On · buttons stay clickable' : 'Off';
-  $('highlight-switch').setAttribute('aria-checked', String(highlightOn));
-  $('highlight-state').textContent = highlightOn ? `On · ${keys}` : `Off · ${keys}`;
+  drawHighlight();
 }
 let highlightOn = false;
 drawOverlay();
@@ -210,11 +219,13 @@ $('ghost').onclick = async () => {
   overlay = await writeOverlay({...overlay, invisible: !overlay.invisible});
   drawOverlay();
 };
-$('highlight-switch').onclick = async () => {
+async function toggleHighlight() {
   if (!tab?.id) return;
   highlightOn = Boolean((await sendExtension({type: 'setHighlight', tabId: tab.id, on: !highlightOn})).on);
-  drawOverlay();
-};
+  drawHighlight();
+}
+$('highlight-switch').onclick = toggleHighlight;
+$('home-highlight').onclick = toggleHighlight;
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.overlaySettings) {
     overlay = normalizeOverlay(changes.overlaySettings.newValue);
@@ -224,7 +235,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   const key = tab?.id ? `highlight:${tab.id}` : '';
   if (area === 'session' && key && changes[key]) {
     highlightOn = Boolean(changes[key].newValue);
-    drawOverlay();
+    drawHighlight();
   }
 });
 

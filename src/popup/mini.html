@@ -18,6 +18,14 @@
       <button id="allow-sites" type="button">Allow</button>
     </div>
 
+    <button id="home-highlight" class="power" type="button" role="switch" aria-checked="false" aria-label="Highlight to solve">
+      <span class="power-copy">
+        <strong>Highlight</strong>
+        <small id="home-highlight-state">Off · ⌘⇧X</small>
+      </span>
+      <span class="power-track" aria-hidden="true"><span class="power-knob"></span></span>
+    </button>
+
     <div class="tiles">
       <button class="tile" type="button" data-go="autopilot">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 11.2 20.2 4.2 13.4 20.4 11 13.4z"/></svg>
@@ -138,17 +146,30 @@
     </header>
     <p id="profile-error" class="note error" hidden></p>
     <div id="signed-out" class="stack" hidden>
-      <p class="lead">Sign in with Google or your email. You'll come right back here.</p>
-      <button id="log-in" class="go" type="button">Log in</button>
+      <div class="hero-card">
+        <span class="hero-mark" aria-hidden="true"><img src="../../icons/icon-48.png" alt="" width="36" height="36"></span>
+        <strong>Your account</strong>
+        <p class="lead">Sign in with Google or email and password. The extension picks up where you left off.</p>
+      </div>
+      <button id="log-in" class="go" type="button">
+        <span>Log in</span>
+        <small>Opens aurasolve.io, then returns here</small>
+      </button>
     </div>
     <div id="signed-in" class="stack" hidden>
       <div class="card who">
         <span class="avatar" aria-hidden="true"></span>
         <span><strong id="who-title">Account</strong><small id="who-detail"></small></span>
       </div>
-      <div id="plans" class="stack" hidden></div>
-      <button id="subscribe" class="go" type="button" hidden>Continue</button>
-      <button id="manage" class="go ghost" type="button" hidden>Manage plan</button>
+      <div id="plans" class="stack plans" hidden></div>
+      <button id="subscribe" class="go" type="button" hidden>
+        <span>Continue</span>
+        <small>Choose a plan to keep solving</small>
+      </button>
+      <button id="manage" class="go ghost" type="button" hidden>
+        <span>Manage plan</span>
+        <small>Billing and subscription</small>
+      </button>
       <button id="sign-out" class="text" type="button">Sign out</button>
     </div>
   </section>
