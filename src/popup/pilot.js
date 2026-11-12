@@ -1,5 +1,6 @@
 import {runFillAssignment} from '../shared/pilot-engine.js';
 import {sendExtension} from '../shared/messaging.js';
+import {isGoogleForm} from '../shared/form-answer.js';
 
 // Offscreen page that runs AutoPilot, so it keeps going after the popup closes.
 // Offscreen pages only get chrome.runtime; status goes back through the worker.
@@ -25,6 +26,15 @@ async function run(tabId, settings) {
   try {
     const health = await request({type: 'settingsStatus'});
     if (!health.configured) throw new Error('AuraSolve Cloud is offline. Try again in a minute.');
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (isGoogleForm(tab?.url || '')) {
+      report({running: true, text: 'Solving Google Form…'});
+      const result = await request({type: 'formsSolveAll', tabId});
+      live();
+      const filled = Number(result?.filled) || 0;
+      report({running: false, text: `Filled ${filled} question${filled === 1 ? '' : 's'}`});
+      return;
+    }
     await request({type: 'inspect'});
     await runFillAssignment({
       request, delay,

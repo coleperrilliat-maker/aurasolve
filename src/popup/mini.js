@@ -194,9 +194,7 @@ function drawHighlight() {
     $(id)?.setAttribute('aria-checked', String(highlightOn));
   }
   $('highlight-state').textContent = label;
-  $('home-highlight-state').textContent = highlightOn
-    ? `On · ${keys} · tap a question`
-    : `Off · ${keys}`;
+  $('home-highlight-state').textContent = label;
 }
 function drawOverlay() {
   const buttons = overlay.showFill || overlay.showShot;
@@ -226,6 +224,13 @@ async function toggleHighlight() {
 }
 $('highlight-switch').onclick = toggleHighlight;
 $('home-highlight').onclick = toggleHighlight;
+// Popup focus can swallow the extension command, so mirror ⌘⇧X here too.
+document.addEventListener('keydown', event => {
+  if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
+  if (event.key.toLowerCase() !== 'x') return;
+  event.preventDefault();
+  toggleHighlight();
+});
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.overlaySettings) {
     overlay = normalizeOverlay(changes.overlaySettings.newValue);

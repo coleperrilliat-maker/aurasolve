@@ -5,9 +5,9 @@ export function createQuizCache() {
   const byId = new Map();
   let pending = null;
   return {
-    prime(questions) {
+    prime(questions, {strong = false} = {}) {
       if (!questions?.length) return Promise.resolve(byId);
-      pending = sendExtension({type: 'quizPrefetch', questions}).then(data => {
+      pending = sendExtension({type: 'quizPrefetch', questions, strong: Boolean(strong)}).then(data => {
         for (const answer of data?.answers || []) byId.set(String(answer.id), answer);
         return byId;
       }).catch(error => {
@@ -20,6 +20,10 @@ export function createQuizCache() {
     async get(id) {
       if (pending) await pending;
       return byId.get(String(id)) || null;
+    },
+    async ready() {
+      if (pending) await pending;
+      return byId;
     },
   };
 }

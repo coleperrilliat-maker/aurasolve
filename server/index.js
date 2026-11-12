@@ -655,7 +655,7 @@ async function handleRequest(req, res) {
     const timeout = setTimeout(() => controller.abort(), 120_000);
     res.on("close", () => { if (!res.writableEnded) controller.abort(); });
     try {
-      const answers = await answerQuiz(questions, controller.signal);
+      const answers = await answerQuiz(questions, controller.signal, {strong: Boolean(payload.strong)});
       await spendFree(grant);
       sendJson(res, 200, {answers});
     } catch (error) {

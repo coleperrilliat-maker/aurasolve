@@ -18,9 +18,10 @@
       <button id="allow-sites" type="button">Allow</button>
     </div>
 
-    <button id="home-highlight" class="power" type="button" role="switch" aria-checked="false" aria-label="Highlight to solve">
+    <button id="home-highlight" class="power" type="button" role="switch" aria-checked="false" aria-label="Solve mode">
       <span class="power-copy">
-        <strong>Highlight</strong>
+        <strong>Solve mode</strong>
+        <small class="howto">Highlight a question</small>
         <small id="home-highlight-state">Off · ⌘⇧X</small>
       </span>
       <span class="power-track" aria-hidden="true"><span class="power-knob"></span></span>
@@ -85,7 +86,7 @@
       <label class="row" for="question-limit"><span><strong>Questions per run</strong></span><select id="question-limit"><option value="0" selected>All unfinished</option><option>1</option><option>5</option><option>10</option><option>20</option></select></label>
       <label class="row" for="solve-budget"><span><strong>AI solves</strong><small>Stops at this limit</small></span><select id="solve-budget"><option>50</option><option selected>200</option><option>500</option></select></label>
     </div>
-    <p class="lead">Checks the answer and goes next. Never submits the assignment.</p>
+    <p class="lead">On Google Forms, fills every question. On MyLab, checks answers and goes next — never submits the assignment.</p>
   </section>
 
   <section class="page chat-page" data-page="chat" hidden>
@@ -132,8 +133,8 @@
     </div>
     <div class="panel">
       <div class="row">
-        <span><strong>Highlight</strong><small id="highlight-state">Off</small></span>
-        <button id="highlight-switch" class="switch" type="button" role="switch" aria-checked="false" aria-label="Highlight to solve"></button>
+        <span><strong>Solve mode</strong><small id="highlight-state">Off</small></span>
+        <button id="highlight-switch" class="switch" type="button" role="switch" aria-checked="false" aria-label="Solve mode"></button>
       </div>
     </div>
     <p id="settings-note" class="note" aria-live="polite"></p>

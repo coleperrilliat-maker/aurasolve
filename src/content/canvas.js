@@ -208,13 +208,30 @@ function collect() {
   return payload;
 }
 
-function prime() {
+let primeTimer = null;
+const PRIME_DELAY_MS = 15_000;
+
+function prime({immediate = false} = {}) {
+  clearTimeout(primeTimer);
+  primeTimer = null;
   if (primed || !highlight) return;
-  const questions = collect();
-  if (!questions.length && tries++ < 8) { setTimeout(prime, 400); return; }
-  if (!questions.length) return;
-  primed = true;
-  cache.prime(questions);
+  const run = () => {
+    if (primed || !highlight) return;
+    const questions = collect();
+    if (!questions.length && tries++ < 8) { setTimeout(() => prime({immediate: true}), 400); return; }
+    if (!questions.length) return;
+    primed = true;
+    cache.prime(questions, {strong: true});
+  };
+  if (immediate) run();
+  else primeTimer = setTimeout(run, PRIME_DELAY_MS);
+}
+
+function cancelPrime() {
+  clearTimeout(primeTimer);
+  primeTimer = null;
+  primed = false;
+  tries = 0;
 }
 
 function idFor(root) {
@@ -317,11 +334,17 @@ function onSelect() {
 export function startCanvas() {
   globalThis.__auraCanvasStop?.();
   let href = location.href;
-  const drop = () => { if (location.href === href) return; href = location.href; highlight = false; };
+  const drop = () => {
+    if (location.href === href) return;
+    href = location.href;
+    highlight = false;
+    cancelPrime();
+  };
   const onMessage = message => {
     if (message?.type !== 'highlightChanged') return;
     highlight = Boolean(message.on);
     if (highlight) prime();
+    else cancelPrime();
   };
   sendExtension({type: 'highlightHere'}).then(data => {
     highlight = Boolean(data?.on);
@@ -336,6 +359,7 @@ export function startCanvas() {
   document.addEventListener('keyup', keyup, true);
   try { chrome.runtime.onMessage.addListener(onMessage); } catch {}
   globalThis.__auraCanvasStop = () => {
+    cancelPrime();
     document.removeEventListener('mouseup', onSelect, true);
     document.removeEventListener('pointerup', onSelect, true);
     document.removeEventListener('selectionchange', onSelect);

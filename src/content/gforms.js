@@ -221,8 +221,10 @@ function formItems() {
   });
 }
 
-function prime() {
-  if (primed || !highlight) return;
+let primeTimer = null;
+const PRIME_DELAY_MS = 15_000;
+
+function collectQuestions() {
   nodes.clear();
   const questions = [];
   formItems().forEach((item, index) => {
@@ -233,12 +235,33 @@ function prime() {
     questions.push({
       id, kind: question.kind, title: question.title, options: question.options || [],
       blanks: (question.rows || []).map(row => ({label: row, options: question.options || []})),
+      images: question.images || [],
     });
   });
-  if (!questions.length && tries++ < 8) { setTimeout(prime, 400); return; }
-  if (!questions.length) return;
-  primed = true;
-  cache.prime(questions);
+  return questions;
+}
+
+function prime({immediate = false} = {}) {
+  clearTimeout(primeTimer);
+  primeTimer = null;
+  if (primed || !highlight) return;
+  const run = () => {
+    if (primed || !highlight) return;
+    const questions = collectQuestions();
+    if (!questions.length && tries++ < 8) { setTimeout(() => prime({immediate: true}), 400); return; }
+    if (!questions.length) return;
+    primed = true;
+    cache.prime(questions, {strong: true});
+  };
+  if (immediate) run();
+  else primeTimer = setTimeout(run, PRIME_DELAY_MS);
+}
+
+function cancelPrime() {
+  clearTimeout(primeTimer);
+  primeTimer = null;
+  primed = false;
+  tries = 0;
 }
 
 function idFor(item) {
@@ -296,15 +319,38 @@ function onSelect() {
   }, 220);
 }
 
+async function solveAll() {
+  highlight = true;
+  cancelPrime();
+  prime({immediate: true});
+  await cache.ready();
+  let filled = 0;
+  for (const item of nodes.values()) {
+    await answer(item);
+    filled++;
+  }
+  return {filled, total: nodes.size};
+}
+
 export function startForms() {
   globalThis.__auraFormsStop?.();
-  // Highlight starts off on every page. It only turns on for this document.
+  // Solve mode starts off on every page. It only turns on for this document.
   let href = location.href;
-  const drop = () => { if (location.href === href) return; href = location.href; highlight = false; };
-  const onSettings = message => {
+  const drop = () => {
+    if (location.href === href) return;
+    href = location.href;
+    highlight = false;
+    cancelPrime();
+  };
+  const onSettings = (message, _sender, reply) => {
+    if (message?.type === 'formsSolveAll') {
+      solveAll().then(result => reply({ok: true, data: result})).catch(error => reply({ok: false, error: error.message}));
+      return true;
+    }
     if (message?.type !== 'highlightChanged') return;
     highlight = Boolean(message.on);
     if (highlight) prime();
+    else cancelPrime();
   };
   sendExtension({type: 'highlightHere'}).then(data => {
     highlight = Boolean(data?.on);
@@ -318,7 +364,9 @@ export function startForms() {
   document.addEventListener('pointerup', onSelect, true);
   document.addEventListener('selectionchange', onSelect);
   document.addEventListener('keyup', keyup, true);
+  globalThis.__auraForms = {solveAll};
   globalThis.__auraFormsStop = () => {
+    cancelPrime();
     document.removeEventListener('mouseup', onSelect, true);
     document.removeEventListener('pointerup', onSelect, true);
     document.removeEventListener('selectionchange', onSelect);
@@ -326,5 +374,6 @@ export function startForms() {
     window.removeEventListener('hashchange', drop);
     window.removeEventListener('popstate', drop);
     try { chrome.runtime.onMessage.removeListener(onSettings); } catch {}
+    try { delete globalThis.__auraForms; } catch {}
   };
 }

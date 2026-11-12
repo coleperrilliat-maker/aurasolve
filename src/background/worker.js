@@ -622,7 +622,33 @@ async function handle(message,sender) {
       }))).filter(Boolean);
       return {...question, images};
     }));
-    return {answers: await quizAnswer(ready, AbortSignal.timeout(120000))};
+    return {answers: await quizAnswer(ready, AbortSignal.timeout(120000), {strong: Boolean(message.strong)})};
+  }
+  if (message.type === "formsSolveAll") {
+    if (sender.tab) throw new Error("Start AutoPilot from the AuraSolve popup.");
+    const tab = Number.isInteger(message.tabId || message.pilotTabId)
+      ? await chrome.tabs.get(message.tabId || message.pilotTabId).catch(() => null)
+      : null;
+    if (!tab?.id || !/^https?:/.test(tab.url || "")) throw new Error("Open the Google Form first.");
+    await chrome.scripting.executeScript({target: {tabId: tab.id, allFrames: true}, files: ["src/content/bootstrap.js"]}).catch(() => {});
+    await setHighlight(tab.id, true);
+    const reports = await chrome.scripting.executeScript({
+      target: {tabId: tab.id, allFrames: true},
+      func: async () => {
+        try {
+          await globalThis.__auraReady;
+          return await globalThis.__auraForms?.solveAll?.() || null;
+        } catch (error) {
+          return {error: error.message};
+        }
+      },
+    });
+    const hit = reports.map(entry => entry.result).find(result => result && !result.error && Number.isFinite(result.filled));
+    if (!hit) {
+      const fail = reports.map(entry => entry.result?.error).find(Boolean);
+      throw new Error(fail || "No Google Form questions were found on this tab.");
+    }
+    return hit;
   }
   if (message.type === "formSolve") {
     const tabId = sender.tab?.id;
