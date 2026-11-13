@@ -147,7 +147,7 @@ Do not add generic clicks returned by the model. Action targets must exist in th
 - Detected questions and field descriptors are sent to your Railway server, then to OpenAI. Conversation storage is disabled in the API request.
 - The OpenAI API key lives only on Railway, not in Chrome.
 - The user signature stays in Chrome session storage. Run checkpoints (question IDs, attempt counts, and recent rejected answers) stay in trusted extension local storage for resuming. Screenshots and credentials are not saved in those checkpoints.
-- Automatic content-script access is limited to the listed Pearson-family domains and the local lab. The toolbar uses activeTab permission for other pages.
+- Automatic content-script access is limited to Pearson/MyLab, Google Forms, Canvas, and the local lab. Broader site access can be added in a later release.
 
 ## Verification
 

@@ -47,7 +47,7 @@ function welcome(email) {
   if (fromExtension) return handoff();
   for (const id of ["ask", "forgot-panel", "reset"]) document.getElementById(id).hidden = true;
   document.getElementById("done").hidden = false;
-  document.getElementById("done-note").textContent = `Signed in as ${email}. Install AuraSolve, then press Log in in the extension and you'll come right back.`;
+  document.getElementById("done-note").textContent = `Signed in as ${email}. You’re successfully on the waiting list — we’ll email you when AuraSolve is available to install.`;
 }
 
 const google = document.getElementById("google");
@@ -61,8 +61,8 @@ let creating = false;
 document.getElementById("mode").onclick = () => {
   creating = !creating;
   showError("");
-  document.getElementById("title").textContent = creating ? "Create account" : "Sign in";
-  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Use Google, or your email and password.");
+  document.getElementById("title").textContent = creating ? "Create account" : (fromExtension ? "Sign in" : "Join the waiting list");
+  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in with Google, or your email and password. Download isn’t open yet.");
   document.getElementById("submit").textContent = creating ? "Create account" : "Sign in";
   document.getElementById("mode").textContent = creating ? "Already have an account? Sign in" : "Create an account";
   document.getElementById("password").autocomplete = creating ? "new-password" : "current-password";

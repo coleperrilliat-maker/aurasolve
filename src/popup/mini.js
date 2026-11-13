@@ -303,7 +303,7 @@ $('manage').onclick = async () => {
 };
 
 /* ---------- Site access ---------- */
-const SITE_ORIGINS = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || []).filter(match => match.startsWith('https://')).concat('<all_urls>');
+const SITE_ORIGINS = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || []).filter(match => match.startsWith('https://'));
 $('site-access').hidden = await chrome.permissions.contains({origins: SITE_ORIGINS}).catch(() => true);
 $('allow-sites').onclick = async () => {
   if (await chrome.permissions.request({origins: SITE_ORIGINS}).catch(() => false)) $('site-access').hidden = true;

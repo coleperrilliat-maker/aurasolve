@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · AuraSolve</title>
   <link rel="icon" type="image/png" href="icon.png?v=3">
-  <link rel="stylesheet" href="style.css?v=55">
+  <link rel="stylesheet" href="style.css?v=56">
 </head>
 <body>
   <main class="login-wrap">
@@ -13,8 +13,8 @@
       <a class="brand" href="index.html"><img src="icon.png?v=3" alt="" width="28" height="28"><span>AuraSolve</span></a>
       <p id="error" class="login-error" hidden></p>
       <div id="ask">
-        <h1 id="title">Sign in</h1>
-        <p class="lead" id="lead">Use Google, or your email and password.</p>
+        <h1 id="title">Join the waiting list</h1>
+        <p class="lead" id="lead">Sign in with Google, or your email and password. Download isn’t open yet.</p>
         <a id="google" class="btn btn-ghost btn-lg google" href="/api/v1/auth/google">
           <svg class="g-mark" viewBox="0 0 18 18" aria-hidden="true">
             <path style="fill:#4285F4;stroke:none" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/>
@@ -54,15 +54,15 @@
         </form>
       </div>
       <div id="done" hidden>
-        <h1>You're signed in</h1>
+        <h1>You're on the waiting list</h1>
         <p class="lead" id="done-note"></p>
         <div class="stack">
-          <a class="btn btn-primary btn-lg" href="install.html">Install the extension</a>
+          <a class="btn btn-primary btn-lg" href="index.html">Back to AuraSolve</a>
           <button id="switch" class="btn btn-ghost btn-lg" type="button">Use a different account</button>
         </div>
       </div>
     </section>
   </main>
-  <script src="login.js?v=3"></script>
+  <script src="login.js?v=4"></script>
 </body>
 </html>

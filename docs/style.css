@@ -138,6 +138,7 @@ main{max-width:calc(var(--wrap) + 2 * var(--pad));margin:0 auto;padding:0 var(--
 .hero h1 em{color:var(--blue)}
 .lead{max-width:30em;margin:20px 0 0;color:var(--ink-2);font-size:clamp(16px,1.25vw,18.5px);line-height:1.6;text-wrap:pretty}
 .lead mark{background:linear-gradient(180deg,transparent 55%,#ffe566 55%);color:inherit;font-weight:600;padding:0 .08em;border-radius:2px}
+.waitlist-note{max-width:30em;margin:14px 0 0;color:var(--ink);font-size:15px;font-weight:600;line-height:1.5}
 .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
 .facts{display:flex;gap:0;margin:40px 0 0;padding:0;list-style:none}
 .facts li{display:flex;flex-direction:column;gap:2px;padding:0 24px;border-left:1px solid var(--line)}
