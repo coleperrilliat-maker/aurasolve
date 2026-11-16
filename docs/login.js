@@ -43,17 +43,23 @@ async function handoff() {
   location.replace(`/auth/done?state=${encodeURIComponent(extState)}&handoff=${encodeURIComponent(data.handoff)}`);
 }
 
+const STORE_URL = "https://chromewebstore.google.com/detail/aurasolve/fmmkeamfcjpnmjcbgmmofejajeeogncm";
+
 function welcome(email) {
   if (fromExtension) return handoff();
   for (const id of ["ask", "forgot-panel", "reset"]) document.getElementById(id).hidden = true;
   document.getElementById("done").hidden = false;
-  document.getElementById("done-note").textContent = `Signed in as ${email}. You’re successfully on the waiting list — we’ll email you when AuraSolve is available to install.`;
+  document.getElementById("done-note").textContent = `Signed in as ${email}. Opening the Chrome Web Store so you can add AuraSolve.`;
+  const store = document.getElementById("store-link");
+  if (store) store.href = STORE_URL;
+  setTimeout(() => { location.assign = STORE_URL; }, 700);
 }
 
 const google = document.getElementById("google");
 if (fromExtension) {
   const googleParams = new URLSearchParams({state: extState, challenge: pkce});
   google.href = `/api/v1/auth/google?${googleParams}`;
+  document.getElementById("title").textContent = "Sign in";
   document.getElementById("lead").textContent = "Sign in and you'll come right back to the extension.";
 }
 
@@ -61,8 +67,8 @@ let creating = false;
 document.getElementById("mode").onclick = () => {
   creating = !creating;
   showError("");
-  document.getElementById("title").textContent = creating ? "Create account" : (fromExtension ? "Sign in" : "Join the waiting list");
-  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in with Google, or your email and password. Download isn’t open yet.");
+  document.getElementById("title").textContent = creating ? "Create account" : "Sign in";
+  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in with Google, or your email and password. Next we’ll take you to the Chrome Web Store to install AuraSolve.");
   document.getElementById("submit").textContent = creating ? "Create account" : "Sign in";
   document.getElementById("mode").textContent = creating ? "Already have an account? Sign in" : "Create an account";
   document.getElementById("password").autocomplete = creating ? "new-password" : "current-password";
