@@ -1,3 +1,13 @@
+function captureEvent(event, properties) {
+  if (window.posthog) {
+    window.posthog.capture(event, properties);
+    return;
+  }
+  window.addEventListener("posthog:ready", readyEvent => {
+    if (readyEvent.detail.available) window.posthog.capture(event, properties);
+  }, {once: true});
+}
+
 const demoVideo = document.getElementById("demo-video");
 const demoButtons = [...document.querySelectorAll(".app-btn")];
 if (demoVideo && demoButtons.length) {
@@ -26,6 +36,7 @@ if (demoVideo && demoButtons.length) {
     const next = demos.findIndex(demo => demo.id === button.dataset.demo);
     if (next < 0) return;
     demos[next].missing = false;
+    captureEvent("demo_platform_selected", {platform: demos[next].id});
     show(next);
   }));
   const nextPlayable = from => {

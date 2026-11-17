@@ -26,6 +26,26 @@ function showError(message) {
   error.textContent = message || "";
 }
 
+function readyPostHog() {
+  if (window.posthog) return Promise.resolve(window.posthog);
+  return new Promise(resolve => {
+    window.addEventListener("posthog:ready", event => resolve(event.detail.available ? window.posthog : null), {once: true});
+  });
+}
+
+async function identifyUser(email) {
+  const posthog = await readyPostHog();
+  // Accounts are keyed only by email, so it is the available stable identifier.
+  if (posthog && email) posthog.identify(email, {email});
+}
+
+async function captureEvent(event, properties) {
+  try {
+    const posthog = await readyPostHog();
+    if (posthog) posthog.capture(event, properties);
+  } catch {}
+}
+
 async function post(path, body) {
   const response = await fetch(path, {
     method: "POST",
@@ -49,7 +69,9 @@ function goToStore() {
   location.replace(STORE_URL);
 }
 
-function welcome(email) {
+async function welcome(email, event, properties) {
+  await identifyUser(email);
+  if (event) await captureEvent(event, properties);
   if (fromExtension) return handoff();
   // Already signed in (or just signed in): go straight to Chrome Web Store.
   goToStore();
@@ -87,7 +109,10 @@ document.getElementById("password-form").onsubmit = async event => {
       email: document.getElementById("email").value.trim(),
       password: document.getElementById("password").value,
     });
-    await welcome(data.email);
+    await welcome(data.email, creating ? "account_registered" : "user_logged_in", {
+      auth_method: "password",
+      destination: fromExtension ? "extension_handoff" : "chrome_web_store",
+    });
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
 };
@@ -113,6 +138,7 @@ document.getElementById("forgot-form").onsubmit = async event => {
   button.disabled = true;
   try {
     await post("/api/v1/auth/web/forgot", {email: document.getElementById("forgot-email").value.trim()});
+    await captureEvent("password_reset_requested", {delivery_method: "email"});
     document.getElementById("forgot-note").hidden = false;
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
@@ -128,7 +154,9 @@ document.getElementById("reset-form").onsubmit = async event => {
       token: resetToken,
       password: document.getElementById("reset-password").value,
     });
-    await welcome(data.email);
+    await welcome(data.email, "password_reset_completed", {
+      destination: fromExtension ? "extension_handoff" : "chrome_web_store",
+    });
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
 };
@@ -136,6 +164,9 @@ document.getElementById("reset-form").onsubmit = async event => {
 document.getElementById("switch").onclick = async () => {
   showError("");
   try { await post("/api/v1/auth/web/logout"); } catch {}
+  await captureEvent("user_logged_out");
+  const posthog = await readyPostHog();
+  if (posthog) posthog.reset();
   document.getElementById("done").hidden = true;
   document.getElementById("ask").hidden = false;
   document.getElementById("password").value = "";
@@ -152,7 +183,7 @@ if (!resetToken && !fromExtension) {
   // Hide the form while we check; signed-in users never see it.
   document.getElementById("ask").hidden = true;
   fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(response => response.json()).then(data => {
-    if (data?.signedIn) goToStore();
+    if (data?.signedIn) welcome(data.email);
     else document.getElementById("ask").hidden = false;
   }).catch(() => { document.getElementById("ask").hidden = false; });
 } else if (!resetToken) {

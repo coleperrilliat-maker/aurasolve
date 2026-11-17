@@ -3,14 +3,21 @@ import http from "node:http";
 import {readFile, stat} from "node:fs/promises";
 import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
-import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, answerQuiz, FORM_KINDS} from "./openai.js";
+import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, answerQuiz, FORM_KINDS, createAIContext} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
 import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, sendReset, issueOauth, readOauth, issueReset, readReset, randomNonce, createStripe} from "./billing.js";
 import {createMemoryUsers, createPostgresUsers} from "./users.js";
 import {hashPassword, verifyPassword, passwordOk, sameText, dummyPasswordHash} from "./passwords.js";
 import {googleConfigured, googleStartUrl, googleIdentity} from "./google.js";
+import {emitPostHogLog, shutdownPostHogLogs} from "./posthog-logs.js";
 
 const PORT = Number(process.env.PORT) || 8787;
+const POSTHOG_PROJECT_TOKEN = process.env.POSTHOG_PROJECT_TOKEN?.trim();
+const POSTHOG_HOST = process.env.POSTHOG_HOST?.trim();
+if (process.env.NODE_ENV !== "production") {
+  if (!POSTHOG_PROJECT_TOKEN) console.warn("POSTHOG_PROJECT_TOKEN variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once POSTHOG_PROJECT_TOKEN is configured");
+  if (!POSTHOG_HOST) console.warn("POSTHOG_HOST variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once POSTHOG_HOST is configured");
+}
 const MAX_BODY = 8_000_000;
 const perIp = createLimiter(60, 60_000);
 const perInstall = createLimiter(40, 60_000);
@@ -298,6 +305,11 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (path === "/api/v1/posthog-config" && req.method === "GET") {
+    sendJson(res, 200, {token: POSTHOG_PROJECT_TOKEN || null, host: POSTHOG_HOST || null, environment: process.env.NODE_ENV || "development"});
+    return;
+  }
+
   if (path === "/api/v1/health" && req.method === "GET") {
     sendJson(res, 200, {
       ok: true,
@@ -572,7 +584,9 @@ async function handleRequest(req, res) {
   }
 
   if (path === "/api/v1/solve" && req.method === "POST") {
-    if (!authorize(req, res)) return;
+    const install = authorize(req, res);
+    if (!install) return;
+    const aiContext = createAIContext(install);
 
     const payload = await readJson(req, res);
     if (!payload) return;
@@ -590,7 +604,7 @@ async function handleRequest(req, res) {
     res.on("close", () => { if (!res.writableEnded) controller.abort(); });
 
     try {
-      const solution = await solveWithOpenAI(snapshot, mode, typeof model === "string" ? model : undefined, controller.signal, effort);
+      const solution = await solveWithOpenAI(snapshot, mode, typeof model === "string" ? model : undefined, controller.signal, effort, aiContext);
       await spendFree(grant);
       sendJson(res, 200, {solution});
     } catch (error) {
@@ -603,7 +617,9 @@ async function handleRequest(req, res) {
   }
 
   if (path === "/api/v1/form" && req.method === "POST") {
-    if (!authorize(req, res)) return;
+    const install = authorize(req, res);
+    if (!install) return;
+    const aiContext = createAIContext(install);
     const payload = await readJson(req, res);
     if (!payload) return;
     const kind = FORM_KINDS.includes(payload.kind) ? payload.kind : null;
@@ -619,7 +635,7 @@ async function handleRequest(req, res) {
     const timeout = setTimeout(() => controller.abort(), 90_000);
     res.on("close", () => { if (!res.writableEnded) controller.abort(); });
     try {
-      const answer = await answerFormQuestion({kind, title, description: String(payload.description || "").slice(0, 4000), options, rows, images, image: payload.image}, controller.signal);
+      const answer = await answerFormQuestion({kind, title, description: String(payload.description || "").slice(0, 4000), options, rows, images, image: payload.image}, controller.signal, aiContext);
       await spendFree(grant);
       sendJson(res, 200, {answer});
     } catch (error) {
@@ -631,7 +647,9 @@ async function handleRequest(req, res) {
   }
 
   if (path === "/api/v1/quiz" && req.method === "POST") {
-    if (!authorize(req, res)) return;
+    const install = authorize(req, res);
+    if (!install) return;
+    const aiContext = createAIContext(install);
     const payload = await readJson(req, res);
     if (!payload) return;
     const questions = (Array.isArray(payload.questions) ? payload.questions : []).slice(0, 40).map((question, index) => ({
@@ -655,7 +673,7 @@ async function handleRequest(req, res) {
     const timeout = setTimeout(() => controller.abort(), 120_000);
     res.on("close", () => { if (!res.writableEnded) controller.abort(); });
     try {
-      const answers = await answerQuiz(questions, controller.signal, {strong: Boolean(payload.strong)});
+      const answers = await answerQuiz(questions, controller.signal, {strong: Boolean(payload.strong)}, aiContext);
       await spendFree(grant);
       sendJson(res, 200, {answers});
     } catch (error) {
@@ -667,7 +685,9 @@ async function handleRequest(req, res) {
   }
 
   if (path === "/api/v1/ask" && req.method === "POST") {
-    if (!authorize(req, res)) return;
+    const install = authorize(req, res);
+    if (!install) return;
+    const aiContext = createAIContext(install);
     let payload;
     try {
       payload = JSON.parse(await readBody(req));
@@ -685,7 +705,7 @@ async function handleRequest(req, res) {
     const timeout = setTimeout(() => controller.abort(), 120_000);
     res.on("close", () => { if (!res.writableEnded) controller.abort(); });
     try {
-      const reply = await askOpenAI({messages: payload.messages, image: payload.image, solve: payload.solve === true}, controller.signal);
+      const reply = await askOpenAI({messages: payload.messages, image: payload.image, solve: payload.solve === true}, controller.signal, aiContext);
       await spendFree(grant);
       sendJson(res, 200, {reply});
     } catch (error) {
@@ -704,6 +724,11 @@ export function createServer() {
     handleRequest(req, res).catch(() => {
       // Never log request bodies, screenshots, credentials, or provider responses.
       console.error("AuraSolve request failed unexpectedly.");
+      emitPostHogLog({
+        severityText: "ERROR",
+        body: "AuraSolve request failed unexpectedly.",
+        attributes: {event: "request_failed", service_component: "http_api"},
+      });
       if (!res.headersSent && !res.destroyed) {
         sendJson(res, 500, {error: "AuraSolve encountered an unexpected error. Try again."});
       } else if (!res.destroyed) {
@@ -714,12 +739,25 @@ export function createServer() {
 }
 
 if (process.argv[1] && nodePath.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const shutdown = () => { void shutdownPostHogLogs().finally(() => process.exit(0)); };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
   openUsers().then(() => {
     createServer().listen(PORT, "0.0.0.0", () => {
       console.log(`AuraSolve API listening on 0.0.0.0:${PORT}`);
+      emitPostHogLog({
+        severityText: "INFO",
+        body: "AuraSolve API started.",
+        attributes: {event: "server_started", service_component: "http_api"},
+      });
     });
   }).catch(error => {
     console.error(`AuraSolve couldn't open the account database. ${error instanceof Error ? error.message : ""}`);
-    process.exit(1);
+    emitPostHogLog({
+      severityText: "ERROR",
+      body: "AuraSolve account database startup failed.",
+      attributes: {event: "database_startup_failed", service_component: "account_store"},
+    });
+    void shutdownPostHogLogs().finally(() => process.exit(1));
   });
 }
