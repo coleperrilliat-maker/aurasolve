@@ -13,8 +13,26 @@
     capture_pageleave: true,
   });
 
-  window.auraPosthogIdentify = function (email) {
+  window.auraPosthogIdentify = function (email, props) {
     if (!email || !window.posthog) return;
-    posthog.identify(String(email).toLowerCase(), {email: String(email).toLowerCase()});
+    const clean = String(email).trim().toLowerCase();
+    posthog.identify(clean, {
+      email: clean,
+      ...(props && typeof props === "object" ? props : {}),
+    });
+  };
+
+  window.auraPosthogSignedIn = function (email, method) {
+    if (!email || !window.posthog) return;
+    const clean = String(email).trim().toLowerCase();
+    const how = String(method || "unknown");
+    window.auraPosthogIdentify(clean, {
+      last_login_method: how,
+      last_login_at: new Date().toISOString(),
+    });
+    posthog.capture("user_signed_in", {
+      method: how,
+      email: clean,
+    });
   };
 })();

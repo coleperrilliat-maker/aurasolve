@@ -480,8 +480,8 @@ async function handleRequest(req, res) {
       }
     } catch { fail("google"); return; }
     const next = saved.extState && saved.challenge
-      ? `/login?state=${encodeURIComponent(saved.extState)}&challenge=${encodeURIComponent(saved.challenge)}`
-      : "/login";
+      ? `/login?state=${encodeURIComponent(saved.extState)}&challenge=${encodeURIComponent(saved.challenge)}&signed_in=google`
+      : "/login?signed_in=google";
     redirect(res, next, [sessionCookie(req, issueSession(accountEmail)), oauthCookie(req, "")]);
     return;
   }

@@ -49,10 +49,11 @@ function goToStore() {
   location.replace(STORE_URL);
 }
 
-function welcome(email) {
+async function welcome(email, method = "session") {
   if (fromExtension) return handoff();
-  try { window.auraPosthogIdentify?.(email); } catch {}
-  // Already signed in (or just signed in): go straight to Chrome Web Store.
+  try { window.auraPosthogSignedIn?.(email, method); } catch {}
+  // Give PostHog a moment to flush identify + login before leaving.
+  await new Promise(resolve => setTimeout(resolve, 450));
   goToStore();
 }
 
@@ -88,7 +89,7 @@ document.getElementById("password-form").onsubmit = async event => {
       email: document.getElementById("email").value.trim(),
       password: document.getElementById("password").value,
     });
-    await welcome(data.email);
+    await welcome(data.email, creating ? "register" : "password");
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
 };
@@ -129,7 +130,7 @@ document.getElementById("reset-form").onsubmit = async event => {
       token: resetToken,
       password: document.getElementById("reset-password").value,
     });
-    await welcome(data.email);
+    await welcome(data.email, "password_reset");
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
 };
@@ -149,15 +150,22 @@ if (resetToken) {
 
 if (params.get("error")) showError(ERRORS[params.get("error")] || "Sign-in didn't work. Try again.");
 
+const signedInMethod = params.get("signed_in") === "google" ? "google" : "session";
+if (params.has("signed_in")) {
+  const clean = new URL(location.href);
+  clean.searchParams.delete("signed_in");
+  history.replaceState(null, "", clean.pathname + clean.search + clean.hash);
+}
+
 if (!resetToken && !fromExtension) {
   // Hide the form while we check; signed-in users never see it.
   document.getElementById("ask").hidden = true;
   fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(response => response.json()).then(data => {
-    if (data?.signedIn) goToStore();
+    if (data?.signedIn) welcome(data.email, signedInMethod);
     else document.getElementById("ask").hidden = false;
   }).catch(() => { document.getElementById("ask").hidden = false; });
 } else if (!resetToken) {
   fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(response => response.json()).then(data => {
-    if (data?.signedIn) welcome(data.email);
+    if (data?.signedIn) welcome(data.email, signedInMethod);
   }).catch(() => {});
 }
