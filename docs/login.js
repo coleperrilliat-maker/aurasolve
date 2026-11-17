@@ -45,14 +45,14 @@ async function handoff() {
 
 const STORE_URL = "https://chromewebstore.google.com/detail/aurasolve/fmmkeamfcjpnmjcbgmmofejajeeogncm";
 
+function goToStore() {
+  location.replace(STORE_URL);
+}
+
 function welcome(email) {
   if (fromExtension) return handoff();
-  for (const id of ["ask", "forgot-panel", "reset"]) document.getElementById(id).hidden = true;
-  document.getElementById("done").hidden = false;
-  document.getElementById("done-note").textContent = `Signed in as ${email}. Opening the Chrome Web Store so you can add AuraSolve.`;
-  const store = document.getElementById("store-link");
-  if (store) store.href = STORE_URL;
-  setTimeout(() => { location.assign = STORE_URL; }, 700);
+  // Already signed in (or just signed in): go straight to Chrome Web Store.
+  goToStore();
 }
 
 const google = document.getElementById("google");
@@ -148,7 +148,14 @@ if (resetToken) {
 
 if (params.get("error")) showError(ERRORS[params.get("error")] || "Sign-in didn't work. Try again.");
 
-if (!resetToken) {
+if (!resetToken && !fromExtension) {
+  // Hide the form while we check; signed-in users never see it.
+  document.getElementById("ask").hidden = true;
+  fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(response => response.json()).then(data => {
+    if (data?.signedIn) goToStore();
+    else document.getElementById("ask").hidden = false;
+  }).catch(() => { document.getElementById("ask").hidden = false; });
+} else if (!resetToken) {
   fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(response => response.json()).then(data => {
     if (data?.signedIn) welcome(data.email);
   }).catch(() => {});
