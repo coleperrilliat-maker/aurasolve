@@ -9,6 +9,7 @@ import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, chec
 import {createMemoryUsers, createPostgresUsers} from "./users.js";
 import {hashPassword, verifyPassword, passwordOk, sameText, dummyPasswordHash} from "./passwords.js";
 import {googleConfigured, googleStartUrl, googleIdentity} from "./google.js";
+import {shutdownPosthog} from "./posthog.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 8_000_000;
@@ -71,6 +72,7 @@ const publicFiles = new Map([
   ["/auth/done", {file: nodePath.join(docsRoot, "auth-done.html"), type: "text/html; charset=utf-8"}],
   ["/style.css", {file: nodePath.join(docsRoot, "style.css"), type: "text/css; charset=utf-8"}],
   ["/script.js", {file: nodePath.join(docsRoot, "script.js"), type: "text/javascript; charset=utf-8"}],
+  ["/analytics.js", {file: nodePath.join(docsRoot, "analytics.js"), type: "text/javascript; charset=utf-8"}],
   ["/app-icon.png", {file: nodePath.join(docsRoot, "app-icon.png"), type: "image/png"}],
   ["/icon.png", {file: nodePath.join(docsRoot, "icon.png"), type: "image/png"}],
   ["/icons/icon-32.png", {file: nodePath.join(iconsRoot, "icon-32.png"), type: "image/png"}],
@@ -718,6 +720,12 @@ if (process.argv[1] && nodePath.resolve(process.argv[1]) === fileURLToPath(impor
     createServer().listen(PORT, "0.0.0.0", () => {
       console.log(`AuraSolve API listening on 0.0.0.0:${PORT}`);
     });
+    const stop = async () => {
+      await shutdownPosthog();
+      process.exit(0);
+    };
+    process.on("SIGTERM", stop);
+    process.on("SIGINT", stop);
   }).catch(error => {
     console.error(`AuraSolve couldn't open the account database. ${error instanceof Error ? error.message : ""}`);
     process.exit(1);

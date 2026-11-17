@@ -51,6 +51,7 @@ function goToStore() {
 
 function welcome(email) {
   if (fromExtension) return handoff();
+  try { window.auraPosthogIdentify?.(email); } catch {}
   // Already signed in (or just signed in): go straight to Chrome Web Store.
   goToStore();
 }
