@@ -8,9 +8,12 @@
 
   posthog.init(KEY, {
     api_host: HOST,
-    person_profiles: "identified_only",
+    // Always create person profiles so Active users / People work from pageviews
+    // (not only after identify/sign-in).
+    person_profiles: "always",
     capture_pageview: true,
     capture_pageleave: true,
+    persistence: "localStorage+cookie",
   });
 
   window.auraPosthogIdentify = function (email, props) {
