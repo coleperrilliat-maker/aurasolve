@@ -1,10 +1,16 @@
 import crypto from "node:crypto";
 import {PostHog} from "posthog-node";
+import {estimateCostUsd} from "./stats.js";
 
 // AI Observability for OpenAI Responses calls on the AuraSolve server.
 // Enabled when POSTHOG_PROJECT_API_KEY is set (Railway). Off otherwise.
 
 let client;
+let usageRecorder = null;
+
+export function setAiUsageRecorder(recorder) {
+  usageRecorder = typeof recorder === "function" ? recorder : null;
+}
 
 export function posthogEnabled() {
   return Boolean(process.env.POSTHOG_PROJECT_API_KEY?.trim());
@@ -62,9 +68,23 @@ function outputChoices(data) {
 }
 
 function captureGeneration({traceId, body, response, data, start, meta, error}) {
+  const usage = data?.usage || {};
+  const inputTokens = usage.input_tokens;
+  const outputTokens = usage.output_tokens;
+  const ok = !(error || (response && !response.ok));
+  const costUsd = estimateCostUsd(body?.model, inputTokens, outputTokens);
+  if (usageRecorder) {
+    Promise.resolve(usageRecorder({
+      model: body?.model,
+      mode: meta.mode,
+      inputTokens,
+      outputTokens,
+      costUsd,
+      ok,
+    })).catch(() => {});
+  }
   const ph = getPosthog();
   if (!ph) return;
-  const usage = data?.usage || {};
   ph.capture({
     distinctId: meta.distinctId || "aurasolve-server",
     event: "$ai_generation",
@@ -79,10 +99,11 @@ function captureGeneration({traceId, body, response, data, start, meta, error}) 
       $ai_http_status: response?.status,
       $ai_input: inputMessages(body),
       $ai_output_choices: outputChoices(data),
-      $ai_input_tokens: usage.input_tokens,
-      $ai_output_tokens: usage.output_tokens,
+      $ai_input_tokens: inputTokens,
+      $ai_output_tokens: outputTokens,
+      $ai_total_cost_usd: costUsd,
       $ai_latency: (Date.now() - start) / 1000,
-      $ai_is_error: Boolean(error || (response && !response.ok)),
+      $ai_is_error: !ok,
       $ai_error: error?.message || (response && !response.ok ? `HTTP ${response.status}` : undefined),
       aurasolve_mode: meta.mode,
     },

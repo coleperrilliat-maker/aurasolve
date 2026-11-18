@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Metrics · AuraSolve</title>
+  <link rel="icon" type="image/png" href="icon.png?v=3">
+  <link rel="stylesheet" href="style.css?v=59">
+</head>
+<body class="metrics-page">
+  <header class="topbar metrics-top">
+    <a class="brand" href="/"><img src="icon.png?v=3" alt="" width="28" height="28"><span>AuraSolve</span></a>
+    <nav class="nav-center" aria-label="Metrics">
+      <span>Metrics</span>
+    </nav>
+    <a class="btn btn-ghost btn-sm" href="/login">Account</a>
+  </header>
+
+  <main class="metrics-wrap">
+    <div id="gate" class="metrics-gate" hidden>
+      <h1>Metrics</h1>
+      <p id="gate-copy" class="lead">Sign in with an admin account to view live AuraSolve analytics.</p>
+      <a id="gate-link" class="btn btn-primary btn-lg" href="/login?next=/metrics">Sign in</a>
+    </div>
+
+    <div id="dash" hidden>
+      <header class="metrics-head">
+        <div>
+          <p class="metrics-kicker">AuraSolve</p>
+          <h1>Metrics</h1>
+          <p class="lead">Views, who signed in, and OpenAI spend — last <span id="days-label">30</span> days.</p>
+        </div>
+        <div class="metrics-head-meta">
+          <p id="viewer" class="metrics-viewer"></p>
+          <button id="refresh" class="btn btn-ghost btn-sm" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <section class="metrics-grid" aria-label="Summary">
+        <article class="metric-card">
+          <p class="metric-label">Pageviews today</p>
+          <p class="metric-value" id="m-views-today">—</p>
+          <p class="metric-sub" id="m-views-sub">—</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Signed in today</p>
+          <p class="metric-value" id="m-signin-today">—</p>
+          <p class="metric-sub" id="m-signin-sub">—</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Accounts</p>
+          <p class="metric-value" id="m-accounts">—</p>
+          <p class="metric-sub" id="m-accounts-sub">—</p>
+        </article>
+        <article class="metric-card metric-card-accent">
+          <p class="metric-label">OpenAI spend (est.)</p>
+          <p class="metric-value" id="m-spend">—</p>
+          <p class="metric-sub" id="m-spend-sub">—</p>
+        </article>
+      </section>
+
+      <section class="metrics-panels">
+        <article class="metrics-panel">
+          <header>
+            <h2>Pageviews</h2>
+            <p>Site visits counted from aurasolve.io</p>
+          </header>
+          <div class="spark" id="spark-views" aria-hidden="true"></div>
+          <ul class="metric-rows" id="view-rows"></ul>
+        </article>
+
+        <article class="metrics-panel">
+          <header>
+            <h2>OpenAI usage</h2>
+            <p>Estimated from token usage on solves / ask / forms</p>
+          </header>
+          <div class="spark" id="spark-spend" aria-hidden="true"></div>
+          <ul class="metric-rows" id="model-rows"></ul>
+        </article>
+      </section>
+
+      <section class="metrics-panel metrics-panel-wide">
+        <header>
+          <h2>Who’s logged in</h2>
+          <p>Recent accounts — Google vs password</p>
+        </header>
+        <div class="metrics-table-wrap">
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Method</th>
+                <th>Last login</th>
+                <th>Joined</th>
+              </tr>
+            </thead>
+            <tbody id="people-rows">
+              <tr><td colspan="4">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <p id="ph-note" class="metrics-note" hidden></p>
+    </div>
+  </main>
+
+  <script src="analytics.js?v=4"></script>
+  <script src="metrics.js?v=1"></script>
+</body>
+</html>

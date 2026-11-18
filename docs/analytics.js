@@ -16,6 +16,16 @@
     persistence: "localStorage+cookie",
   });
 
+  // First-party pageview for /metrics (works even if PostHog is blocked).
+  try {
+    const body = JSON.stringify({path: location.pathname || "/"});
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/v1/stats/pageview", new Blob([body], {type: "application/json"}));
+    } else {
+      fetch("/api/v1/stats/pageview", {method: "POST", headers: {"Content-Type": "application/json"}, body, keepalive: true}).catch(() => {});
+    }
+  } catch {}
+
   window.auraPosthogIdentify = function (email, props) {
     if (!email || !window.posthog) return;
     const clean = String(email).trim().toLowerCase();

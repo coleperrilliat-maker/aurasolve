@@ -9,7 +9,8 @@ import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, chec
 import {createMemoryUsers, createPostgresUsers} from "./users.js";
 import {hashPassword, verifyPassword, passwordOk, sameText, dummyPasswordHash} from "./passwords.js";
 import {googleConfigured, googleStartUrl, googleIdentity} from "./google.js";
-import {shutdownPosthog} from "./posthog.js";
+import {setAiUsageRecorder, shutdownPosthog} from "./posthog.js";
+import {createMemoryStatsStore, createPostgresStats, queryPosthogOverview} from "./stats.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_BODY = 8_000_000;
@@ -22,28 +23,52 @@ const codesPerIp = createLimiter(20, 60 * 60_000);
 const guessesPerChallenge = createLimiter(5, 15 * 60_000);
 const loginsPerIp = createLimiter(30, 15 * 60_000);
 const loginsPerEmail = createLimiter(10, 15 * 60_000);
+const pageviewsPerIp = createLimiter(120, 60_000);
 const accountCache = new Map();
 let stripe = createStripe();
 let mailer = sendCode;
 let resetMailer = sendReset;
 let users = createMemoryUsers();
+let stats = createMemoryStatsStore();
 let googleFetcher = fetch;
 // Tests swap in fakes for Stripe, email, and the account directory.
-export function setBillingDeps({stripe: nextStripe, mailer: nextMailer, resetMailer: nextReset, users: nextUsers, googleFetcher: nextGoogle} = {}) {
+export function setBillingDeps({stripe: nextStripe, mailer: nextMailer, resetMailer: nextReset, users: nextUsers, googleFetcher: nextGoogle, stats: nextStats} = {}) {
   if (nextStripe) stripe = nextStripe;
   if (nextMailer) mailer = nextMailer;
   if (nextReset) resetMailer = nextReset;
   if (nextUsers) users = nextUsers;
   if (nextGoogle) googleFetcher = nextGoogle;
+  if (nextStats) {
+    stats = nextStats;
+    setAiUsageRecorder(payload => stats.recordAiCall(payload));
+  }
   accountCache.clear();
+}
+function adminEmails() {
+  return String(process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map(value => normalizeEmail(value))
+    .filter(Boolean);
+}
+function isAdminEmail(email) {
+  const clean = normalizeEmail(email);
+  if (!clean) return false;
+  const allow = adminEmails();
+  return allow.length > 0 && allow.includes(clean);
+}
+async function recordLoginSafe(email, method) {
+  try { await users.recordLogin?.(email, method); } catch {}
 }
 async function openUsers() {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) {
     console.error("DATABASE_URL is not set. Password and Google accounts will reset when the server restarts.");
+    setAiUsageRecorder(payload => stats.recordAiCall(payload));
     return;
   }
   users = await createPostgresUsers(url);
+  stats = await createPostgresStats(url);
+  setAiUsageRecorder(payload => stats.recordAiCall(payload));
 }
 // Extensions released before per-install tokens send this old public value.
 // It is accepted only until store users have had time to update.
@@ -69,10 +94,12 @@ const publicFiles = new Map([
   ["/privacy", {file: nodePath.join(docsRoot, "privacy.html"), type: "text/html; charset=utf-8"}],
   ["/install", {file: nodePath.join(docsRoot, "install.html"), type: "text/html; charset=utf-8"}],
   ["/login", {file: nodePath.join(docsRoot, "login.html"), type: "text/html; charset=utf-8"}],
+  ["/metrics", {file: nodePath.join(docsRoot, "metrics.html"), type: "text/html; charset=utf-8"}],
   ["/auth/done", {file: nodePath.join(docsRoot, "auth-done.html"), type: "text/html; charset=utf-8"}],
   ["/style.css", {file: nodePath.join(docsRoot, "style.css"), type: "text/css; charset=utf-8"}],
   ["/script.js", {file: nodePath.join(docsRoot, "script.js"), type: "text/javascript; charset=utf-8"}],
   ["/analytics.js", {file: nodePath.join(docsRoot, "analytics.js"), type: "text/javascript; charset=utf-8"}],
+  ["/metrics.js", {file: nodePath.join(docsRoot, "metrics.js"), type: "text/javascript; charset=utf-8"}],
   ["/app-icon.png", {file: nodePath.join(docsRoot, "app-icon.png"), type: "image/png"}],
   ["/icon.png", {file: nodePath.join(docsRoot, "icon.png"), type: "image/png"}],
   ["/icons/icon-32.png", {file: nodePath.join(iconsRoot, "icon-32.png"), type: "image/png"}],
@@ -315,6 +342,62 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (path === "/api/v1/stats/pageview" && req.method === "POST") {
+    if (!pageviewsPerIp(clientIp(req))) { sendJson(res, 429, {error: "Too many requests."}); return; }
+    try { await stats.recordPageview(); } catch {}
+    sendJson(res, 200, {ok: true});
+    return;
+  }
+
+  if (path === "/api/v1/admin/metrics" && req.method === "GET") {
+    const email = readSession(readCookie(req, "aura_session"));
+    if (!email) { sendJson(res, 401, {error: "Sign in first.", code: "signin"}); return; }
+    if (!adminEmails().length) {
+      sendJson(res, 403, {error: "Set ADMIN_EMAILS on Railway to unlock the metrics page.", code: "admin_unset"});
+      return;
+    }
+    if (!isAdminEmail(email)) { sendJson(res, 403, {error: "This account can’t view metrics.", code: "forbidden"}); return; }
+    const days = Math.min(Math.max(Number(queryOf(req).get("days")) || 30, 1), 90);
+    let local;
+    try { local = await stats.summary({days}); }
+    catch { local = {pageviews: {today: 0, last7: 0, last30: 0, series: []}, openai: {spendUsd: 0, calls: 0, inputTokens: 0, outputTokens: 0, byModel: [], series: []}}; }
+    let accounts = {total: 0, google: 0, password: 0, signedInToday: 0, signedIn7d: 0};
+    let recent = [];
+    try {
+      if (users.accountStats) accounts = await users.accountStats();
+      if (users.listAccounts) recent = await users.listAccounts({limit: 40});
+    } catch {}
+    let posthog = null;
+    const personalKey = process.env.POSTHOG_PERSONAL_API_KEY?.trim();
+    const projectId = process.env.POSTHOG_PROJECT_ID?.trim() || "741977";
+    if (personalKey) {
+      try {
+        posthog = await queryPosthogOverview({
+          personalKey,
+          projectId,
+          host: process.env.POSTHOG_HOST?.trim(),
+          days,
+        });
+      } catch (error) {
+        posthog = {error: error instanceof Error ? error.message : "PostHog query failed."};
+      }
+    }
+    sendJson(res, 200, {
+      viewer: email,
+      days,
+      pageviews: local.pageviews,
+      openai: local.openai,
+      accounts: {...accounts, recent},
+      posthog,
+      sources: {
+        local: true,
+        posthog: Boolean(personalKey),
+        adminConfigured: true,
+      },
+    });
+    return;
+  }
+
   const webLogin = WEB_LOGIN.has(path);
   const ownSite = req.headers.origin === requestOrigin(req);
   if (path.startsWith("/api/") && req.method === "POST" && !trusted && !(webLogin && ownSite)) {
@@ -365,6 +448,7 @@ async function handleRequest(req, res) {
     if (typeof payload.challenge !== "string" || !guessesPerChallenge(payload.challenge.slice(-43))) { sendJson(res, 429, {error: "Too many tries. Request a new code."}); return; }
     const email = checkChallenge(payload.challenge, payload.code);
     if (!email) { sendJson(res, 400, {error: "That code is wrong or expired."}); return; }
+    await recordLoginSafe(email, "code");
     sendJson(res, 200, {ok: true, email}, {"Set-Cookie": sessionCookie(req, issueSession(email))});
     return;
   }
@@ -398,6 +482,7 @@ async function handleRequest(req, res) {
       sendJson(res, 400, {error: existing?.googleSub && !existing.passwordHash ? "That email uses Google. Continue with Google." : "Wrong email or password."});
       return;
     }
+    await recordLoginSafe(email, creating ? "register" : "password");
     sendJson(res, 200, {ok: true, email}, {"Set-Cookie": sessionCookie(req, issueSession(email))});
     return;
   }
@@ -434,6 +519,7 @@ async function handleRequest(req, res) {
       return;
     }
     await users.setPassword(parsed.email, await hashPassword(payload.password));
+    await recordLoginSafe(parsed.email, "reset");
     sendJson(res, 200, {ok: true, email: parsed.email}, {"Set-Cookie": sessionCookie(req, issueSession(parsed.email))});
     return;
   }
@@ -482,6 +568,7 @@ async function handleRequest(req, res) {
     const next = saved.extState && saved.challenge
       ? `/login?state=${encodeURIComponent(saved.extState)}&challenge=${encodeURIComponent(saved.challenge)}&signed_in=google`
       : "/login?signed_in=google";
+    await recordLoginSafe(accountEmail, "google");
     redirect(res, next, [sessionCookie(req, issueSession(accountEmail)), oauthCookie(req, "")]);
     return;
   }

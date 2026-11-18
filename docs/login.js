@@ -12,6 +12,11 @@ const extState = params.get("state") || "";
 const pkce = params.get("challenge") || "";
 const fromExtension = /^[A-Za-z0-9_-]{16,128}$/.test(extState) && /^[A-Za-z0-9_-]{43}$/.test(pkce);
 const resetToken = params.get("reset") || "";
+const nextParam = params.get("next") || "";
+const safeNext = nextParam === "/metrics" || nextParam.startsWith("/metrics?") ? nextParam : "";
+if (safeNext) {
+  try { sessionStorage.setItem("aura_next", safeNext); } catch {}
+}
 const error = document.getElementById("error");
 const ERRORS = {
   google_denied: "Google sign-in was cancelled.",
@@ -49,12 +54,22 @@ function goToStore() {
   location.replace(STORE_URL);
 }
 
+function goNextOrStore() {
+  let next = "";
+  try { next = sessionStorage.getItem("aura_next") || ""; sessionStorage.removeItem("aura_next"); } catch {}
+  if (next === "/metrics" || next.startsWith("/metrics?")) {
+    location.replace(next);
+    return;
+  }
+  goToStore();
+}
+
 async function welcome(email, method = "session") {
   if (fromExtension) return handoff();
   try { window.auraPosthogSignedIn?.(email, method); } catch {}
   // Give PostHog a moment to flush identify + login before leaving.
   await new Promise(resolve => setTimeout(resolve, 450));
-  goToStore();
+  goNextOrStore();
 }
 
 const google = document.getElementById("google");
