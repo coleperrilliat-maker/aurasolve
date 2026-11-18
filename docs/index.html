@@ -12,6 +12,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=59">
+  <link rel="preload" as="image" href="demos/posters/forms.jpg">
+  <link rel="preload" as="video" href="demos/forms.mp4" type="video/mp4">
 </head>
 <body>
   <header class="topbar">
@@ -68,7 +70,7 @@
           </button>
         </div>
         <div class="demo-frame">
-          <video id="demo-video" muted playsinline preload="auto" aria-label="AuraSolve on Google Forms"></video>
+          <video id="demo-video" muted playsinline autoplay preload="auto" poster="demos/posters/forms.jpg" src="demos/forms.mp4" aria-label="AuraSolve on Google Forms"></video>
         </div>
       </figure>
     </section>
@@ -347,7 +349,7 @@
     <span>© 2026 AuraSolve. Not affiliated with Pearson.</span>
   </footer>
 
-  <script src="script.js?v=5"></script>
+  <script src="script.js?v=6"></script>
   <script src="analytics.js?v=5"></script>
 </body>
 </html>

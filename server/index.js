@@ -1,5 +1,6 @@
 import {BUILD_VERSION} from '../src/shared/version.js';
 import http from "node:http";
+import {createReadStream} from "node:fs";
 import {readFile, stat} from "node:fs/promises";
 import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
@@ -251,13 +252,52 @@ function sendJson(res, status, payload, headers = {}) {
   res.end(JSON.stringify(payload));
 }
 
-async function sendPublicFile(res, file) {
-  const body = await readFile(file.file);
+async function sendPublicFile(req, res, file) {
+  const info = await stat(file.file);
   const longCache = file.type.startsWith("image/") || file.type === "video/mp4";
-  res.writeHead(200, {
+  const cache = longCache ? "public, max-age=86400" : "public, max-age=300";
+  const base = {
     "Content-Type": file.type,
-    "Cache-Control": longCache ? "public, max-age=86400" : "public, max-age=300",
-  });
+    "Cache-Control": cache,
+    "Accept-Ranges": "bytes",
+  };
+
+  if (req.method === "HEAD") {
+    res.writeHead(200, {...base, "Content-Length": info.size});
+    res.end();
+    return;
+  }
+
+  // Stream large media so browsers can paint the first frame without waiting
+  // for the whole file (and honor Range seeks for <video>).
+  if (file.type === "video/mp4" || info.size > 256_000) {
+    const range = String(req.headers.range || "");
+    const match = /^bytes=(\d*)-(\d*)$/i.exec(range);
+    if (match) {
+      const size = info.size;
+      let start = match[1] ? Number(match[1]) : 0;
+      let end = match[2] ? Number(match[2]) : size - 1;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= size) {
+        res.writeHead(416, {...base, "Content-Range": `bytes */${size}`});
+        res.end();
+        return;
+      }
+      end = Math.min(end, size - 1);
+      res.writeHead(206, {
+        ...base,
+        "Content-Length": end - start + 1,
+        "Content-Range": `bytes ${start}-${end}/${size}`,
+      });
+      createReadStream(file.file, {start, end}).pipe(res);
+      return;
+    }
+    res.writeHead(200, {...base, "Content-Length": info.size});
+    createReadStream(file.file).pipe(res);
+    return;
+  }
+
+  const body = await readFile(file.file);
+  res.writeHead(200, {...base, "Content-Length": body.length});
   res.end(body);
 }
 
@@ -304,13 +344,12 @@ async function handleRequest(req, res) {
     return;
   }
 
-  if (req.method === "GET") {
+  if (req.method === "GET" || req.method === "HEAD") {
     const exact = publicFiles.get(path);
     const asset = exact || resolveDocsAsset(path);
     if (asset) {
       try {
-        await stat(asset.file);
-        await sendPublicFile(res, asset);
+        await sendPublicFile(req, res, asset);
       } catch {
         sendJson(res, exact ? 500 : 404, {error: exact ? "Landing page unavailable" : "Not found"});
       }

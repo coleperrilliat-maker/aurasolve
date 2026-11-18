@@ -2,9 +2,9 @@ const demoVideo = document.getElementById("demo-video");
 const demoButtons = [...document.querySelectorAll(".app-btn")];
 if (demoVideo && demoButtons.length) {
   const demos = [
-    {id: "forms", src: "demos/forms.mp4", label: "AuraSolve on Google Forms"},
-    {id: "canvas", src: "demos/canvas.mp4", label: "AuraSolve on Canvas"},
-    {id: "pearson", src: "demos/pearson.mp4", label: "AuraSolve on Pearson"},
+    {id: "forms", src: "demos/forms.mp4", poster: "demos/posters/forms.jpg", label: "AuraSolve on Google Forms"},
+    {id: "canvas", src: "demos/canvas.mp4", poster: "demos/posters/canvas.jpg", label: "AuraSolve on Canvas"},
+    {id: "pearson", src: "demos/pearson.mp4", poster: "demos/posters/pearson.jpg", label: "AuraSolve on Pearson"},
   ];
   let index = 0;
   const show = next => {
@@ -16,6 +16,7 @@ if (demoVideo && demoButtons.length) {
       button.setAttribute("aria-selected", String(on));
     });
     demoVideo.setAttribute("aria-label", demo.label);
+    if (demoVideo.getAttribute("poster") !== demo.poster) demoVideo.poster = demo.poster;
     if (demoVideo.getAttribute("src") !== demo.src) {
       demoVideo.src = demo.src;
       demoVideo.load();
@@ -41,6 +42,14 @@ if (demoVideo && demoButtons.length) {
     demos[index].missing = true;
     const next = nextPlayable(index);
     if (next !== index) show(next);
+  });
+  // Warm the other clips in the background so tab switches feel instant.
+  demos.slice(1).forEach(demo => {
+    const warm = document.createElement("link");
+    warm.rel = "prefetch";
+    warm.as = "video";
+    warm.href = demo.src;
+    document.head.appendChild(warm);
   });
   show(0);
 }
