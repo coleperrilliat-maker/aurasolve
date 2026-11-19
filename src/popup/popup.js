@@ -551,11 +551,11 @@ $('save-inspection').onclick = () => {
 /* ---------- Account and plans ---------- */
 const PAYWALL = /pick a plan|Sign in to AuraSolve to keep solving/i;
 const PLAN_NOTES = {
-  weekly: {tag: '', intro: '$0.99 today for your first week, then $8.99 every week until you cancel.', full: '$8.99 today, then $8.99 every week until you cancel.', fullPrice: '$8.99/week', fullThen: 'billed weekly'},
+  weekly: {tag: '', intro: 'Try for only $0.99. Renews for $8.99 a week until you cancel.', full: '$8.99 today, then $8.99 every week until you cancel.', fullPrice: '$8.99/week', fullThen: 'billed weekly'},
   monthly: {tag: 'Most popular', intro: '$4.99 today for your first month, then $9.99 every month until you cancel.', full: '$9.99 today, then $9.99 every month until you cancel.', fullPrice: '$9.99/month', fullThen: 'billed monthly'},
   yearly: {tag: 'Best value', intro: '$40.00 today, then $40.00 every year until you cancel.', full: '$40.00 today, then $40.00 every year until you cancel.'},
 };
-let challenge = null, chosenPlan = 'monthly', planList = null, accountState = null;
+let challenge = null, chosenPlan = 'weekly', planList = null, accountState = null;
 const accountError = message => { $('account-error').textContent = message || ''; $('account-error').hidden = !message; };
 function drawPlans() {
   const intro = accountState?.introEligible !== false;

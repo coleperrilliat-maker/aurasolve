@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 
 export const PLANS = {
   weekly: {lookup: "aurasolve_weekly", amount: 899, interval: "week", introCoupon: "aurasolve_first_week", introOff: 800,
-    title: "Weekly", price: "$0.99 first week", then: "then $8.99/week"},
+    title: "Weekly", price: "Try for only $0.99", then: "Renews for $8.99 a week"},
   monthly: {lookup: "aurasolve_monthly", amount: 999, interval: "month", introCoupon: "aurasolve_first_month", introOff: 500,
     title: "Monthly", price: "$4.99 first month", then: "then $9.99/month"},
   yearly: {lookup: "aurasolve_yearly", amount: 4000, interval: "year",

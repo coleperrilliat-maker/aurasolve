@@ -245,7 +245,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 /* ---------- Profile ---------- */
-let challenge = null, accountState = null, planList = null, chosenPlan = 'monthly';
+let challenge = null, accountState = null, planList = null, chosenPlan = 'weekly';
 function profileError(message) { say('profile-error', message || '', true); }
 function drawPlans() {
   const box = $('plans');

@@ -153,5 +153,5 @@ test('with no Stripe key the paywall stays off', async t => {
   const response = await fetch(base + '/api/v1/solve', {method: 'POST', body: JSON.stringify({mode: 'field', snapshot: {}}), headers: {authorization: `Bearer ${token}`}});
   assert.notEqual(response.status, 402);
   const plans = await (await fetch(base + '/api/v1/plans')).json();
-  assert.deepEqual(plans.plans.map(plan => plan.price), ['$0.99 first week', '$4.99 first month', '$40.00/year']);
+  assert.deepEqual(plans.plans.map(plan => plan.price), ['Try for only $0.99', '$4.99 first month', '$40.00/year']);
 });
