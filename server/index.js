@@ -486,6 +486,11 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (path === "/api/v1/billing/config" && req.method === "GET") {
+    sendJson(res, 200, {publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() || ""});
+    return;
+  }
+
   if (path === "/api/v1/plans" && req.method === "GET") {
     sendJson(res, 200, {paywall: paywallEnabled(), freeTotal: freeSolves(), plans: Object.entries(PLANS).map(([id, plan]) => ({id, title: plan.title, price: plan.price, then: plan.then}))});
     return;

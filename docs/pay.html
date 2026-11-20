@@ -9,6 +9,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=64">
+  <script src="https://js.stripe.com/endive/stripe.js" async></script>
+  <script>
+    window.auraStripeReady = (async () => {
+      const started = Date.now();
+      while (!window.Stripe) {
+        if (Date.now() - started > 8000) throw new Error("Stripe.js didn't load.");
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+      const config = await fetch("/api/v1/billing/config", {credentials: "same-origin"}).then(response => response.json());
+      if (!config.publishableKey) throw new Error("Checkout isn't ready yet.");
+      return window.Stripe(config.publishableKey);
+    })();
+  </script>
 </head>
 <body class="pay-body">
   <main class="pay">
@@ -37,7 +50,6 @@
       </aside>
     </div>
   </main>
-  <script src="https://js.stripe.com/endive/stripe.js"></script>
-  <script src="pay.js?v=3" type="module"></script>
+  <script src="pay.js?v=4" type="module"></script>
 </body>
 </html>
