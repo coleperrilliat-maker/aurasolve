@@ -306,6 +306,7 @@ export function createStripe(fetcher = fetch) {
         cancel_url: embedded ? undefined : `${base}/login?pay=1`,
         return_url: embedded ? `${base}/install?paid=1&session_id={CHECKOUT_SESSION_ID}` : undefined,
         subscription_data: {metadata: {plan: planName}},
+        excluded_payment_method_types: embedded ? ["us_bank_account", "cashapp", "klarna", "affirm", "afterpay_clearpay", "amazon_pay"] : undefined,
         integration_identifier: embedded ? `aurasolve_checkout_${suffix}` : undefined,
       }, embedded ? "2026-09-30.endive" : "2024-06-20");
       if (embedded) {

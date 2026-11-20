@@ -38,7 +38,6 @@ const session = await fetch("/api/v1/auth/session", {credentials: "same-origin"}
 if (!session?.signedIn) location.replace("/login");
 else if (!session.paywall || session.paid) location.replace("/install?paid=1");
 else {
-  document.getElementById("pay-email").textContent = session.email || "";
   try {
     const checkoutSession = await post("/api/v1/auth/web/checkout", {plan: "weekly", embedded: true});
     if (checkoutSession.url) {
@@ -81,9 +80,10 @@ else {
         express.mount("#express-checkout");
       }
       checkout.createPaymentElement({
-        layout: {type: "accordion", radios: "never", spacedAccordionItems: true},
-        paymentMethodOrder: ["link", "card"],
-        fields: {billingDetails: {email: "never", address: "if_required"}},
+        layout: {type: "tabs"},
+        wallets: {link: "never"},
+        walletOptions: {emailRequired: false, phoneNumberRequired: false},
+        fields: {billingDetails: {name: "never", email: "never", phone: "never", address: "if_required"}},
       }).mount("#payment-element");
       const loaded = await checkout.loadActions();
       if (loaded.type === "error") throw new Error(loaded.error.message);
