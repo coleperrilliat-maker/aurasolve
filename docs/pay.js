@@ -85,18 +85,34 @@ else {
         walletOptions: {emailRequired: false, phoneNumberRequired: false},
         fields: {billingDetails: {name: "never", email: "never", phone: "never", address: "if_required"}},
       }).mount("#payment-element");
-      const loaded = await checkout.loadActions();
-      if (loaded.type === "error") throw new Error(loaded.error.message);
-      showTotal(loaded.actions.getSession?.());
       document.getElementById("pay").onclick = async () => {
         const button = document.getElementById("pay");
+        const label = button.textContent;
         button.disabled = true;
+        button.textContent = "Starting your plan…";
         showError("");
-        showTotal(loaded.actions.getSession?.());
-        const result = await loaded.actions.confirm();
-        if (result?.type === "error" || result?.message) {
-          showError(result.error?.message || result.message);
+        try {
+          const ready = await checkout.loadActions();
+          if (ready?.type === "error") throw new Error(ready.error?.message || "Payment couldn't start.");
+          const actions = ready?.actions || ready;
+          const session = actions.getSession?.();
+          const total = session?.total?.total;
+          if (total) {
+            void total.amount;
+            void total.minorUnitsAmount;
+            void total.currency;
+            void total.minorUnitsAmountDivisor;
+            showTotal(session);
+          }
+          const confirm = actions.confirm?.bind(actions) || checkout.confirm?.bind(checkout);
+          if (!confirm) throw new Error("Payment couldn't start. Refresh the page and try again.");
+          const result = await confirm();
+          if (result?.type === "error") throw new Error(result.error?.message || "Payment didn't go through.");
+          if (result?.error?.message) throw new Error(result.error.message);
+        } catch (err) {
+          showError(err.message || "Payment didn't go through. Check the card and try again.");
           button.disabled = false;
+          button.textContent = label;
         }
       };
     }
