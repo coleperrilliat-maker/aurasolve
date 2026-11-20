@@ -47,7 +47,9 @@ else {
       showError("Checkout isn't ready yet. Add the Stripe publishable key, then try again.");
     } else {
       const stripe = window.Stripe(checkoutSession.publishableKey);
-      const checkout = stripe.initCheckoutElementsSdk({
+      const init = stripe.initCheckoutElementsSdk?.bind(stripe) || stripe.initCheckout?.bind(stripe);
+      if (!init) throw new Error("Stripe checkout isn't available in this browser. Refresh and try again.");
+      let checkout = init({
         clientSecret: checkoutSession.clientSecret,
         elementsOptions: {
           appearance: {
@@ -60,6 +62,7 @@ else {
           },
         },
       });
+      if (checkout?.then) checkout = await checkout;
       checkout.on("change", showTotal);
       if (typeof checkout.createExpressCheckoutElement === "function") {
         const express = checkout.createExpressCheckoutElement({buttonHeight: 48, layout: {maxColumns: 1, maxRows: 1}});
