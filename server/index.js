@@ -6,9 +6,9 @@ import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
 import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, answerQuiz, FORM_KINDS} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
-import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, sendReset, issueOauth, readOauth, issueReset, readReset, randomNonce, createStripe} from "./billing.js";
+import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, sendReset, issueOauth, readOauth, issueReset, readReset, issueSignup, readSignup, randomNonce, createStripe} from "./billing.js";
 import {createMemoryUsers, createPostgresUsers} from "./users.js";
-import {hashPassword, verifyPassword, passwordOk, sameText, dummyPasswordHash} from "./passwords.js";
+import {hashPassword, verifyPassword, passwordOk, passwordError, sameText, dummyPasswordHash} from "./passwords.js";
 import {googleConfigured, googleStartUrl, googleIdentity} from "./google.js";
 import {setAiUsageRecorder, shutdownPosthog} from "./posthog.js";
 import {createMemoryStatsStore, createPostgresStats, queryPosthogOverview} from "./stats.js";
@@ -182,6 +182,8 @@ const WEB_LOGIN = new Set([
   "/api/v1/auth/web/verify",
   "/api/v1/auth/web/logout",
   "/api/v1/auth/web/register",
+  "/api/v1/auth/web/register/start",
+  "/api/v1/auth/web/register/code",
   "/api/v1/auth/web/login",
   "/api/v1/auth/web/forgot",
   "/api/v1/auth/web/reset",
@@ -524,13 +526,42 @@ async function handleRequest(req, res) {
     return;
   }
 
-  if ((path === "/api/v1/auth/web/register" || path === "/api/v1/auth/web/login") && req.method === "POST") {
+  if (path === "/api/v1/auth/web/register/start" && req.method === "POST") {
     const payload = await readJson(req, res);
     if (!payload) return;
     const email = normalizeEmail(payload.email);
+    if (!email) { sendJson(res, 400, {error: "Enter a valid email address."}); return; }
+    if (!codesPerIp(clientIp(req)) || !codesPerEmail(email)) { sendJson(res, 429, {error: "Too many codes requested. Wait a bit and try again."}); return; }
+    const existing = await users.getByEmail(email);
+    if (existing?.passwordHash) { sendJson(res, 409, {error: "An account with that email already exists. Sign in."}); return; }
+    if (existing?.googleSub) { sendJson(res, 409, {error: "That email uses Google. Continue with Google."}); return; }
+    const {code, challenge} = createChallenge(email);
+    try { await mailer(email, code); }
+    catch (error) { sendJson(res, error.status || 502, {error: error.message}); return; }
+    sendJson(res, 200, {challenge});
+    return;
+  }
+
+  if (path === "/api/v1/auth/web/register/code" && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    if (typeof payload.challenge !== "string" || !guessesPerChallenge(payload.challenge.slice(-43))) { sendJson(res, 429, {error: "Too many tries. Request a new code."}); return; }
+    const email = checkChallenge(payload.challenge, payload.code);
+    if (!email) { sendJson(res, 400, {error: "That code is wrong or expired."}); return; }
+    const existing = await users.getByEmail(email);
+    if (existing?.passwordHash) { sendJson(res, 409, {error: "An account with that email already exists. Sign in."}); return; }
+    if (existing?.googleSub) { sendJson(res, 409, {error: "That email uses Google. Continue with Google."}); return; }
+    sendJson(res, 200, {ok: true, email, signup: issueSignup(email)});
+    return;
+  }
+
+  if ((path === "/api/v1/auth/web/register" || path === "/api/v1/auth/web/login") && req.method === "POST") {
+    const payload = await readJson(req, res);
+    if (!payload) return;
     const creating = path.endsWith("/register");
-    if (!email || !passwordOk(payload.password)) {
-      sendJson(res, 400, {error: creating ? "Use a valid email and a password of at least 8 characters." : "Wrong email or password."});
+    const email = creating ? readSignup(payload.signup) : normalizeEmail(payload.email);
+    if (!email || (creating ? !passwordOk(payload.password) : typeof payload.password !== "string" || !payload.password || payload.password.length > 200)) {
+      sendJson(res, 400, {error: creating ? (email ? passwordError(payload.password) : "Verify your email before choosing a password.") : "Wrong email or password."});
       return;
     }
     if (!loginsPerIp(clientIp(req)) || !loginsPerEmail(email)) {
@@ -575,8 +606,12 @@ async function handleRequest(req, res) {
     const payload = await readJson(req, res);
     if (!payload) return;
     const parsed = readReset(payload.token);
-    if (!parsed || !passwordOk(payload.password) || !loginsPerIp(clientIp(req))) {
+    if (!parsed || !loginsPerIp(clientIp(req))) {
       sendJson(res, 400, {error: "That reset link is invalid or expired."});
+      return;
+    }
+    if (!passwordOk(payload.password)) {
+      sendJson(res, 400, {error: passwordError(payload.password)});
       return;
     }
     const existing = await users.getByEmail(parsed.email);

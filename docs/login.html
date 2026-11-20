@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=61">
+  <link rel="stylesheet" href="style.css?v=62">
 </head>
 <body>
   <main class="login-wrap">
@@ -50,10 +50,39 @@
       </div>
       <div id="reset" hidden>
         <h1>Choose a new password</h1>
-        <p class="lead">Use at least 8 characters.</p>
+        <p class="lead">Use a password that meets every requirement below.</p>
         <form id="reset-form">
-          <input id="reset-password" type="password" autocomplete="new-password" placeholder="New password" minlength="8" required>
-          <button class="btn btn-primary btn-lg" type="submit">Save password</button>
+          <input id="reset-password" type="password" autocomplete="new-password" placeholder="New password" required>
+          <ul class="pw-rules" id="reset-rules">
+            <li data-rule="len">At least 8 characters</li>
+            <li data-rule="lower">One lowercase letter</li>
+            <li data-rule="upper">One uppercase letter</li>
+            <li data-rule="digit">One number</li>
+          </ul>
+          <button id="reset-submit" class="btn btn-primary btn-lg" type="submit" disabled>Save password</button>
+        </form>
+      </div>
+      <div id="signup-code" hidden>
+        <h1>Check your email</h1>
+        <p class="lead" id="signup-code-lead">We sent a 6-digit code.</p>
+        <form id="signup-code-form">
+          <input id="signup-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" required>
+          <button class="btn btn-primary btn-lg" type="submit">Verify</button>
+          <button id="signup-code-back" class="btn btn-ghost btn-lg" type="button">Use a different email</button>
+        </form>
+      </div>
+      <div id="signup-password" hidden>
+        <h1>Create a password</h1>
+        <p class="lead" id="signup-password-lead">Choose a password for this account.</p>
+        <form id="signup-password-form">
+          <input id="signup-password-input" type="password" autocomplete="new-password" placeholder="Password" required>
+          <ul class="pw-rules" id="signup-rules">
+            <li data-rule="len">At least 8 characters</li>
+            <li data-rule="lower">One lowercase letter</li>
+            <li data-rule="upper">One uppercase letter</li>
+            <li data-rule="digit">One number</li>
+          </ul>
+          <button id="signup-password-submit" class="btn btn-primary btn-lg" type="submit" disabled>Create account</button>
         </form>
       </div>
       <div id="account" hidden>
@@ -67,6 +96,6 @@
     </section>
   </main>
   <script src="analytics.js?v=5"></script>
-  <script src="login.js?v=12"></script>
+  <script src="login.js?v=13"></script>
 </body>
 </html>

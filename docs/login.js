@@ -49,9 +49,25 @@ async function handoff() {
 }
 
 function showPanel(name) {
-  for (const id of ["ask", "forgot-panel", "reset", "account"]) {
+  for (const id of ["ask", "forgot-panel", "reset", "signup-code", "signup-password", "account"]) {
     document.getElementById(id).hidden = id !== name;
   }
+}
+
+function passwordChecks(value) {
+  const text = String(value || "");
+  return {
+    len: text.length >= 8 && text.length <= 200,
+    lower: /[a-z]/.test(text),
+    upper: /[A-Z]/.test(text),
+    digit: /[0-9]/.test(text),
+  };
+}
+
+function paintRules(listId, value) {
+  const checks = passwordChecks(value);
+  document.querySelectorAll(`#${listId} li`).forEach(item => item.classList.toggle("met", Boolean(checks[item.dataset.rule])));
+  return Object.values(checks).every(Boolean);
 }
 
 let payToken = 0;
@@ -127,33 +143,100 @@ if (fromExtension) {
 }
 
 let creating = false;
-document.getElementById("mode").onclick = () => {
-  creating = !creating;
+let signupChallenge = "";
+let signupProof = "";
+let signupEmail = "";
+
+function setCreateMode(on) {
+  creating = on;
   showError("");
   document.getElementById("title").textContent = creating ? "Create account" : "Sign in";
-  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in with Google, or your email and password.");
-  document.getElementById("submit").textContent = creating ? "Create account" : "Sign in";
+  document.getElementById("lead").textContent = creating ? "Enter your email and we'll send a verification code." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in with Google, or your email and password.");
+  document.getElementById("submit").textContent = creating ? "Continue" : "Sign in";
   document.getElementById("mode").textContent = creating ? "Already have an account? Sign in" : "Create an account";
-  document.getElementById("password").autocomplete = creating ? "new-password" : "current-password";
+  document.getElementById("password").hidden = creating;
+  document.getElementById("password").required = !creating;
   google.hidden = creating;
   document.getElementById("or").hidden = creating;
   document.getElementById("forgot").hidden = creating;
-};
+}
+
+document.getElementById("mode").onclick = () => { setCreateMode(!creating); };
 
 document.getElementById("password-form").onsubmit = async event => {
   event.preventDefault();
   showError("");
   const button = document.getElementById("submit");
   button.disabled = true;
+  const email = document.getElementById("email").value.trim();
   try {
-    const data = await post(creating ? "/api/v1/auth/web/register" : "/api/v1/auth/web/login", {
-      email: document.getElementById("email").value.trim(),
-      password: document.getElementById("password").value,
-    });
-    await welcome(data.email, creating ? "register" : "password", true);
+    if (creating) {
+      const data = await post("/api/v1/auth/web/register/start", {email});
+      signupEmail = email;
+      signupChallenge = data.challenge;
+      signupProof = "";
+      document.getElementById("signup-code-lead").textContent = `We sent a 6-digit code to ${email}. It expires in 10 minutes.`;
+      document.getElementById("signup-code-input").value = "";
+      showPanel("signup-code");
+      document.getElementById("signup-code-input").focus();
+    } else {
+      const data = await post("/api/v1/auth/web/login", {email, password: document.getElementById("password").value});
+      await welcome(data.email, "password", true);
+    }
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
 };
+
+document.getElementById("signup-code-back").onclick = () => {
+  showError("");
+  showPanel("ask");
+  setCreateMode(true);
+};
+
+document.getElementById("signup-code-form").onsubmit = async event => {
+  event.preventDefault();
+  showError("");
+  const button = event.target.querySelector("button");
+  button.disabled = true;
+  try {
+    const data = await post("/api/v1/auth/web/register/code", {
+      challenge: signupChallenge,
+      code: document.getElementById("signup-code-input").value.trim(),
+    });
+    signupProof = data.signup;
+    signupEmail = data.email || signupEmail;
+    document.getElementById("signup-password-lead").textContent = `Choose a password for ${signupEmail}.`;
+    document.getElementById("signup-password-input").value = "";
+    paintRules("signup-rules", "");
+    document.getElementById("signup-password-submit").disabled = true;
+    showPanel("signup-password");
+    document.getElementById("signup-password-input").focus();
+  } catch (err) { showError(err.message); }
+  finally { button.disabled = false; }
+};
+
+document.getElementById("signup-password-input").addEventListener("input", event => {
+  document.getElementById("signup-password-submit").disabled = !paintRules("signup-rules", event.target.value);
+});
+
+document.getElementById("signup-password-form").onsubmit = async event => {
+  event.preventDefault();
+  showError("");
+  const button = document.getElementById("signup-password-submit");
+  if (!paintRules("signup-rules", document.getElementById("signup-password-input").value)) return;
+  button.disabled = true;
+  try {
+    const data = await post("/api/v1/auth/web/register", {
+      signup: signupProof,
+      password: document.getElementById("signup-password-input").value,
+    });
+    await welcome(data.email, "register", true);
+  } catch (err) { showError(err.message); button.disabled = false; }
+};
+
+document.getElementById("reset-password").addEventListener("input", event => {
+  document.getElementById("reset-submit").disabled = !paintRules("reset-rules", event.target.value);
+});
 
 document.getElementById("forgot").onclick = () => {
   showError("");
@@ -193,7 +276,7 @@ document.getElementById("reset-form").onsubmit = async event => {
     });
     await welcome(data.email, "password_reset", true);
   } catch (err) { showError(err.message); }
-  finally { button.disabled = false; }
+  finally { button.disabled = !paintRules("reset-rules", document.getElementById("reset-password").value); }
 };
 
 document.getElementById("account-continue").onclick = () => { continueAccount(); };

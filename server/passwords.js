@@ -4,8 +4,21 @@ import {promisify} from "node:util";
 const scrypt = promisify(crypto.scrypt);
 const KEY_LEN = 32;
 
+export function passwordProblems(value) {
+  const text = typeof value === "string" ? value : "";
+  const problems = [];
+  if (text.length < 8 || text.length > 200) problems.push("8 to 200 characters");
+  if (!/[a-z]/.test(text)) problems.push("a lowercase letter");
+  if (!/[A-Z]/.test(text)) problems.push("an uppercase letter");
+  if (!/[0-9]/.test(text)) problems.push("a number");
+  return problems;
+}
 export function passwordOk(value) {
-  return typeof value === "string" && value.length >= 8 && value.length <= 200;
+  return passwordProblems(value).length === 0;
+}
+export function passwordError(value) {
+  const problems = passwordProblems(value);
+  return problems.length ? `Password needs ${problems.join(", ")}.` : "";
 }
 
 export async function hashPassword(password) {

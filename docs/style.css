@@ -89,6 +89,12 @@ em{font-style:normal}
 .login-links button:hover{color:var(--ink)}
 .login-note{margin:16px 0 0;font-weight:600}
 .login-error{margin:16px 0 0;color:#c2414b;font-weight:600}
+.pw-rules{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.pw-rules li{color:#8b93a7;font-size:13px;font-weight:600}
+.pw-rules li::before{content:"•";margin-right:8px}
+.pw-rules li.met{color:#178a45}
+.pw-rules li.met::before{content:"✓"}
+.login-card button:disabled{opacity:.55;cursor:default;transform:none}
 
 main{max-width:calc(var(--wrap) + 2 * var(--pad));margin:0 auto;padding:0 var(--pad)}
 .hero{

@@ -20,8 +20,10 @@ test('password hashes do not keep the password', async () => {
 test('email and password sign-in, reset, and Google all stay on the website session', async t => {
   const directory = createMemoryUsers();
   let resetLink = null;
+  let sent = null;
   setBillingDeps({
     users: directory,
+    mailer: async (email, code) => { sent = {email, code}; },
     resetMailer: async (_email, link) => { resetLink = link; },
     googleFetcher: async url => {
       if (String(url).includes('oauth2.googleapis.com/token')) return {ok: true, json: async () => ({access_token: 'tok'})};
@@ -47,21 +49,32 @@ test('email and password sign-in, reset, and Google all stay on the website sess
   const cookieOf = response => (response.headers.getSetCookie?.() || []).find(value => value.startsWith('aura_session='))?.split(';')[0] || '';
   const web = (path, body, cookie) => fetch(base + path, {method: 'POST', body: JSON.stringify(body || {}), headers: {origin, 'content-type': 'application/json', ...(cookie ? {cookie} : {})}});
 
-  const evil = await fetch(base + '/api/v1/auth/web/register', {method: 'POST', body: JSON.stringify({email: 'a@b.co', password: 'longpassword'}), headers: {origin: 'https://evil.example', 'content-type': 'application/json'}});
+  const evil = await fetch(base + '/api/v1/auth/web/register/start', {method: 'POST', body: JSON.stringify({email: 'a@b.co'}), headers: {origin: 'https://evil.example', 'content-type': 'application/json'}});
   assert.equal(evil.status, 403);
-  assert.equal((await web('/api/v1/auth/web/register', {email: 'a@b.co', password: 'short'})).status, 400);
+  assert.equal((await web('/api/v1/auth/web/register', {password: 'Longpassword1'})).status, 400);
 
-  const created = await web('/api/v1/auth/web/register', {email: 'Person@Example.com', password: 'longpassword'});
+  const started = await web('/api/v1/auth/web/register/start', {email: 'Person@Example.com'});
+  assert.equal(started.status, 200);
+  assert.equal(sent.email, 'person@example.com');
+  const {challenge} = await started.json();
+  const wrongCode = sent.code === '111111' ? '222222' : '111111';
+  assert.equal((await web('/api/v1/auth/web/register/code', {challenge, code: wrongCode})).status, 400);
+  const coded = await web('/api/v1/auth/web/register/code', {challenge, code: sent.code});
+  const codedBody = await coded.json();
+  assert.equal(coded.status, 200);
+  assert.equal(codedBody.email, 'person@example.com');
+  assert.equal((await web('/api/v1/auth/web/register', {signup: codedBody.signup, password: 'longpassword'})).status, 400);
+  const created = await web('/api/v1/auth/web/register', {signup: codedBody.signup, password: 'Longpassword1'});
   const createdBody = await created.json();
   assert.equal(created.status, 200);
   assert.equal(createdBody.email, 'person@example.com');
   assert.equal(createdBody.session, undefined);
   const cookie = cookieOf(created);
   assert.match(cookie, /^aura_session=/);
-  assert.equal((await web('/api/v1/auth/web/register', {email: 'person@example.com', password: 'longpassword'})).status, 409);
+  assert.equal((await web('/api/v1/auth/web/register/start', {email: 'person@example.com'})).status, 409);
   assert.equal((await web('/api/v1/auth/web/login', {email: 'person@example.com', password: 'nope-nope'})).status, 400);
 
-  const signedIn = await web('/api/v1/auth/web/login', {email: 'person@example.com', password: 'longpassword'});
+  const signedIn = await web('/api/v1/auth/web/login', {email: 'person@example.com', password: 'Longpassword1'});
   assert.equal((await signedIn.json()).email, 'person@example.com');
   const session = readSession(decodeURIComponent(cookieOf(signedIn).slice('aura_session='.length)));
   assert.equal(session, 'person@example.com');
@@ -78,18 +91,18 @@ test('email and password sign-in, reset, and Google all stay on the website sess
   assert.match(resetLink, /^https:\/\/aurasolve\.io\/login\?reset=/);
   const resetToken = new URL(resetLink).searchParams.get('reset');
   assert.equal((await web('/api/v1/auth/web/reset', {token: resetToken, password: 'tiny'})).status, 400);
-  const reset = await web('/api/v1/auth/web/reset', {token: resetToken, password: 'newer-password'});
+  const reset = await web('/api/v1/auth/web/reset', {token: resetToken, password: 'Newerpassword1'});
   assert.equal((await reset.json()).email, 'person@example.com');
-  assert.equal((await web('/api/v1/auth/web/login', {email: 'person@example.com', password: 'longpassword'})).status, 400);
-  assert.equal((await web('/api/v1/auth/web/login', {email: 'person@example.com', password: 'newer-password'})).status, 200);
-  assert.equal((await web('/api/v1/auth/web/reset', {token: resetToken, password: 'newer-password'})).status, 400);
+  assert.equal((await web('/api/v1/auth/web/login', {email: 'person@example.com', password: 'Longpassword1'})).status, 400);
+  assert.equal((await web('/api/v1/auth/web/login', {email: 'person@example.com', password: 'Newerpassword1'})).status, 200);
+  assert.equal((await web('/api/v1/auth/web/reset', {token: resetToken, password: 'Newerpassword1'})).status, 400);
 
-  const started = await fetch(`${base}/api/v1/auth/google?state=abcdefghijklmnop&challenge=${pkceChallenge(verifier)}`, {redirect: 'manual'});
-  assert.equal(started.status, 302);
-  const location = new URL(started.headers.get('location'));
+  const googleStart = await fetch(`${base}/api/v1/auth/google?state=abcdefghijklmnop&challenge=${pkceChallenge(verifier)}`, {redirect: 'manual'});
+  assert.equal(googleStart.status, 302);
+  const location = new URL(googleStart.headers.get('location'));
   assert.equal(location.origin, 'https://accounts.google.com');
   assert.equal(location.searchParams.get('redirect_uri'), `${base}/api/v1/auth/google/callback`);
-  const oauth = (started.headers.getSetCookie?.() || []).find(value => value.startsWith('aura_oauth=')).split(';')[0];
+  const oauth = (googleStart.headers.getSetCookie?.() || []).find(value => value.startsWith('aura_oauth=')).split(';')[0];
   const callback = await fetch(`${base}/api/v1/auth/google/callback?code=abc&state=${location.searchParams.get('state')}`, {headers: {cookie: oauth}, redirect: 'manual'});
   assert.equal(callback.status, 302);
   const back = new URL(callback.headers.get('location'), base);

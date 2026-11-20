@@ -124,6 +124,21 @@ export function readOauth(token, now = Date.now()) {
 }
 
 const RESET_MS = 30 * 60_000;
+const SIGNUP_MS = 15 * 60_000;
+export function issueSignup(email, now = Date.now()) {
+  const body = Buffer.from(JSON.stringify({email, expires: now + SIGNUP_MS})).toString("base64url");
+  return `u1.${body}.${hmac(`signup.${body}`)}`;
+}
+export function readSignup(token, now = Date.now()) {
+  if (typeof token !== "string" || token.length > 900) return null;
+  const [version, body, signature] = token.split(".");
+  if (version !== "u1" || !body || !signature || !same(signature, hmac(`signup.${body}`))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    const email = normalizeEmail(data.email);
+    return email && now < data.expires ? email : null;
+  } catch { return null; }
+}
 export function issueReset(email, nonce, now = Date.now()) {
   const body = Buffer.from(JSON.stringify({email, nonce, expires: now + RESET_MS})).toString("base64url");
   return `r1.${body}.${hmac(`reset.${body}`)}`;
@@ -156,8 +171,8 @@ export async function sendCode(email, code, fetcher = fetch) {
   await sendMail({
     to: email,
     subject: `Your AuraSolve code: ${code}`,
-    text: `Your AuraSolve sign-in code is ${code}\n\nIt expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.`,
-    html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;color:#1d2433"><p>Your AuraSolve sign-in code is</p><p style="font-size:30px;font-weight:700;letter-spacing:6px">${code}</p><p style="color:#667">It expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.</p></div>`,
+    text: `Your AuraSolve code is ${code}\n\nIt expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.`,
+    html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;color:#1d2433"><p>Your AuraSolve code is</p><p style="font-size:30px;font-weight:700;letter-spacing:6px">${code}</p><p style="color:#667">It expires in ${CODE_MINUTES} minutes. If you didn't ask for this, you can ignore this email.</p></div>`,
   }, fetcher);
 }
 
