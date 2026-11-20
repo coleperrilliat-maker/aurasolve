@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkout · AuraSolve</title>
+  <link rel="icon" type="image/png" href="icon.png?v=3">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=63">
+</head>
+<body class="pay-body">
+  <main class="pay">
+    <a class="brand pay-brand" href="/"><img src="icon.png?v=3" alt="" width="28" height="28"><span>AuraSolve</span></a>
+    <p id="pay-error" class="login-error" hidden></p>
+    <div class="pay-grid">
+      <section class="pay-card">
+        <p id="pay-email" class="pay-email"></p>
+        <div id="express-checkout" hidden></div>
+        <p id="pay-or" class="or" hidden>or</p>
+        <div id="payment-element"></div>
+        <button id="pay" class="pay-go" type="button" disabled>Get started for $0.99</button>
+        <label class="pay-plan">
+          <input type="radio" checked>
+          <span>
+            <strong>Weekly</strong>
+            <small>Try for $0.99, then $8.99 a week</small>
+          </span>
+        </label>
+        <button id="pay-logout" class="pay-logout" type="button">Log out</button>
+      </section>
+      <aside class="pay-card pay-summary">
+        <h2>Your order</h2>
+        <div class="pay-line"><span>Weekly</span><strong id="line-price">$0.99</strong></div>
+        <div class="pay-due"><span>Total due today</span><strong id="due">$0.99</strong></div>
+        <p class="pay-secure">Secure checkout powered by Stripe</p>
+      </aside>
+    </div>
+  </main>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="pay.js?v=1" type="module"></script>
+</body>
+</html>

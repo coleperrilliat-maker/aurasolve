@@ -107,6 +107,27 @@ export function randomNonce() {
   return crypto.randomBytes(16).toString("base64url");
 }
 
+export function verifyStripeEvent(raw, header, secret, now = Date.now()) {
+  if (!secret || typeof raw !== "string" || typeof header !== "string") return null;
+  const items = header.split(",").map(part => {
+    const split = part.indexOf("=");
+    return split < 0 ? ["", ""] : [part.slice(0, split), part.slice(split + 1)];
+  });
+  const timestamp = items.find(([key]) => key === "t")?.[1];
+  const signatures = items.filter(([key]) => key === "v1").map(([, value]) => value);
+  const age = Math.abs(now / 1000 - Number(timestamp));
+  if (!timestamp || !signatures.length || !Number.isFinite(age) || age > 5 * 60) return null;
+  const expected = crypto.createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex");
+  const match = signatures.some(signature => {
+    const left = Buffer.from(expected);
+    const right = Buffer.from(signature);
+    return left.length === right.length && crypto.timingSafeEqual(left, right);
+  });
+  if (!match) return null;
+  try { return JSON.parse(raw); }
+  catch { return null; }
+}
+
 const OAUTH_MS = 10 * 60_000;
 export function issueOauth(payload, now = Date.now()) {
   const body = Buffer.from(JSON.stringify({...payload, expires: now + OAUTH_MS})).toString("base64url");
@@ -197,12 +218,12 @@ function form(params, prefix = "", out = new URLSearchParams()) {
 }
 
 export function createStripe(fetcher = fetch) {
-  const call = async (method, path, params) => {
+  const call = async (method, path, params, version = "2024-06-20") => {
     const key = process.env.STRIPE_SECRET_KEY?.trim();
     const query = method === "GET" && params ? `?${form(params)}` : "";
     const response = await fetcher(`https://api.stripe.com/v1${path}${query}`, {
       method,
-      headers: {"Authorization": `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded", "Stripe-Version": "2024-06-20"},
+      headers: {"Authorization": `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded", "Stripe-Version": version},
       body: method === "GET" ? undefined : form(params || {}).toString(),
     });
     const data = await response.json().catch(() => ({}));
@@ -266,22 +287,31 @@ export function createStripe(fetcher = fetch) {
     async useFree(customerId, used) {
       await call("POST", `/customers/${customerId}`, {metadata: {free_used: used + 1}});
     },
-    async checkout(account, planName, base) {
+    async checkout(account, planName, base, mode = "hosted") {
       const plan = PLANS[planName];
       if (!plan) throw Object.assign(new Error("Pick a plan."), {status: 400});
       const ids = await prices();
       // Intro prices are for a first subscription only, so cancelling and
       // resubscribing doesn't restart the $0.99 week.
       const intro = plan.introCoupon && !account.hadSubscription;
+      const embedded = mode === "elements";
+      const suffix = Array.from(crypto.randomBytes(8), byte => "abcdefghijklmnopqrstuvwxyz"[byte % 26]).join("");
       const session = await call("POST", "/checkout/sessions", {
         mode: "subscription",
+        ui_mode: embedded ? "elements" : undefined,
         customer: account.customerId,
         line_items: [{price: ids[planName], quantity: 1}],
         discounts: intro ? [{coupon: plan.introCoupon}] : undefined,
-        success_url: `${base}/install?paid=1`,
-        cancel_url: `${base}/login?pay=1`,
+        success_url: embedded ? undefined : `${base}/install?paid=1`,
+        cancel_url: embedded ? undefined : `${base}/login?pay=1`,
+        return_url: embedded ? `${base}/install?paid=1&session_id={CHECKOUT_SESSION_ID}` : undefined,
         subscription_data: {metadata: {plan: planName}},
-      });
+        integration_identifier: embedded ? `aurasolve_checkout_${suffix}` : undefined,
+      }, embedded ? "2026-09-30.endive" : "2024-06-20");
+      if (embedded) {
+        if (!session.client_secret) throw Object.assign(new Error("Checkout didn't start. Try again."), {status: 502});
+        return {clientSecret: session.client_secret};
+      }
       return session.url;
     },
     async portal(account, base) {

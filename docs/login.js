@@ -92,25 +92,8 @@ async function continueAccount() {
     location.assign(next === "/metrics" || next.startsWith("/metrics?") ? next : "/install?paid=1");
     return;
   }
-  const token = ++payToken;
-  const button = document.getElementById("account-continue");
-  button.disabled = true;
   showError("");
-  try {
-    const data = await post("/api/v1/auth/web/checkout", {plan: "weekly"});
-    if (token !== payToken) return;
-    location.assign(data.url);
-  } catch (err) {
-    if (token !== payToken) return;
-    if (/already have a plan/i.test(err.message)) {
-      currentSession = {...session, paid: true};
-      showAccount(currentSession);
-      location.assign("/install?paid=1");
-      return;
-    }
-    showError(err.message);
-    button.disabled = false;
-  }
+  location.assign("/pay");
 }
 
 async function logout() {

@@ -6,7 +6,7 @@ import nodePath from "node:path";
 import {fileURLToPath} from "node:url";
 import {solveWithOpenAI, pickModel, askOpenAI, answerFormQuestion, answerQuiz, FORM_KINDS} from "./openai.js";
 import {issueToken, verifyToken, bearer, originAllowed, createLimiter} from "./auth.js";
-import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, sendReset, issueOauth, readOauth, issueReset, readReset, issueSignup, readSignup, randomNonce, createStripe} from "./billing.js";
+import {PLANS, paywallEnabled, freeSolves, normalizeEmail, createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, sendCode, sendReset, issueOauth, readOauth, issueReset, readReset, issueSignup, readSignup, randomNonce, createStripe, verifyStripeEvent} from "./billing.js";
 import {createMemoryUsers, createPostgresUsers} from "./users.js";
 import {hashPassword, verifyPassword, passwordOk, passwordError, sameText, dummyPasswordHash} from "./passwords.js";
 import {googleConfigured, googleStartUrl, googleIdentity} from "./google.js";
@@ -95,6 +95,7 @@ const publicFiles = new Map([
   ["/privacy", {file: nodePath.join(docsRoot, "privacy.html"), type: "text/html; charset=utf-8"}],
   ["/install", {file: nodePath.join(docsRoot, "install.html"), type: "text/html; charset=utf-8"}],
   ["/login", {file: nodePath.join(docsRoot, "login.html"), type: "text/html; charset=utf-8"}],
+  ["/pay", {file: nodePath.join(docsRoot, "pay.html"), type: "text/html; charset=utf-8"}],
   ["/metrics", {file: nodePath.join(docsRoot, "metrics.html"), type: "text/html; charset=utf-8"}],
   ["/auth/done", {file: nodePath.join(docsRoot, "auth-done.html"), type: "text/html; charset=utf-8"}],
   ["/style.css", {file: nodePath.join(docsRoot, "style.css"), type: "text/css; charset=utf-8"}],
@@ -360,6 +361,29 @@ async function handleRequest(req, res) {
     }
   }
 
+  if (path === "/api/v1/stripe/webhook" && req.method === "POST") {
+    const raw = await readBody(req);
+    const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+    if (!secret) { sendJson(res, 503, {error: "Stripe webhook secret is not configured."}); return; }
+    const event = verifyStripeEvent(raw, req.headers["stripe-signature"], secret);
+    if (!event?.type) { sendJson(res, 400, {error: "Invalid Stripe signature."}); return; }
+    const refresh = new Set([
+      "checkout.session.completed",
+      "checkout.session.async_payment_succeeded",
+      "checkout.session.async_payment_failed",
+      "customer.subscription.created",
+      "customer.subscription.updated",
+      "customer.subscription.deleted",
+      "invoice.paid",
+      "invoice.payment_failed",
+      "charge.dispute.created",
+      "charge.refunded",
+    ]);
+    if (refresh.has(event.type)) accountCache.clear();
+    sendJson(res, 200, {received: true});
+    return;
+  }
+
   if (path === "/billing/done" && req.method === "GET") {
     res.writeHead(302, {Location: "/install?paid=1"});
     res.end();
@@ -490,6 +514,12 @@ async function handleRequest(req, res) {
       const account = await loadAccount(email, true);
       if (account.paid) { sendJson(res, 409, {error: "You already have a plan.", paid: true}); return; }
       const plan = PLANS[payload.plan] ? payload.plan : "weekly";
+      const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY?.trim() || "";
+      if (payload.embedded && publishableKey) {
+        const session = await stripe.checkout(account, plan, publicBase(req), "elements");
+        sendJson(res, 200, {clientSecret: session.clientSecret, publishableKey});
+        return;
+      }
       sendJson(res, 200, {url: await stripe.checkout(account, plan, publicBase(req))});
     } catch (error) {
       sendJson(res, error.status === 400 ? 400 : 502, {error: error.status === 400 ? error.message : "Checkout is unavailable right now. Try again in a minute."});

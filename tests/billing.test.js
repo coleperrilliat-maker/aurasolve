@@ -3,7 +3,17 @@ process.env.INSTALL_SECRET = 'unit-test-secret';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {createServer, setBillingDeps} from '../server/index.js';
-import {createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, pkceChallenge, createStripe, normalizeEmail} from '../server/billing.js';
+import {createChallenge, checkChallenge, issueSession, readSession, issueHandoff, readHandoff, pkceChallenge, createStripe, normalizeEmail, verifyStripeEvent} from '../server/billing.js';
+import crypto from 'node:crypto';
+
+test('stripe webhooks only accept a fresh signed payload', () => {
+  const raw = JSON.stringify({id: 'evt_1', type: 'invoice.paid'});
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = crypto.createHmac('sha256', 'whsec_test').update(`${timestamp}.${raw}`).digest('hex');
+  assert.equal(verifyStripeEvent(raw, `t=${timestamp},v1=${signature}`, 'whsec_test').type, 'invoice.paid');
+  assert.equal(verifyStripeEvent(raw, `t=${timestamp},v1=${signature}`, 'whsec_other'), null);
+  assert.equal(verifyStripeEvent(raw, `t=${timestamp - 1000},v1=${signature}`, 'whsec_test'), null);
+});
 
 test('sign-in codes only work for the right code, email, and time', () => {
   const {code, challenge} = createChallenge('a@b.co', 1000);
@@ -76,7 +86,16 @@ test('checkout creates prices once and gives the intro price only on a first sub
     if (pathname === '/v1/prices') return json({id: `price_${body.get('lookup_key')}`});
     if (pathname.startsWith('/v1/coupons/')) return {ok: false, status: 404, json: async () => ({error: {message: 'No such coupon'}})};
     if (pathname === '/v1/coupons') return json({id: body.get('id')});
-    if (pathname === '/v1/checkout/sessions') return json({url: `https://checkout.test/${body.get('line_items[0][price]')}/${body.get('discounts[0][coupon]') || 'full'}`});
+    if (pathname === '/v1/checkout/sessions') {
+      if (body.get('ui_mode') === 'elements') {
+        assert.equal(options.headers['Stripe-Version'], '2026-09-30.endive');
+        assert.equal(body.get('success_url'), null);
+        assert.match(body.get('return_url'), /session_id=\{CHECKOUT_SESSION_ID\}$/);
+        assert.match(body.get('integration_identifier'), /^aurasolve_checkout_[a-z]{8}$/);
+        return json({client_secret: 'cs_secret'});
+      }
+      return json({url: `https://checkout.test/${body.get('line_items[0][price]')}/${body.get('discounts[0][coupon]') || 'full'}`});
+    }
     assert.fail(`unexpected ${pathname}${search}`);
   };
   const stripe = createStripe(fake);
@@ -86,6 +105,8 @@ test('checkout creates prices once and gives the intro price only on a first sub
   assert.equal(again, 'https://checkout.test/price_aurasolve_monthly/full');
   const yearly = await stripe.checkout({customerId: 'cus_1', hadSubscription: false}, 'yearly', 'https://x');
   assert.equal(yearly, 'https://checkout.test/price_aurasolve_yearly/full');
+  const embedded = await stripe.checkout({customerId: 'cus_1', hadSubscription: false}, 'weekly', 'https://x', 'elements');
+  assert.equal(embedded.clientSecret, 'cs_secret');
   assert.equal(calls.filter(call => call === 'POST /v1/products').length, 1);
   assert.equal(calls.filter(call => call === 'POST /v1/prices').length, 3);
   delete process.env.STRIPE_SECRET_KEY;

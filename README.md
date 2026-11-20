@@ -20,6 +20,8 @@ Users install the extension and start practicing. **No API key in Chrome.** Your
    - `OPENAI_MODEL` — e.g. `gpt-4.1`
    - `INSTALL_SECRET` — optional long random string (`openssl rand -hex 32`) that signs per-install tokens and sign-in sessions. Without it, the server derives one from `OPENAI_API_KEY`.
    - `STRIPE_SECRET_KEY` — turns the paywall on. Plans (Weekly $0.99 then $8.99, Monthly $4.99 then $9.99, Yearly $40) and their intro coupons are created in Stripe on the first checkout. Stripe is the only account store: one customer per email, with the free-solve count in its metadata.
+   - `STRIPE_PUBLISHABLE_KEY` — required for the embedded checkout on `/pay`. Without it, checkout falls back to Stripe's hosted page.
+   - `STRIPE_WEBHOOK_SECRET` — required so subscription updates clear the paid-status cache. Point a Stripe webhook at `https://aurasolve.io/api/v1/stripe/webhook`.
    - `RESEND_API_KEY` and `EMAIL_FROM` — send the 6-digit sign-in codes.
    - `FREE_SOLVES` (default 0 — hard paywall) and `PUBLIC_URL` (used for the checkout return pages) are optional. Set `STRIPE_SECRET_KEY` to turn the paywall on.
    - `EXTENSION_IDS` — optional comma-separated Chrome extension ids allowed to call the API (set it to your Web Store id once published).
