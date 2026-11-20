@@ -185,6 +185,7 @@ const WEB_LOGIN = new Set([
   "/api/v1/auth/web/login",
   "/api/v1/auth/web/forgot",
   "/api/v1/auth/web/reset",
+  "/api/v1/auth/web/checkout",
   "/api/v1/auth/handoff",
 ]);
 function publicBase(req) {
@@ -221,7 +222,7 @@ async function entitle(req, res) {
   catch { sendJson(res, 503, {error: "AuraSolve couldn't check your plan. Try again in a minute."}); return null; }
   if (account.paid) return {account, free: false};
   if (account.freeLeft > 0) return {account, free: true};
-  sendJson(res, 402, {code: "paywall", error: "You've used your free solves. Open the AuraSolve panel and pick a plan to keep going."});
+  sendJson(res, 402, {code: "paywall", error: "Subscribe on aurasolve.io to keep solving. Sign in there, pay $0.99, then sign in again in the extension."});
   return null;
 }
 
@@ -358,11 +359,13 @@ async function handleRequest(req, res) {
   }
 
   if (path === "/billing/done" && req.method === "GET") {
-    billingPage(res, "You're all set", "Your AuraSolve plan is updated. Close this tab and go back to AuraSolve. It may take a few seconds to show up.");
+    res.writeHead(302, {Location: "/install?paid=1"});
+    res.end();
     return;
   }
   if (path === "/billing/cancelled" && req.method === "GET") {
-    billingPage(res, "No charge made", "Checkout was cancelled and you weren't charged. You can pick a plan anytime from the AuraSolve panel.");
+    res.writeHead(302, {Location: "/login?pay=1"});
+    res.end();
     return;
   }
 
@@ -464,7 +467,31 @@ async function handleRequest(req, res) {
 
   if (path === "/api/v1/auth/session" && req.method === "GET") {
     const email = readSession(readCookie(req, "aura_session"));
-    sendJson(res, 200, email ? {signedIn: true, email} : {signedIn: false});
+    if (!email) { sendJson(res, 200, {signedIn: false, paywall: paywallEnabled()}); return; }
+    if (!paywallEnabled()) { sendJson(res, 200, {signedIn: true, email, paywall: false, paid: true}); return; }
+    try {
+      const account = await loadAccount(email, true);
+      sendJson(res, 200, {signedIn: true, email, ...publicAccount(account)});
+    } catch {
+      sendJson(res, 200, {signedIn: true, email, paywall: true, paid: false});
+    }
+    return;
+  }
+
+  if (path === "/api/v1/auth/web/checkout" && req.method === "POST") {
+    const email = readSession(readCookie(req, "aura_session"));
+    if (!email) { sendJson(res, 401, {error: "Sign in first."}); return; }
+    if (!paywallEnabled()) { sendJson(res, 400, {error: "Plans aren't available yet."}); return; }
+    const payload = await readJson(req, res);
+    if (!payload) return;
+    try {
+      const account = await loadAccount(email, true);
+      if (account.paid) { sendJson(res, 409, {error: "You already have a plan.", paid: true}); return; }
+      const plan = PLANS[payload.plan] ? payload.plan : "weekly";
+      sendJson(res, 200, {url: await stripe.checkout(account, plan, publicBase(req))});
+    } catch (error) {
+      sendJson(res, error.status === 400 ? 400 : 502, {error: error.status === 400 ? error.message : "Checkout is unavailable right now. Try again in a minute."});
+    }
     return;
   }
 

@@ -2,7 +2,7 @@ import {runFillAssignment} from '../shared/pilot-engine.js';
 import {renderSolution, renderRich, answerLines} from "../shared/render.js";
 import {BUILD_VERSION} from '../shared/version.js';
 import {sendExtension} from '../shared/messaging.js';
-import {account as loadAccount, plans as loadPlans, startSignIn, finishSignIn, signOut, checkoutUrl, portalUrl} from '../background/api.js';
+import {account as loadAccount, startSignIn, finishSignIn, signOut, portalUrl} from '../background/api.js';
 import {DEFAULT_OVERLAY, OVERLAY_COLORS, OVERLAY_ZONES, normalizeOverlay, readOverlay, writeOverlay} from '../shared/overlay.js';
 
 const $ = id => document.getElementById(id);
@@ -549,30 +549,10 @@ $('save-inspection').onclick = () => {
 };
 
 /* ---------- Account and plans ---------- */
-const PAYWALL = /pick a plan|Sign in to AuraSolve to keep solving/i;
-const PLAN_NOTES = {
-  weekly: {tag: '', intro: 'Try for only $0.99. Renews for $8.99 a week until you cancel.', full: '$8.99 today, then $8.99 every week until you cancel.', fullPrice: '$8.99/week', fullThen: 'billed weekly'},
-  monthly: {tag: 'Most popular', intro: '$4.99 today for your first month, then $9.99 every month until you cancel.', full: '$9.99 today, then $9.99 every month until you cancel.', fullPrice: '$9.99/month', fullThen: 'billed monthly'},
-  yearly: {tag: 'Best value', intro: '$40.00 today, then $40.00 every year until you cancel.', full: '$40.00 today, then $40.00 every year until you cancel.'},
-};
-let challenge = null, chosenPlan = 'weekly', planList = null, accountState = null;
+const PAYWALL = /Subscribe on aurasolve\.io|Sign in to AuraSolve to keep solving|pick a plan/i;
+const SITE_PAY_URL = 'https://aurasolve.io/login?pay=1';
+let challenge = null, accountState = null;
 const accountError = message => { $('account-error').textContent = message || ''; $('account-error').hidden = !message; };
-function drawPlans() {
-  const intro = accountState?.introEligible !== false;
-  $('plan-list').replaceChildren(...(planList || []).map(plan => {
-    const note = PLAN_NOTES[plan.id] || {};
-    const button = el('button', 'plan');
-    button.type = 'button'; button.setAttribute('role', 'radio'); button.setAttribute('aria-checked', String(plan.id === chosenPlan));
-    if (note.tag) button.append(el('span', 'plan-tag', note.tag));
-    const name = el('span', 'plan-name'); name.append(el('strong', '', plan.title), el('small', '', 'Unlimited solves'));
-    const price = el('span', 'plan-price'); price.append(el('strong', '', intro || !note.fullPrice ? plan.price : note.fullPrice), el('small', '', intro || !note.fullThen ? plan.then : note.fullThen));
-    button.append(name, price);
-    button.onclick = () => { chosenPlan = plan.id; drawPlans(); };
-    return button;
-  }));
-  const note = PLAN_NOTES[chosenPlan] || {};
-  $('plan-terms').textContent = intro ? note.intro || '' : note.full || '';
-}
 function drawAccount() {
   const state = accountState || {};
   const signedIn = Boolean(state.signedIn);
@@ -590,16 +570,14 @@ function drawAccount() {
     $('plan-title').textContent = `AuraSolve ${state.plan ? state.plan[0].toUpperCase() + state.plan.slice(1) : 'Pro'}`;
     $('plan-detail').textContent = `${state.email} · ${state.cancelAtPeriodEnd ? `Ends ${date}` : state.status === 'past_due' ? 'Payment failed: update your card in Manage subscription' : `Renews ${date}`}`;
   } else {
-    $('plan-title').textContent = 'Free';
-    $('plan-detail').textContent = `${state.email} · ${state.freeLeft} of ${state.freeTotal} free solves left`;
-    drawPlans();
+    $('plan-title').textContent = 'Not subscribed';
+    $('plan-detail').textContent = `${state.email} · Pay $0.99 on aurasolve.io to unlock`;
   }
 }
 async function refreshAccount() {
   accountError('');
-  try {
-    [accountState, planList] = await Promise.all([loadAccount(), planList ? planList : loadPlans().then(data => data.plans)]);
-  } catch (error) { accountError(error.message); }
+  try { accountState = await loadAccount(); }
+  catch (error) { accountError(error.message); }
   drawAccount();
 }
 $('signin-email').onsubmit = async event => {
@@ -625,11 +603,9 @@ $('signin-code').onsubmit = async event => {
 };
 $('code-back').onclick = () => { challenge = null; accountError(''); drawAccount(); };
 $('sign-out').onclick = async () => { await signOut(); accountState = null; challenge = null; refreshAccount(); };
-$('subscribe').onclick = async () => {
-  accountError(''); $('subscribe').disabled = true;
-  try { chrome.tabs.create({url: await checkoutUrl(chosenPlan)}); }
-  catch (error) { accountError(error.message); }
-  finally { $('subscribe').disabled = false; }
+$('subscribe').onclick = () => {
+  accountError('');
+  chrome.tabs.create({url: SITE_PAY_URL});
 };
 $('manage-plan').onclick = async () => {
   accountError('');

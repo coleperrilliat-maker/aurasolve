@@ -21,7 +21,8 @@ export function paywallEnabled() {
 }
 export function freeSolves() {
   const value = Number(process.env.FREE_SOLVES);
-  return Number.isInteger(value) && value >= 0 ? value : 5;
+  // Hard paywall by default: no free solves unless FREE_SOLVES is set.
+  return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
 function secret() {
@@ -262,14 +263,14 @@ export function createStripe(fetcher = fetch) {
         customer: account.customerId,
         line_items: [{price: ids[planName], quantity: 1}],
         discounts: intro ? [{coupon: plan.introCoupon}] : undefined,
-        success_url: `${base}/billing/done`,
-        cancel_url: `${base}/billing/cancelled`,
+        success_url: `${base}/install?paid=1`,
+        cancel_url: `${base}/login?pay=1`,
         subscription_data: {metadata: {plan: planName}},
       });
       return session.url;
     },
     async portal(account, base) {
-      return (await call("POST", "/billing_portal/sessions", {customer: account.customerId, return_url: `${base}/billing/done`})).url;
+      return (await call("POST", "/billing_portal/sessions", {customer: account.customerId, return_url: `${base}/install`})).url;
     },
   };
 }

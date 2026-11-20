@@ -2,7 +2,7 @@ import {BUILD_VERSION} from '../shared/version.js';
 import {sendExtension} from '../shared/messaging.js';
 import {answerLines} from '../shared/render.js';
 import {normalizeOverlay, readOverlay, writeOverlay} from '../shared/overlay.js';
-import {account as loadAccount, plans as loadPlans, signOut, checkoutUrl, portalUrl} from '../background/api.js';
+import {account as loadAccount, signOut, portalUrl} from '../background/api.js';
 
 const $ = id => document.getElementById(id);
 $('version').textContent = `v${BUILD_VERSION}`;
@@ -245,23 +245,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 /* ---------- Profile ---------- */
-let challenge = null, accountState = null, planList = null, chosenPlan = 'weekly';
+let challenge = null, accountState = null;
+const SITE_PAY_URL = 'https://aurasolve.io/login?pay=1';
 function profileError(message) { say('profile-error', message || '', true); }
-function drawPlans() {
-  const box = $('plans');
-  box.replaceChildren(...(planList || []).map(plan => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'plan';
-    button.setAttribute('aria-checked', String(plan.id === chosenPlan));
-    button.innerHTML = `<span><strong></strong><small></small></span><small></small>`;
-    button.querySelector('strong').textContent = plan.title || plan.id;
-    button.querySelector('small').textContent = 'Unlimited solves';
-    button.lastElementChild.textContent = plan.price || '';
-    button.onclick = () => { chosenPlan = plan.id; drawPlans(); };
-    return button;
-  }));
-}
 function drawAccount() {
   const state = accountState || {};
   const signedIn = Boolean(state.signedIn);
@@ -271,18 +257,16 @@ function drawAccount() {
   $('who-title').textContent = state.email || 'Signed in';
   if (state.paywall === false) $('who-detail').textContent = 'Everything is unlocked.';
   else if (state.paid) $('who-detail').textContent = state.plan ? `${state.plan} plan` : 'Paid plan';
-  else $('who-detail').textContent = `${state.freeLeft ?? 0} of ${state.freeTotal ?? 0} free solves left`;
+  else $('who-detail').textContent = 'Pay $0.99 on aurasolve.io to unlock';
   const needsPlan = Boolean(state.paywall && !state.paid);
-  $('plans').hidden = !needsPlan;
+  $('plans').hidden = true;
   $('subscribe').hidden = !needsPlan;
   $('manage').hidden = !state.paid;
-  if (needsPlan) drawPlans();
 }
 async function refreshAccount() {
   profileError('');
-  try {
-    [accountState, planList] = await Promise.all([loadAccount(), planList ? planList : loadPlans().then(data => data.plans)]);
-  } catch (error) { profileError(error.message); }
+  try { accountState = await loadAccount(); }
+  catch (error) { profileError(error.message); }
   drawAccount();
 }
 $('log-in').onclick = async () => {
@@ -291,16 +275,16 @@ $('log-in').onclick = async () => {
   catch (error) { profileError(error.message); }
 };
 $('sign-out').onclick = async () => { await signOut(); accountState = null; challenge = null; refreshAccount(); };
-$('subscribe').onclick = async () => {
+$('subscribe').onclick = () => {
   profileError('');
-  try { chrome.tabs.create({url: await checkoutUrl(chosenPlan)}); }
-  catch (error) { profileError(error.message); }
+  chrome.tabs.create({url: SITE_PAY_URL});
 };
 $('manage').onclick = async () => {
   profileError('');
   try { chrome.tabs.create({url: await portalUrl()}); }
   catch (error) { profileError(error.message); }
 };
+window.addEventListener('focus', () => refreshAccount());
 
 /* ---------- Site access ---------- */
 const SITE_ORIGINS = (chrome.runtime.getManifest().content_scripts?.[0]?.matches || []).filter(match => match.startsWith('https://'));

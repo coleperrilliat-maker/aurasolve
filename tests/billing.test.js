@@ -91,7 +91,7 @@ test('checkout creates prices once and gives the intro price only on a first sub
   delete process.env.STRIPE_SECRET_KEY;
 });
 
-test('with the paywall on, solving needs sign-in, then free solves, then a plan', async t => {
+test('with the paywall on, solving needs sign-in, then a paid plan (no free trial)', async t => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_x';
   t.after(() => { delete process.env.STRIPE_SECRET_KEY; });
   let sent = null;
@@ -141,6 +141,28 @@ test('with the paywall on, solving needs sign-in, then free solves, then a plan'
   assert.equal((await (await post('/api/v1/portal', {}, paid)).json()).url, 'https://billing.test/portal');
   const account = await (await post('/api/v1/account', {}, paid)).json();
   assert.equal(account.plan, 'monthly');
+
+  // Site checkout uses the web cookie session (Get started → login → pay on site).
+  setBillingDeps({
+    mailer: async (email, code) => { sent = {email, code}; },
+    stripe: {
+      account: async email => ({email, customerId: 'cus', freeUsed: 0, freeTotal: 0, freeLeft: 0, hadSubscription: false, ...accounts[email]}),
+      useFree: async () => {},
+      checkout: async () => 'https://checkout.test/web',
+      portal: async () => 'https://billing.test/portal',
+    },
+  });
+  const start = await fetch(base + '/api/v1/auth/web/start', {method: 'POST', headers: {origin: base, 'content-type': 'application/json'}, body: JSON.stringify({email: 'out@x.co'})});
+  assert.equal(start.status, 200);
+  const {challenge} = await start.json();
+  const verified = await fetch(base + '/api/v1/auth/web/verify', {method: 'POST', headers: {origin: base, 'content-type': 'application/json'}, body: JSON.stringify({challenge, code: sent.code})});
+  const cookie = (verified.headers.getSetCookie?.() || [verified.headers.get('set-cookie')]).find(Boolean).split(';')[0];
+  const sessionInfo = await (await fetch(base + '/api/v1/auth/session', {headers: {cookie}})).json();
+  assert.equal(sessionInfo.signedIn, true);
+  assert.equal(sessionInfo.paid, false);
+  const webCheckout = await fetch(base + '/api/v1/auth/web/checkout', {method: 'POST', headers: {origin: base, 'content-type': 'application/json', cookie}, body: JSON.stringify({plan: 'weekly'})});
+  assert.equal(webCheckout.status, 200);
+  assert.equal((await webCheckout.json()).url, 'https://checkout.test/web');
 });
 
 test('with no Stripe key the paywall stays off', async t => {

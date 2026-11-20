@@ -29,15 +29,25 @@
 
   <main class="login-wrap">
     <section class="login-card">
-      <span class="chip">Chrome Web Store</span>
-      <h1 style="margin-top:18px">Install AuraSolve</h1>
-      <p class="lead">AuraSolve is live on the Chrome Web Store. Sign in first, then add the extension to Chrome.</p>
+      <span class="chip" id="chip">Chrome Web Store</span>
+      <h1 id="title" style="margin-top:18px">Install AuraSolve</h1>
+      <p class="lead" id="lead">Sign in and pay $0.99 on this site, then add the extension and sign in there to unlock solves.</p>
       <div class="stack">
-        <a class="btn btn-primary btn-lg" href="login.html">Sign in to continue</a>
-        <a class="btn btn-ghost btn-lg" href="https://chromewebstore.google.com/detail/aurasolve/fmmkeamfcjpnmjcbgmmofejajeeogncm" target="_blank" rel="noopener">Open Chrome Web Store</a>
+        <a class="btn btn-primary btn-lg" id="primary" href="https://chromewebstore.google.com/detail/aurasolve/fmmkeamfcjpnmjcbgmmofejajeeogncm" target="_blank" rel="noopener">Add to Chrome</a>
+        <a class="btn btn-ghost btn-lg" id="secondary" href="login.html">Sign in first</a>
       </div>
     </section>
   </main>
   <script src="analytics.js?v=5"></script>
+  <script>
+    const paid = new URLSearchParams(location.search).get("paid") === "1";
+    if (paid) {
+      document.getElementById("chip").textContent = "You're in";
+      document.getElementById("title").textContent = "Add the extension";
+      document.getElementById("lead").textContent = "Payment received. Install AuraSolve, then sign in inside the extension so we can verify your plan.";
+      document.getElementById("secondary").textContent = "Back to home";
+      document.getElementById("secondary").href = "index.html";
+    }
+  </script>
 </body>
 </html>

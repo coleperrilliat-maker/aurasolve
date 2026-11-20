@@ -48,20 +48,29 @@ async function handoff() {
   location.replace(`/auth/done?state=${encodeURIComponent(extState)}&handoff=${encodeURIComponent(data.handoff)}`);
 }
 
-const STORE_URL = "https://chromewebstore.google.com/detail/aurasolve/fmmkeamfcjpnmjcbgmmofejajeeogncm";
-
-function goToStore() {
-  location.replace(STORE_URL);
+function goInstall(paid) {
+  location.replace(paid ? "/install?paid=1" : "/install");
 }
 
-function goNextOrStore() {
+function goNextOrInstall(paid) {
   let next = "";
   try { next = sessionStorage.getItem("aura_next") || ""; sessionStorage.removeItem("aura_next"); } catch {}
   if (next === "/metrics" || next.startsWith("/metrics?")) {
     location.replace(next);
     return;
   }
-  goToStore();
+  goInstall(paid);
+}
+
+async function startCheckout() {
+  document.getElementById("ask").hidden = true;
+  document.getElementById("forgot-panel").hidden = true;
+  document.getElementById("reset").hidden = true;
+  document.getElementById("done").hidden = false;
+  document.getElementById("done-note").textContent = "Opening secure checkout for $0.99…";
+  document.getElementById("store-link").hidden = true;
+  const data = await post("/api/v1/auth/web/checkout", {plan: "weekly"});
+  location.replace(data.url);
 }
 
 async function welcome(email, method = "session") {
@@ -69,7 +78,16 @@ async function welcome(email, method = "session") {
   try { window.auraPosthogSignedIn?.(email, method); } catch {}
   // Give PostHog a moment to flush identify + login before leaving.
   await new Promise(resolve => setTimeout(resolve, 450));
-  goNextOrStore();
+  let session = {signedIn: true, email, paywall: false, paid: true};
+  try {
+    session = await fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(r => r.json());
+  } catch {}
+  if (session?.paywall && !session.paid) {
+    try { await startCheckout(); }
+    catch (err) { showError(err.message); document.getElementById("done").hidden = true; document.getElementById("ask").hidden = false; }
+    return;
+  }
+  goNextOrInstall(Boolean(session?.paid));
 }
 
 const google = document.getElementById("google");
@@ -85,7 +103,7 @@ document.getElementById("mode").onclick = () => {
   creating = !creating;
   showError("");
   document.getElementById("title").textContent = creating ? "Create account" : "Sign in";
-  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in with Google, or your email and password. Next we’ll take you to the Chrome Web Store to install AuraSolve.");
+  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in, pay $0.99, then install the Chrome extension.");
   document.getElementById("submit").textContent = creating ? "Create account" : "Sign in";
   document.getElementById("mode").textContent = creating ? "Already have an account? Sign in" : "Create an account";
   document.getElementById("password").autocomplete = creating ? "new-password" : "current-password";
