@@ -71,6 +71,7 @@ em{font-style:normal}
 .btn-ghost:hover{transform:translateY(-1px);box-shadow:0 0 0 1px rgba(15,18,34,.14),0 6px 14px rgba(15,18,34,.06)}
 .btn:active{transform:scale(.98)}
 .login-wrap{min-height:100vh;display:grid;place-items:center;padding:40px 20px}
+.login-wrap.under-bar{min-height:auto;place-items:start center;padding:72px 20px 96px}
 .login-card{width:min(420px,100%)}
 .login-card h1{margin:0;font-size:36px;font-weight:600;letter-spacing:-.04em}
 .login-card .lead{margin:10px 0 0}

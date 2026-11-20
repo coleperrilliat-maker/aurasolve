@@ -48,46 +48,74 @@ async function handoff() {
   location.replace(`/auth/done?state=${encodeURIComponent(extState)}&handoff=${encodeURIComponent(data.handoff)}`);
 }
 
-function goInstall(paid) {
-  location.replace(paid ? "/install?paid=1" : "/install");
+function showPanel(name) {
+  for (const id of ["ask", "forgot-panel", "reset", "account"]) {
+    document.getElementById(id).hidden = id !== name;
+  }
 }
 
-function goNextOrInstall(paid) {
-  let next = "";
-  try { next = sessionStorage.getItem("aura_next") || ""; sessionStorage.removeItem("aura_next"); } catch {}
-  if (next === "/metrics" || next.startsWith("/metrics?")) {
-    location.replace(next);
+let payToken = 0;
+let currentSession = null;
+
+function showAccount(session) {
+  currentSession = session || {signedIn: true, email: "", paywall: true, paid: false};
+  showPanel("account");
+  const email = currentSession.email || "your account";
+  const paid = !currentSession.paywall || currentSession.paid;
+  document.getElementById("account-lead").textContent = `Signed in as ${email}`;
+  document.getElementById("account-continue").textContent = paid ? "Add to Chrome" : "Continue";
+  document.getElementById("account-continue").disabled = false;
+}
+
+async function continueAccount() {
+  const session = currentSession || {};
+  const paid = !session.paywall || session.paid;
+  if (paid) {
+    let next = "";
+    try { next = sessionStorage.getItem("aura_next") || ""; sessionStorage.removeItem("aura_next"); } catch {}
+    location.assign(next === "/metrics" || next.startsWith("/metrics?") ? next : "/install?paid=1");
     return;
   }
-  goInstall(paid);
+  const token = ++payToken;
+  const button = document.getElementById("account-continue");
+  button.disabled = true;
+  showError("");
+  try {
+    const data = await post("/api/v1/auth/web/checkout", {plan: "weekly"});
+    if (token !== payToken) return;
+    location.assign(data.url);
+  } catch (err) {
+    if (token !== payToken) return;
+    if (/already have a plan/i.test(err.message)) {
+      currentSession = {...session, paid: true};
+      showAccount(currentSession);
+      location.assign("/install?paid=1");
+      return;
+    }
+    showError(err.message);
+    button.disabled = false;
+  }
 }
 
-async function startCheckout() {
-  document.getElementById("ask").hidden = true;
-  document.getElementById("forgot-panel").hidden = true;
-  document.getElementById("reset").hidden = true;
-  document.getElementById("done").hidden = false;
-  document.getElementById("done-note").textContent = "Opening secure checkout for $0.99…";
-  document.getElementById("store-link").hidden = true;
-  const data = await post("/api/v1/auth/web/checkout", {plan: "weekly"});
-  location.replace(data.url);
+async function logout() {
+  payToken += 1;
+  currentSession = null;
+  showError("");
+  try { await post("/api/v1/auth/web/logout"); } catch {}
+  document.getElementById("password").value = "";
+  showPanel("ask");
 }
 
-async function welcome(email, method = "session") {
+async function welcome(email, method = "session", autoPay = false) {
   if (fromExtension) return handoff();
   try { window.auraPosthogSignedIn?.(email, method); } catch {}
-  // Give PostHog a moment to flush identify + login before leaving.
-  await new Promise(resolve => setTimeout(resolve, 450));
-  let session = {signedIn: true, email, paywall: false, paid: true};
+  let session = {signedIn: true, email, paywall: true, paid: false};
   try {
     session = await fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(r => r.json());
   } catch {}
-  if (session?.paywall && !session.paid) {
-    try { await startCheckout(); }
-    catch (err) { showError(err.message); document.getElementById("done").hidden = true; document.getElementById("ask").hidden = false; }
-    return;
-  }
-  goNextOrInstall(Boolean(session?.paid));
+  if (!session?.email) session = {...session, signedIn: true, email};
+  showAccount(session);
+  if (autoPay && session.paywall && !session.paid) await continueAccount();
 }
 
 const google = document.getElementById("google");
@@ -122,7 +150,7 @@ document.getElementById("password-form").onsubmit = async event => {
       email: document.getElementById("email").value.trim(),
       password: document.getElementById("password").value,
     });
-    await welcome(data.email, creating ? "register" : "password");
+    await welcome(data.email, creating ? "register" : "password", true);
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
 };
@@ -163,18 +191,13 @@ document.getElementById("reset-form").onsubmit = async event => {
       token: resetToken,
       password: document.getElementById("reset-password").value,
     });
-    await welcome(data.email, "password_reset");
+    await welcome(data.email, "password_reset", true);
   } catch (err) { showError(err.message); }
   finally { button.disabled = false; }
 };
 
-document.getElementById("switch").onclick = async () => {
-  showError("");
-  try { await post("/api/v1/auth/web/logout"); } catch {}
-  document.getElementById("done").hidden = true;
-  document.getElementById("ask").hidden = false;
-  document.getElementById("password").value = "";
-};
+document.getElementById("account-continue").onclick = () => { continueAccount(); };
+document.getElementById("account-logout").onclick = () => { logout(); };
 
 if (resetToken) {
   document.getElementById("ask").hidden = true;
@@ -191,14 +214,11 @@ if (params.has("signed_in")) {
 }
 
 if (!resetToken && !fromExtension) {
-  // Hide the form while we check; signed-in users never see it.
-  document.getElementById("ask").hidden = true;
   fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(response => response.json()).then(data => {
-    if (data?.signedIn) welcome(data.email, signedInMethod);
-    else document.getElementById("ask").hidden = false;
-  }).catch(() => { document.getElementById("ask").hidden = false; });
+    if (data?.signedIn) welcome(data.email, signedInMethod, params.has("signed_in"));
+  }).catch(() => {});
 } else if (!resetToken) {
   fetch("/api/v1/auth/session", {credentials: "same-origin"}).then(response => response.json()).then(data => {
-    if (data?.signedIn) welcome(data.email, signedInMethod);
+    if (data?.signedIn) welcome(data.email, signedInMethod, false);
   }).catch(() => {});
 }

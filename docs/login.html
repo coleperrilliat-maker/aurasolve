@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · AuraSolve</title>
   <link rel="icon" type="image/png" href="icon.png?v=3">
-  <link rel="stylesheet" href="style.css?v=59">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=61">
 </head>
 <body>
   <main class="login-wrap">
@@ -53,17 +56,17 @@
           <button class="btn btn-primary btn-lg" type="submit">Save password</button>
         </form>
       </div>
-      <div id="done" hidden>
-        <h1>You're signed in</h1>
-        <p class="lead" id="done-note"></p>
+      <div id="account" hidden>
+        <h1>Account</h1>
+        <p class="lead" id="account-lead"></p>
         <div class="stack">
-          <a id="store-link" class="btn btn-primary btn-lg" href="https://chromewebstore.google.com/detail/aurasolve/fmmkeamfcjpnmjcbgmmofejajeeogncm" target="_blank" rel="noopener">Add to Chrome</a>
-          <button id="switch" class="btn btn-ghost btn-lg" type="button">Use a different account</button>
+          <button id="account-continue" class="btn btn-primary btn-lg" type="button">Continue</button>
+          <button id="account-logout" class="btn btn-ghost btn-lg" type="button">Log out</button>
         </div>
       </div>
     </section>
   </main>
   <script src="analytics.js?v=5"></script>
-  <script src="login.js?v=11"></script>
+  <script src="login.js?v=12"></script>
 </body>
 </html>
