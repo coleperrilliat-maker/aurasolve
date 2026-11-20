@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=57">
+  <link rel="stylesheet" href="style.css?v=65">
 </head>
 <body>
   <header class="topbar">
@@ -24,7 +24,10 @@
       <a href="./#features">Features</a>
       <a href="./#faq">FAQ</a>
     </nav>
-    <a class="btn btn-primary btn-sm" href="login.html">Get started</a>
+    <div class="topbar-actions">
+      <button class="nav-signin" id="nav-account" type="button">Sign in</button>
+      <a class="btn btn-primary btn-sm" href="login.html">Get started</a>
+    </div>
   </header>
 
   <main>
@@ -105,6 +108,7 @@
     </nav>
     <span>© 2026 AuraSolve. Not affiliated with Pearson.</span>
   </footer>
+  <script src="nav.js?v=1"></script>
   <script src="analytics.js?v=5"></script>
 </body>
 </html>

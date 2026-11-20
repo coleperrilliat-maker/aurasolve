@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=61">
+  <link rel="stylesheet" href="style.css?v=65">
 </head>
 <body>
   <header class="topbar">
@@ -24,7 +24,10 @@
       <a href="index.html#features">Features</a>
       <a href="index.html#faq">FAQ</a>
     </nav>
-    <a class="btn btn-primary btn-sm" href="login.html">Get started</a>
+    <div class="topbar-actions">
+      <button class="nav-signin" id="nav-account" type="button">Sign in</button>
+      <a class="btn btn-primary btn-sm" href="login.html">Get started</a>
+    </div>
   </header>
 
   <main class="login-wrap under-bar">
@@ -39,6 +42,7 @@
       </div>
     </section>
   </main>
+  <script src="nav.js?v=1"></script>
   <script src="analytics.js?v=5"></script>
   <script>
     const paid = new URLSearchParams(location.search).get("paid") === "1";

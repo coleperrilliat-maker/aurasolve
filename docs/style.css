@@ -45,6 +45,11 @@ em{font-style:normal}
 .nav-center a{transition:color .15s}
 .nav-center a:hover{color:var(--ink)}
 .topbar .btn{justify-self:end}
+.topbar-actions{justify-self:end;display:flex;align-items:center;gap:8px}
+.topbar-actions .btn{justify-self:auto}
+.nav-signin{height:38px;padding:0 10px;border:0;background:none;color:var(--ink-2);font:600 14px Inter,system-ui,sans-serif;cursor:pointer}
+.nav-signin:hover{color:var(--ink)}
+.nav-signin:disabled{opacity:.6;cursor:default}
 
 .btn{
   display:inline-flex;
@@ -462,6 +467,7 @@ body:not(.os-win) .os-win,body:not(.os-win) .os-win-inline{display:none}
   :root{--pad:16px}
   .topbar{width:calc(100% - 20px);top:8px;margin-top:8px;height:52px}
   .topbar .btn-sm{padding:0 12px;font-size:13px}
+  .nav-signin{height:36px;padding:0 6px;font-size:13px}
   .hero{padding-top:20px;gap:44px}
   .hero h1{font-size:clamp(30px,8.6vw,38px);line-height:1.08}
   .actions{gap:10px}

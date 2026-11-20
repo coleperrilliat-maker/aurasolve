@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=60">
+  <link rel="stylesheet" href="style.css?v=65">
   <link rel="preload" as="image" href="demos/posters/forms.jpg">
   <link rel="preload" as="video" href="demos/forms.mp4" type="video/mp4">
 </head>
@@ -28,7 +28,10 @@
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
     </nav>
-    <a class="btn btn-primary btn-sm" href="login.html">Get started</a>
+    <div class="topbar-actions">
+      <button class="nav-signin" id="nav-account" type="button">Sign in</button>
+      <a class="btn btn-primary btn-sm" href="login.html">Get started</a>
+    </div>
   </header>
 
   <main>
@@ -331,6 +334,7 @@
     <span>© 2026 AuraSolve. Not affiliated with Pearson.</span>
   </footer>
 
+  <script src="nav.js?v=1"></script>
   <script src="script.js?v=6"></script>
   <script src="analytics.js?v=5"></script>
 </body>
