@@ -103,7 +103,7 @@ document.getElementById("mode").onclick = () => {
   creating = !creating;
   showError("");
   document.getElementById("title").textContent = creating ? "Create account" : "Sign in";
-  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in, pay $0.99, then install the Chrome extension.");
+  document.getElementById("lead").textContent = creating ? "Use the email and password you'll sign in with." : (fromExtension ? "Sign in and you'll come right back to the extension." : "Sign in with Google, or your email and password.");
   document.getElementById("submit").textContent = creating ? "Create account" : "Sign in";
   document.getElementById("mode").textContent = creating ? "Already have an account? Sign in" : "Create an account";
   document.getElementById("password").autocomplete = creating ? "new-password" : "current-password";
